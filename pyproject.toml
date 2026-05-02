@@ -1,7 +1,7 @@
 [project]
-name = "hello-world"
+name = "mmd-demo"
 version = "0.1.0"
-description = "A simple hello world project"
+description = "A PMX model viewer with outline rendering support"
 requires-python = ">=3.10"
 dependencies = [
     "glfw>=2.10.0",

@@ -31,8 +31,6 @@ class Renderer:
 
         self.ctx = moderngl.create_context()
         self.ctx.enable(moderngl.DEPTH_TEST)
-        # self.ctx.enable(moderngl.CULL_FACE)
-        # self.ctx.cull_face = 'back'
 
         self._create_shaders()
         self._create_axis_shader()
@@ -367,10 +365,6 @@ class Renderer:
             self.camera_y += speed
         if glfw.get_key(self.window, glfw.KEY_Q) == glfw.PRESS:
             self.camera_y -= speed
-        
-        # 调试：打印相机位置
-        if glfw.get_key(self.window, glfw.KEY_W) == glfw.PRESS or            glfw.get_key(self.window, glfw.KEY_S) == glfw.PRESS or            glfw.get_key(self.window, glfw.KEY_A) == glfw.PRESS or            glfw.get_key(self.window, glfw.KEY_D) == glfw.PRESS or            glfw.get_key(self.window, glfw.KEY_E) == glfw.PRESS or            glfw.get_key(self.window, glfw.KEY_Q) == glfw.PRESS:
-            print(f"Camera: pos=({self.camera_x:.2f}, {self.camera_y:.2f}, {self.camera_z:.2f}), speed={speed:.4f}")
 
     def _create_projection(self):
         aspect = self.width / self.height
@@ -505,14 +499,6 @@ class Renderer:
             index_offset += mat.vertex_count
         
         print(f"Created {len(self.material_batches)} material batches, total indices: {index_offset}")
-        
-        # 调试：检查body材质
-        for i, batch in enumerate(self.material_batches):
-            mat = pmx_model.materials[i]
-            if 'body' in mat.name.lower() or 'dress' in mat.name.lower():
-                tex_idx = batch['texture_index']
-                tex_name = pmx_model.textures[tex_idx] if 0 <= tex_idx < len(pmx_model.textures) else 'N/A'
-                print(f"  {mat.name}: uses texture[{tex_idx}] = {tex_name}, indices {batch['first']}-{batch['first']+batch['count']}")
 
     def _save_screenshot(self):
         img_data = self.ctx.fbo.read(components=3)
@@ -622,8 +608,8 @@ class Renderer:
 
 
 def main():
-    model_path = "resources/ikaros-uniform/Ikaros.pmx"
-    texture_dir = "resources/ikaros-uniform"
+    model_path = "resources/ikaros-origin/Ikaros.pmx"
+    texture_dir = "resources/ikaros-origin"
 
     print(f"Loading model: {model_path}")
     model = PmxModel(model_path)
