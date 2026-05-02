@@ -43,8 +43,10 @@ class Renderer:
 
         self.show_outline = True
         self.outline_thickness = 0.003
+        self.show_toon = True
 
         self._create_shaders()
+        self._create_toon_shaders()
         self._create_axis_shader()
         self._create_outline_shader()
         self._create_world_axis()
@@ -65,6 +67,7 @@ class Renderer:
 
         self.model_vao = None
         self.outline_vao = None
+        self.toon_vao = None
         self.textures = []
         self.material_batches = []
         self.index_count = 0
@@ -91,6 +94,28 @@ class Renderer:
         )
         self.outline_program["outline_color"] = (0.0, 0.0, 0.0)
         self.outline_program["outline_thickness"] = self.outline_thickness
+
+    def _create_toon_shaders(self):
+        self.toon_program = self.ctx.program(
+            vertex_shader=_load_shader("toon.vert"),
+            fragment_shader=_load_shader("toon.frag")
+        )
+        self.toon_program["light_dir"] = (0.5, 0.8, -1.0)
+        self.toon_program["shadow_thresh"] = 0.2
+        self.toon_program["rim_power"] = 3.0
+        self.toon_program["rim_color"] = (1.0, 0.95, 0.9)
+        self.toon_program["has_texture"] = False
+        self.toon_program["tex"] = 0
+        self.toon_program["gradient_map"] = 1
+
+        gradient_data = np.array([
+            [60, 60, 60],
+            [120, 120, 120],
+            [180, 180, 180],
+            [220, 220, 220]
+        ], dtype='u1')
+        self.gradient_texture = self.ctx.texture((4, 1), 3, gradient_data.tobytes())
+        self.gradient_texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
 
     def _create_world_axis(self):
         axis_length = 50.0
@@ -193,6 +218,10 @@ class Renderer:
             self.show_outline = not self.show_outline
             print(f"Outline: {'ON' if self.show_outline else 'OFF'}")
 
+        if key == glfw.KEY_T and action == glfw.PRESS:
+            self.show_toon = not self.show_toon
+            print(f"Toon shading: {'ON' if self.show_toon else 'OFF'}")
+
         if key == glfw.KEY_R and action == glfw.PRESS:
             self.camera.reset()
             print("Camera reset to default position")
@@ -236,6 +265,14 @@ class Renderer:
             self.ctx.buffer(indices)
         )
 
+        self.toon_vao = self.ctx.vertex_array(
+            self.toon_program,
+            [
+                (self.ctx.buffer(vertices), '3f 3f 2f', 'in_position', 'in_normal', 'in_uv'),
+            ],
+            self.ctx.buffer(indices)
+        )
+
         self.outline_vao = self.ctx.vertex_array(
             self.outline_program,
             [
@@ -254,7 +291,14 @@ class Renderer:
         self.textures = []
         if texture_dir and os.path.exists(texture_dir):
             for i, tex_name in enumerate(pmx_model.textures):
-                tex_path = os.path.join(texture_dir, tex_name)
+                tex_name_normalized = tex_name.replace('\\', '/')
+                tex_path = os.path.join(texture_dir, tex_name_normalized)
+                if not os.path.exists(tex_path):
+                    parts = tex_name_normalized.split('/')
+                    if 'textures' in parts:
+                        idx = parts.index('textures')
+                        tex_name_without_prefix = '/'.join(parts[idx + 1:])
+                        tex_path = os.path.join(texture_dir, tex_name_without_prefix)
                 if os.path.exists(tex_path):
                     try:
                         img = Image.open(tex_path).convert('RGBA')
@@ -263,7 +307,7 @@ class Renderer:
                         tex.repeat_x = False
                         tex.repeat_y = False
                         self.textures.append(tex)
-                        print(f"  [{i}] {tex_name}")
+                        print(f"  [{i}] OK: {os.path.basename(tex_path)}")
                     except Exception as e:
                         print(f"  [{i}] Failed: {tex_name} - {e}")
                         self.textures.append(None)
@@ -356,19 +400,26 @@ class Renderer:
                 self.ctx.disable(moderngl.CULL_FACE)
 
             if self.model_vao and self.material_batches:
-                self.program["projection"].write(projection.T.tobytes())
-                self.program["view"].write(view.T.tobytes())
-                self.program["model"].write(model.tobytes())
+                shader = self.toon_program if self.show_toon else self.program
+                vao = self.toon_vao if self.show_toon else self.model_vao
+
+                shader["projection"].write(projection.T.tobytes())
+                shader["view"].write(view.T.tobytes())
+                shader["model"].write(model.tobytes())
+
+                if self.show_toon:
+                    shader["camera_pos"] = (self.camera.x, self.camera.y, self.camera.z)
+                    self.gradient_texture.use(1)
 
                 for batch in self.material_batches:
                     tex_idx = batch['texture_index']
                     if 0 <= tex_idx < len(self.textures) and self.textures[tex_idx]:
                         self.textures[tex_idx].use(0)
-                        self.program["has_texture"] = True
+                        shader["has_texture"] = True
                     else:
-                        self.program["has_texture"] = False
+                        shader["has_texture"] = False
 
-                    self.model_vao.render(moderngl.TRIANGLES, vertices=batch['count'], first=batch['first'])
+                    vao.render(moderngl.TRIANGLES, vertices=batch['count'], first=batch['first'])
 
             glfw.swap_buffers(self.window)
 
@@ -387,13 +438,36 @@ class Renderer:
         glfw.terminate()
 
 
+MODELS = {
+    "ikaros-origin": ("resources/models/ikaros-origin/Ikaros.pmx", "resources/models/ikaros-origin"),
+    "ikaros-uniform": ("resources/models/ikaros-uniform/Ikaros.pmx", "resources/models/ikaros-uniform"),
+    "安比": ("resources/models/安比/安比.pmx", "resources/models/安比"),
+    "刀": ("resources/models/安比/刀.pmx", "resources/models/安比"),
+    "chloe": ("resources/models/Chloe_Uniform1_0.9/Chloe_Uniform1_0.9.pmx", "resources/models/Chloe_Uniform1_0.9/textures"),
+    "aqua-swimwear": ("resources/models/Aqua_Swimwear_1.0/Aqua_Swimwear_1.0.pmx", "resources/models/Aqua_Swimwear_1.0/textures"),
+    "marine-swimwear": ("resources/models/Marine_Swmwear_1.01/Marine_Swmwear_1.01.pmx", "resources/models/Marine_Swmwear_1.01/textures"),
+    "aqua-basebody": ("resources/models/Aqua_BaseBody_R15_0.9/Aqua_BaseBody_R15_0.9.pmx", "resources/models/Aqua_BaseBody_R15_0.9/textures"),
+}
+
+
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="PMX Model Viewer")
+    parser.add_argument("--model", "-m", default="ikaros-origin", choices=MODELS.keys(), help="Model to load")
+    args = parser.parse_args()
+
     proj_root = Path(__file__).parent.parent
-    model_path = proj_root / "resources/models/ikaros-origin/Ikaros.pmx"
-    texture_dir = proj_root / "resources/models/ikaros-origin"
+    pmx_path, tex_dir = MODELS[args.model]
+    model_path = proj_root / pmx_path
+    texture_dir = proj_root / tex_dir
 
     print(f"Loading model: {model_path}")
-    model = PmxModel(model_path)
+    try:
+        model = PmxModel(model_path)
+    except Exception as e:
+        print(f"Failed to load model: {e}")
+        return
     print(f"Model: {model.name}, Vertices: {model.vertex_count}, Faces: {model.face_count}")
     print(f"Textures: {model.textures}")
 
@@ -411,6 +485,7 @@ def main():
     print("  X key: Toggle world axis display")
     print("  G key: Toggle ground grid display")
     print("  O key: Toggle outline display")
+    print("  T key: Toggle toon shading")
     print("  R key: Reset camera to default position")
     print("Starting render loop...")
     renderer.render()
