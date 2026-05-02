@@ -29,7 +29,9 @@ view_history.json
 debug.log
 
 # Model files
-resources/
+# Only ignore ikaros models, keep shaders and other models
+resources/models/ikaros*/
+!resources/shaders/
 
 # OS
 .DS_Store

@@ -5,6 +5,15 @@ from load_pmx import PmxModel
 from PIL import Image
 import os
 import json
+from pathlib import Path
+
+from camera import Camera
+
+
+def _load_shader(filename):
+    path = Path(__file__).parent.parent / "resources" / "shaders" / filename
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
 
 
 class Renderer:
@@ -32,25 +41,16 @@ class Renderer:
         self.ctx = moderngl.create_context()
         self.ctx.enable(moderngl.DEPTH_TEST)
 
-        self._create_shaders()
-        self._create_axis_shader()
         self.show_outline = True
         self.outline_thickness = 0.003
+
+        self._create_shaders()
+        self._create_axis_shader()
         self._create_outline_shader()
         self._create_world_axis()
 
-        self.camera_x = 0.0
-        self.camera_y = 0.0
-        self.camera_z = 10.0
-        self.camera_rot_x = 0.0
-        self.camera_rot_y = 0.0
-        self.camera_speed = 20.0
-        self.mouse_sensitivity = 0.05
-        self.is_dragging = False
-        self.is_panning = False
-        self.last_mouse_x = 0
-        self.last_mouse_y = 0
-        self.view_history = []
+        self.camera = Camera()
+
         self.show_world_axis = True
         self.show_ground_grid = True
 
@@ -61,190 +61,75 @@ class Renderer:
 
         self.model_center = [0, 0, 0]
         self.model_scale = 1.0
+        self.view_history = []
+
+        self.model_vao = None
+        self.outline_vao = None
+        self.textures = []
+        self.material_batches = []
+        self.index_count = 0
 
     def _create_shaders(self):
-        vertex_shader = """
-        #version 330 core
-
-        in vec3 in_position;
-        in vec3 in_normal;
-        in vec2 in_uv;
-
-        uniform mat4 model;
-        uniform mat4 view;
-        uniform mat4 projection;
-
-        out vec3 v_normal;
-        out vec2 v_uv;
-        out vec3 v_position;
-
-        void main() {
-            vec4 world_pos = model * vec4(in_position, 1.0);
-            gl_Position = projection * view * world_pos;
-            v_normal = normalize(mat3(model) * in_normal);
-            v_uv = in_uv;
-            v_position = world_pos.xyz;
-        }
-        """
-
-        fragment_shader = """
-        #version 330 core
-
-        in vec3 v_normal;
-        in vec2 v_uv;
-        in vec3 v_position;
-
-        uniform vec3 light_dir;
-        uniform sampler2D tex;
-        uniform bool has_texture;
-
-        out vec4 fragColor;
-
-        void main() {
-            vec3 normal = normalize(v_normal);
-            vec3 light = normalize(light_dir);
-            
-            float diff = max(dot(normal, light), 0.0);
-            float ambient = 0.6;
-            
-            vec3 color;
-            if (has_texture) {
-                vec4 tex_color = texture(tex, v_uv);
-                color = tex_color.rgb;
-                // 处理透明区域
-                if (tex_color.a < 0.1) {
-                    discard;
-                }
-            } else {
-                float height_shade = (v_position.y + 10.0) / 20.0;
-                color = vec3(0.9 * height_shade + 0.3, 0.7 * height_shade + 0.2, 0.6 * height_shade + 0.2);
-            }
-            
-            vec3 result = color * (ambient + diff * 0.4);
-            result = clamp(result, 0.0, 1.0);
-            fragColor = vec4(result, 1.0);
-        }
-        """
-
-        self.program = self.ctx.program(vertex_shader=vertex_shader, fragment_shader=fragment_shader)
+        self.program = self.ctx.program(
+            vertex_shader=_load_shader("main.vert"),
+            fragment_shader=_load_shader("main.frag")
+        )
         self.program["light_dir"] = (1.0, 1.0, 0.5)
         self.program["has_texture"] = False
         self.program["tex"] = 0
 
     def _create_axis_shader(self):
-        vertex_shader = """
-        #version 330 core
-
-        in vec3 in_position;
-        in vec3 in_color;
-
-        uniform mat4 model;
-        uniform mat4 view;
-        uniform mat4 projection;
-
-        out vec3 v_color;
-
-        void main() {
-            gl_Position = projection * view * model * vec4(in_position, 1.0);
-            v_color = in_color;
-        }
-        """
-
-        fragment_shader = """
-        #version 330 core
-
-        in vec3 v_color;
-        out vec4 fragColor;
-
-        void main() {
-            fragColor = vec4(v_color, 1.0);
-        }
-        """
-
-        self.axis_program = self.ctx.program(vertex_shader=vertex_shader, fragment_shader=fragment_shader)
+        self.axis_program = self.ctx.program(
+            vertex_shader=_load_shader("axis.vert"),
+            fragment_shader=_load_shader("axis.frag")
+        )
 
     def _create_outline_shader(self):
-        vertex_shader = """
-        #version 330 core
-
-        in vec3 in_position;
-        in vec3 in_normal;
-
-        uniform mat4 model;
-        uniform mat4 view;
-        uniform mat4 projection;
-        uniform float outline_thickness;
-
-        void main() {
-            vec3 pos = in_position + in_normal * outline_thickness;
-            gl_Position = projection * view * model * vec4(pos, 1.0);
-        }
-        """
-
-        fragment_shader = """
-        #version 330 core
-
-        uniform vec3 outline_color;
-        out vec4 fragColor;
-
-        void main() {
-            fragColor = vec4(outline_color, 1.0);
-        }
-        """
-
-        self.outline_program = self.ctx.program(vertex_shader=vertex_shader, fragment_shader=fragment_shader)
+        self.outline_program = self.ctx.program(
+            vertex_shader=_load_shader("outline.vert"),
+            fragment_shader=_load_shader("outline.frag")
+        )
         self.outline_program["outline_color"] = (0.0, 0.0, 0.0)
         self.outline_program["outline_thickness"] = self.outline_thickness
 
-    def _create_outline_vao(self, vertices, indices):
-        # 顶点数据格式是 3f(pos) + 3f(normal) + 2f(uv)，共 8 floats
-        self.outline_vao = self.ctx.vertex_array(
-            self.outline_program,
-            [
-                (self.ctx.buffer(vertices), '3f 3f 8x', 'in_position', 'in_normal'),
-            ],
-            self.ctx.buffer(indices)
-        )
-
     def _create_world_axis(self):
         axis_length = 50.0
-        
-        axis_vertices = []
         arrow_size = 3.0
-        
+
+        axis_vertices = []
         for axis in range(3):
             start = [0.0, 0.0, 0.0]
             end = [0.0, 0.0, 0.0]
             color = [0.0, 0.0, 0.0]
-            
+
             end[axis] = axis_length
             color[axis] = 1.0
-            
+
             axis_vertices.extend(start + color)
             axis_vertices.extend(end + color)
-            
+
             start_neg = [0.0, 0.0, 0.0]
             start_neg[axis] = -axis_length
             axis_vertices.extend(start + color)
             axis_vertices.extend(start_neg + color)
-            
+
             base = end.copy()
             base[axis] -= arrow_size
-            
+
             perp1 = [0.0, 0.0, 0.0]
             perp2 = [0.0, 0.0, 0.0]
             perp_indices = [(axis + 1) % 3, (axis + 2) % 3]
             perp1[perp_indices[0]] = arrow_size * 0.5
             perp2[perp_indices[1]] = arrow_size * 0.5
-            
+
             arrow_tip1 = [base[i] + perp1[i] for i in range(3)]
             arrow_tip2 = [base[i] + perp2[i] for i in range(3)]
-            
+
             axis_vertices.extend(end + color)
             axis_vertices.extend(arrow_tip1 + color)
             axis_vertices.extend(end + color)
             axis_vertices.extend(arrow_tip2 + color)
-        
+
         axis_vertices = np.array(axis_vertices, dtype='f4')
         self.axis_vbo = self.ctx.buffer(axis_vertices)
         self.axis_vao = self.ctx.vertex_array(
@@ -260,15 +145,14 @@ class Renderer:
         grid_step = grid_size / grid_divisions
 
         grid_vertices = []
-
-        for i in range(-grid_divisions//2, grid_divisions//2 + 1):
+        for i in range(-grid_divisions // 2, grid_divisions // 2 + 1):
             x = i * grid_step
-            grid_vertices.extend([x, 0.0, -grid_size/2, 0.5, 0.5, 0.5])
-            grid_vertices.extend([x, 0.0, grid_size/2, 0.5, 0.5, 0.5])
+            grid_vertices.extend([x, 0.0, -grid_size / 2, 0.5, 0.5, 0.5])
+            grid_vertices.extend([x, 0.0, grid_size / 2, 0.5, 0.5, 0.5])
 
             z = i * grid_step
-            grid_vertices.extend([-grid_size/2, 0.0, z, 0.5, 0.5, 0.5])
-            grid_vertices.extend([grid_size/2, 0.0, z, 0.5, 0.5, 0.5])
+            grid_vertices.extend([-grid_size / 2, 0.0, z, 0.5, 0.5, 0.5])
+            grid_vertices.extend([grid_size / 2, 0.0, z, 0.5, 0.5, 0.5])
 
         grid_vertices = np.array(grid_vertices, dtype='f4')
         self.grid_vbo = self.ctx.buffer(grid_vertices)
@@ -283,138 +167,35 @@ class Renderer:
         self.ctx.viewport = (0, 0, width, height)
 
     def _on_mouse_button(self, window, button, action, mods):
-        if button == glfw.MOUSE_BUTTON_LEFT:
-            if action == glfw.PRESS:
-                self.is_panning = True
-                self.last_mouse_x, self.last_mouse_y = glfw.get_cursor_pos(window)
-            else:
-                self.is_panning = False
+        self.camera.on_mouse_button(window, button, action, mods)
 
     def _on_cursor_pos(self, window, xpos, ypos):
-        if self.is_panning:
-            dx = xpos - self.last_mouse_x
-            dy = ypos - self.last_mouse_y
-
-            self.camera_rot_y -= dx * self.mouse_sensitivity
-            self.camera_rot_x -= dy * self.mouse_sensitivity
-
-            self.camera_rot_x = max(-89, min(89, self.camera_rot_x))
-
-            self.last_mouse_x = xpos
-            self.last_mouse_y = ypos
+        self.camera.on_cursor_pos(window, xpos, ypos)
 
     def _on_scroll(self, window, xoffset, yoffset):
-        self.camera_speed += yoffset * 0.5
-        self.camera_speed = max(1.0, min(20.0, self.camera_speed))
-        print(f"Camera speed: {self.camera_speed:.1f}")
+        self.camera.on_scroll(window, xoffset, yoffset)
+        print(f"Camera speed: {self.camera.speed:.1f}")
 
     def _on_key(self, window, key, scancode, action, mods):
         if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
             glfw.set_input_mode(window, glfw.CURSOR, glfw.CURSOR_NORMAL)
-            self.is_panning = False
-        
+            self.camera.is_panning = False
+
         if key == glfw.KEY_X and action == glfw.PRESS:
             self.show_world_axis = not self.show_world_axis
             print(f"World axis: {'ON' if self.show_world_axis else 'OFF'}")
-        
+
         if key == glfw.KEY_G and action == glfw.PRESS:
             self.show_ground_grid = not self.show_ground_grid
             print(f"Ground grid: {'ON' if self.show_ground_grid else 'OFF'}")
-        
+
         if key == glfw.KEY_O and action == glfw.PRESS:
             self.show_outline = not self.show_outline
             print(f"Outline: {'ON' if self.show_outline else 'OFF'}")
-        
+
         if key == glfw.KEY_R and action == glfw.PRESS:
-            self.camera_x = 0.0
-            self.camera_y = 0.0
-            self.camera_z = 10.0
-            self.camera_rot_x = 0.0
-            self.camera_rot_y = 0.0
+            self.camera.reset()
             print("Camera reset to default position")
-
-    def _update_camera(self, delta_time):
-        speed = self.camera_speed * delta_time
-        
-        rot_y_rad = np.radians(self.camera_rot_y)
-        rot_x_rad = np.radians(self.camera_rot_x)
-        
-        front_x = -np.sin(rot_y_rad) * np.cos(rot_x_rad)
-        front_y = np.sin(rot_x_rad)
-        front_z = -np.cos(rot_y_rad) * np.cos(rot_x_rad)
-        
-        right_x = np.cos(rot_y_rad)
-        right_y = 0
-        right_z = -np.sin(rot_y_rad)
-        
-        if glfw.get_key(self.window, glfw.KEY_W) == glfw.PRESS:
-            self.camera_x += front_x * speed
-            self.camera_y += front_y * speed
-            self.camera_z += front_z * speed
-        if glfw.get_key(self.window, glfw.KEY_S) == glfw.PRESS:
-            self.camera_x -= front_x * speed
-            self.camera_y -= front_y * speed
-            self.camera_z -= front_z * speed
-        if glfw.get_key(self.window, glfw.KEY_A) == glfw.PRESS:
-            self.camera_x -= right_x * speed
-            self.camera_z -= right_z * speed
-        if glfw.get_key(self.window, glfw.KEY_D) == glfw.PRESS:
-            self.camera_x += right_x * speed
-            self.camera_z += right_z * speed
-        if glfw.get_key(self.window, glfw.KEY_E) == glfw.PRESS:
-            self.camera_y += speed
-        if glfw.get_key(self.window, glfw.KEY_Q) == glfw.PRESS:
-            self.camera_y -= speed
-
-    def _create_projection(self):
-        aspect = self.width / self.height
-        fov = 45.0
-        near = 0.01
-        far = 1000.0
-
-        f = 1.0 / np.tan(np.radians(fov) / 2)
-        proj = np.array([
-            [f / aspect, 0, 0, 0],
-            [0, f, 0, 0],
-            [0, 0, -(far + near) / (far - near), -2.0 * far * near / (far - near)],
-            [0, 0, -1, 0]
-        ], dtype='f4')
-        return proj
-
-    def _create_view(self):
-        rot_x = np.radians(self.camera_rot_x)
-        rot_y = np.radians(self.camera_rot_y)
-
-        cx, cy = np.cos(rot_x), np.cos(rot_y)
-        sx, sy = np.sin(rot_x), np.sin(rot_y)
-
-        # 构建正确的FPS相机视图矩阵
-        # Y轴旋转矩阵
-        rot_y_mat = np.array([
-            [cy, 0, -sy, 0],
-            [0, 1, 0, 0],
-            [sy, 0, cy, 0],
-            [0, 0, 0, 1]
-        ], dtype='f4')
-        
-        # X轴旋转矩阵
-        rot_x_mat = np.array([
-            [1, 0, 0, 0],
-            [0, cx, sx, 0],
-            [0, -sx, cx, 0],
-            [0, 0, 0, 1]
-        ], dtype='f4')
-        
-        # 平移矩阵
-        trans = np.array([
-            [1, 0, 0, -self.camera_x],
-            [0, 1, 0, -self.camera_y],
-            [0, 0, 1, -self.camera_z],
-            [0, 0, 0, 1]
-        ], dtype='f4')
-        
-        # 视图矩阵 = 旋转 * 平移
-        return rot_x_mat @ rot_y_mat @ trans
 
     def load_model(self, pmx_model: PmxModel, texture_dir: str = ""):
         positions = np.array([(v.position[0], v.position[1], v.position[2]) for v in pmx_model.vertices], dtype='f4')
@@ -430,7 +211,7 @@ class Renderer:
 
         self.model_center = center.tolist()
         self.model_scale = 2.0 / max_size if max_size > 0 else 1.0
-        
+
         scaled_size = max_size * self.model_scale
         print(f"Model size after scaling: {scaled_size:.2f}")
 
@@ -447,7 +228,7 @@ class Renderer:
         vertices = np.array(vertices, dtype='f4')
         indices = np.array(list(pmx_model.indices), dtype='i4')
 
-        self.vao = self.ctx.vertex_array(
+        self.model_vao = self.ctx.vertex_array(
             self.program,
             [
                 (self.ctx.buffer(vertices), '3f 3f 2f', 'in_position', 'in_normal', 'in_uv'),
@@ -455,16 +236,20 @@ class Renderer:
             self.ctx.buffer(indices)
         )
 
-        self._create_outline_vao(vertices, indices)
+        self.outline_vao = self.ctx.vertex_array(
+            self.outline_program,
+            [
+                (self.ctx.buffer(vertices), '3f 3f 8x', 'in_position', 'in_normal'),
+            ],
+            self.ctx.buffer(indices)
+        )
 
         self.index_count = len(indices)
 
-        # 调试：打印材质详细信息
         print(f"\nMaterial details:")
         for i, mat in enumerate(pmx_model.materials):
             print(f"  Mat {i}: tex={mat.texture_index}, sphere={getattr(mat, 'sphere_texture_index', -1)}, toon={getattr(mat, 'toon_texture_index', -1)}, name={getattr(mat, 'name', 'N/A')}")
-        
-        # 加载所有纹理
+
         print(f"\nLoading {len(pmx_model.textures)} textures...")
         self.textures = []
         if texture_dir and os.path.exists(texture_dir):
@@ -485,8 +270,7 @@ class Renderer:
                 else:
                     print(f"  [{i}] Not found: {tex_name}")
                     self.textures.append(None)
-        
-        # 构建材质渲染批次
+
         self.material_batches = []
         index_offset = 0
         for mat in pmx_model.materials:
@@ -497,7 +281,7 @@ class Renderer:
             }
             self.material_batches.append(batch)
             index_offset += mat.vertex_count
-        
+
         print(f"Created {len(self.material_batches)} material batches, total indices: {index_offset}")
 
     def _save_screenshot(self):
@@ -509,11 +293,11 @@ class Renderer:
 
     def _save_view_history(self):
         history_data = {
-            'camera_x': float(self.camera_x),
-            'camera_y': float(self.camera_y),
-            'camera_z': float(self.camera_z),
-            'camera_rot_x': float(self.camera_rot_x),
-            'camera_rot_y': float(self.camera_rot_y),
+            'camera_x': float(self.camera.x),
+            'camera_y': float(self.camera.y),
+            'camera_z': float(self.camera.z),
+            'camera_rot_x': float(self.camera.rot_x),
+            'camera_rot_y': float(self.camera.rot_y),
             'view_history': [{k: float(v) for k, v in h.items()} for h in self.view_history]
         }
         with open('view_history.json', 'w') as f:
@@ -522,24 +306,23 @@ class Renderer:
 
     def render(self):
         last_time = glfw.get_time()
-        
+
         while not glfw.window_should_close(self.window):
             glfw.poll_events()
-            
+
             current_time = glfw.get_time()
             delta_time = current_time - last_time
             last_time = current_time
-            
-            self._update_camera(delta_time)
+
+            self.camera.update(self.window, delta_time)
 
             self.ctx.clear(0.15, 0.15, 0.2)
             self.ctx.enable(moderngl.DEPTH_TEST)
 
-            projection = self._create_projection()
-            view = self._create_view()
+            projection = Camera.create_projection_matrix(self.width, self.height)
+            view = self.camera.create_view_matrix()
             model = np.eye(4, dtype='f4')
 
-            # 再渲染辅助线条（禁用深度测试）
             if self.show_ground_grid:
                 self.ctx.disable(moderngl.DEPTH_TEST)
                 self.axis_program["projection"].write(projection.T.tobytes())
@@ -558,11 +341,10 @@ class Renderer:
                 self.axis_vao.render(moderngl.LINES)
                 self.ctx.enable(moderngl.DEPTH_TEST)
 
-            # 渲染描边（标准 Inverted Hull 方法）
-            if self.show_outline and hasattr(self, 'outline_vao') and hasattr(self, 'material_batches'):
+            if self.show_outline and self.outline_vao and self.material_batches:
                 self.ctx.enable(moderngl.CULL_FACE)
-                self.ctx.cull_face = 'front'  # 剔除正面，只渲染背面
-                
+                self.ctx.cull_face = 'front'
+
                 self.outline_program["projection"].write(projection.T.tobytes())
                 self.outline_program["view"].write(view.T.tobytes())
                 self.outline_program["model"].write(model.tobytes())
@@ -570,34 +352,32 @@ class Renderer:
 
                 for batch in self.material_batches:
                     self.outline_vao.render(moderngl.TRIANGLES, vertices=batch['count'], first=batch['first'])
-                
+
                 self.ctx.disable(moderngl.CULL_FACE)
 
-            # 渲染模型
-            if hasattr(self, 'vao') and hasattr(self, 'material_batches'):
+            if self.model_vao and self.material_batches:
                 self.program["projection"].write(projection.T.tobytes())
                 self.program["view"].write(view.T.tobytes())
                 self.program["model"].write(model.tobytes())
-                
-                # 按材质分批渲染
-                for i, batch in enumerate(self.material_batches):
+
+                for batch in self.material_batches:
                     tex_idx = batch['texture_index']
                     if 0 <= tex_idx < len(self.textures) and self.textures[tex_idx]:
                         self.textures[tex_idx].use(0)
                         self.program["has_texture"] = True
                     else:
                         self.program["has_texture"] = False
-                    
-                    self.vao.render(moderngl.TRIANGLES, vertices=batch['count'], first=batch['first'])
+
+                    self.model_vao.render(moderngl.TRIANGLES, vertices=batch['count'], first=batch['first'])
 
             glfw.swap_buffers(self.window)
 
             self.view_history.append({
-                'x': self.camera_x,
-                'y': self.camera_y,
-                'z': self.camera_z,
-                'rot_x': self.camera_rot_x,
-                'rot_y': self.camera_rot_y
+                'x': self.camera.x,
+                'y': self.camera.y,
+                'z': self.camera.z,
+                'rot_x': self.camera.rot_x,
+                'rot_y': self.camera.rot_y
             })
 
         self._save_screenshot()
@@ -608,8 +388,9 @@ class Renderer:
 
 
 def main():
-    model_path = "resources/ikaros-origin/Ikaros.pmx"
-    texture_dir = "resources/ikaros-origin"
+    proj_root = Path(__file__).parent.parent
+    model_path = proj_root / "resources/models/ikaros-origin/Ikaros.pmx"
+    texture_dir = proj_root / "resources/models/ikaros-origin"
 
     print(f"Loading model: {model_path}")
     model = PmxModel(model_path)
@@ -625,8 +406,7 @@ def main():
     print("FPS Camera Controls:")
     print("  Left mouse drag: Rotate camera view")
     print("  W/A/S/D: Move forward/left/backward/right")
-    print("  SPACE: Move up")
-    print("  LEFT_SHIFT: Move down")
+    print("  E/Q: Move up/down")
     print("  Mouse scroll: Adjust movement speed")
     print("  X key: Toggle world axis display")
     print("  G key: Toggle ground grid display")
