@@ -9,6 +9,13 @@ uniform mat4 projection;
 uniform float outline_thickness;
 
 void main() {
-    vec3 pos = in_position + in_normal * outline_thickness;
-    gl_Position = projection * view * model * vec4(pos, 1.0);
+    // 变换法线到视图空间（避免非均匀缩放问题）
+    mat3 normalMatrix = transpose(inverse(mat3(model)));
+    vec3 worldNormal = normalize(normalMatrix * in_normal);
+    vec3 worldPos = (model * vec4(in_position, 1.0)).xyz;
+    
+    // 沿法线外扩
+    vec3 expandedPos = worldPos + worldNormal * outline_thickness;
+    
+    gl_Position = projection * view * vec4(expandedPos, 1.0);
 }

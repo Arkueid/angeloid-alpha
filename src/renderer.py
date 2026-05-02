@@ -65,6 +65,12 @@ class Renderer:
         self.model_scale = 1.0
         self.view_history = []
 
+        self.idle_animation_enabled = True
+        self.idle_time = 0.0
+        self.idle_breath_intensity = 0.005
+        self.idle_sway_intensity = 0.01
+        self.idle_head_intensity = 0.008
+
         self.model_vao = None
         self.outline_vao = None
         self.toon_vao = None
@@ -77,7 +83,7 @@ class Renderer:
             vertex_shader=_load_shader("main.vert"),
             fragment_shader=_load_shader("main.frag")
         )
-        self.program["light_dir"] = (1.0, 1.0, 0.5)
+        self.program["light_dir"] = (0.0, 0.5, -1.0)
         self.program["has_texture"] = False
         self.program["tex"] = 0
 
@@ -100,7 +106,7 @@ class Renderer:
             vertex_shader=_load_shader("toon.vert"),
             fragment_shader=_load_shader("toon.frag")
         )
-        self.toon_program["light_dir"] = (0.5, 0.8, -1.0)
+        self.toon_program["light_dir"] = (0.0, 0.5, -1.0)
         self.toon_program["shadow_thresh"] = 0.2
         self.toon_program["rim_power"] = 3.0
         self.toon_program["rim_color"] = (1.0, 0.95, 0.9)
@@ -226,6 +232,10 @@ class Renderer:
             self.camera.reset()
             print("Camera reset to default position")
 
+        if key == glfw.KEY_I and action == glfw.PRESS:
+            self.idle_animation_enabled = not self.idle_animation_enabled
+            print(f"Idle animation: {'ON' if self.idle_animation_enabled else 'OFF'}")
+
     def load_model(self, pmx_model: PmxModel, texture_dir: str = ""):
         positions = np.array([(v.position[0], v.position[1], v.position[2]) for v in pmx_model.vertices], dtype='f4')
 
@@ -247,7 +257,7 @@ class Renderer:
         vertices = []
         for v in pmx_model.vertices:
             x = (v.position[0] - center[0]) * self.model_scale
-            y = (v.position[1] - center[1]) * self.model_scale
+            y = (v.position[1] - min_pos[1]) * self.model_scale
             z = (v.position[2] - center[2]) * self.model_scale
             nx = v.normal[0]
             ny = v.normal[1]
@@ -367,6 +377,19 @@ class Renderer:
             view = self.camera.create_view_matrix()
             model = np.eye(4, dtype='f4')
 
+            if self.idle_animation_enabled:
+                self.idle_time += delta_time
+                breath = np.eye(4, dtype='f4')
+                breath[3, 1] = np.sin(self.idle_time * 1.5) * self.idle_breath_intensity
+                sway_angle = np.sin(self.idle_time * 0.7) * self.idle_sway_intensity
+                sway = np.array([
+                    [np.cos(sway_angle), 0, np.sin(sway_angle), 0],
+                    [0, 1, 0, 0],
+                    [-np.sin(sway_angle), 0, np.cos(sway_angle), 0],
+                    [0, 0, 0, 1]
+                ], dtype='f4')
+                model = model @ breath @ sway
+
             if self.show_ground_grid:
                 self.ctx.disable(moderngl.DEPTH_TEST)
                 self.axis_program["projection"].write(projection.T.tobytes())
@@ -406,6 +429,7 @@ class Renderer:
                 shader["projection"].write(projection.T.tobytes())
                 shader["view"].write(view.T.tobytes())
                 shader["model"].write(model.tobytes())
+                shader["light_dir"] = (0.0, 0.5, -1.0)
 
                 if self.show_toon:
                     shader["camera_pos"] = (self.camera.x, self.camera.y, self.camera.z)
@@ -487,6 +511,7 @@ def main():
     print("  O key: Toggle outline display")
     print("  T key: Toggle toon shading")
     print("  R key: Reset camera to default position")
+    print("  I key: Toggle idle animation")
     print("Starting render loop...")
     renderer.render()
     renderer.close()
