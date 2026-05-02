@@ -30,7 +30,7 @@ debug.log
 
 # Model files
 # Only ignore ikaros models, keep shaders and other models
-resources/models/ikaros*/
+resources/models/*
 !resources/shaders/
 
 # OS
