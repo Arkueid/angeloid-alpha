@@ -36,6 +36,9 @@ class Renderer:
 
         self._create_shaders()
         self._create_axis_shader()
+        self.show_outline = True
+        self.outline_thickness = 0.003
+        self._create_outline_shader()
         self._create_world_axis()
 
         self.camera_x = 0.0
@@ -162,6 +165,49 @@ class Renderer:
 
         self.axis_program = self.ctx.program(vertex_shader=vertex_shader, fragment_shader=fragment_shader)
 
+    def _create_outline_shader(self):
+        vertex_shader = """
+        #version 330 core
+
+        in vec3 in_position;
+        in vec3 in_normal;
+
+        uniform mat4 model;
+        uniform mat4 view;
+        uniform mat4 projection;
+        uniform float outline_thickness;
+
+        void main() {
+            vec3 pos = in_position + in_normal * outline_thickness;
+            gl_Position = projection * view * model * vec4(pos, 1.0);
+        }
+        """
+
+        fragment_shader = """
+        #version 330 core
+
+        uniform vec3 outline_color;
+        out vec4 fragColor;
+
+        void main() {
+            fragColor = vec4(outline_color, 1.0);
+        }
+        """
+
+        self.outline_program = self.ctx.program(vertex_shader=vertex_shader, fragment_shader=fragment_shader)
+        self.outline_program["outline_color"] = (0.0, 0.0, 0.0)
+        self.outline_program["outline_thickness"] = self.outline_thickness
+
+    def _create_outline_vao(self, vertices, indices):
+        # 顶点数据格式是 3f(pos) + 3f(normal) + 2f(uv)，共 8 floats
+        self.outline_vao = self.ctx.vertex_array(
+            self.outline_program,
+            [
+                (self.ctx.buffer(vertices), '3f 3f 8x', 'in_position', 'in_normal'),
+            ],
+            self.ctx.buffer(indices)
+        )
+
     def _create_world_axis(self):
         axis_length = 50.0
         
@@ -276,6 +322,10 @@ class Renderer:
         if key == glfw.KEY_G and action == glfw.PRESS:
             self.show_ground_grid = not self.show_ground_grid
             print(f"Ground grid: {'ON' if self.show_ground_grid else 'OFF'}")
+        
+        if key == glfw.KEY_O and action == glfw.PRESS:
+            self.show_outline = not self.show_outline
+            print(f"Outline: {'ON' if self.show_outline else 'OFF'}")
         
         if key == glfw.KEY_R and action == glfw.PRESS:
             self.camera_x = 0.0
@@ -411,6 +461,8 @@ class Renderer:
             self.ctx.buffer(indices)
         )
 
+        self._create_outline_vao(vertices, indices)
+
         self.index_count = len(indices)
 
         # 调试：打印材质详细信息
@@ -519,8 +571,23 @@ class Renderer:
                 self.ctx.line_width = 3.0
                 self.axis_vao.render(moderngl.LINES)
                 self.ctx.enable(moderngl.DEPTH_TEST)
-            
-            # 先渲染模型（需要深度测试）
+
+            # 渲染描边（标准 Inverted Hull 方法）
+            if self.show_outline and hasattr(self, 'outline_vao') and hasattr(self, 'material_batches'):
+                self.ctx.enable(moderngl.CULL_FACE)
+                self.ctx.cull_face = 'front'  # 剔除正面，只渲染背面
+                
+                self.outline_program["projection"].write(projection.T.tobytes())
+                self.outline_program["view"].write(view.T.tobytes())
+                self.outline_program["model"].write(model.tobytes())
+                self.outline_program["outline_thickness"] = self.outline_thickness
+
+                for batch in self.material_batches:
+                    self.outline_vao.render(moderngl.TRIANGLES, vertices=batch['count'], first=batch['first'])
+                
+                self.ctx.disable(moderngl.CULL_FACE)
+
+            # 渲染模型
             if hasattr(self, 'vao') and hasattr(self, 'material_batches'):
                 self.program["projection"].write(projection.T.tobytes())
                 self.program["view"].write(view.T.tobytes())
@@ -555,8 +622,8 @@ class Renderer:
 
 
 def main():
-    model_path = "resources/ikaros-origin/Ikaros.pmx"
-    texture_dir = "resources/ikaros-origin"
+    model_path = "resources/ikaros-uniform/Ikaros.pmx"
+    texture_dir = "resources/ikaros-uniform"
 
     print(f"Loading model: {model_path}")
     model = PmxModel(model_path)
@@ -577,6 +644,7 @@ def main():
     print("  Mouse scroll: Adjust movement speed")
     print("  X key: Toggle world axis display")
     print("  G key: Toggle ground grid display")
+    print("  O key: Toggle outline display")
     print("  R key: Reset camera to default position")
     print("Starting render loop...")
     renderer.render()
