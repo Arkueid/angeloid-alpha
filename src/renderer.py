@@ -47,6 +47,7 @@ class Renderer:
 
         self._create_shaders()
         self._create_toon_shaders()
+        self._create_skinned_shaders()
         self._create_axis_shader()
         self._create_outline_shader()
         self._create_world_axis()
@@ -74,9 +75,15 @@ class Renderer:
         self.model_vao = None
         self.outline_vao = None
         self.toon_vao = None
+        self.skinned_vao = None
+        self.pmx_model = None
         self.textures = []
         self.material_batches = []
         self.index_count = 0
+        
+        self.bone_texture = None
+        self.bone_texture_width = 0
+        self.show_skinned = False
 
     def _create_shaders(self):
         self.program = self.ctx.program(
@@ -102,6 +109,16 @@ class Renderer:
         self.outline_program["outline_thickness"] = self.outline_thickness
         self.outline_program["tex"] = 0
 
+        self.outline_skinned_program = self.ctx.program(
+            vertex_shader=_load_shader("outline_skinned.vert"),
+            fragment_shader=_load_shader("outline.frag")
+        )
+        self.outline_skinned_program["outline_color"] = (0.0, 0.0, 0.0)
+        self.outline_skinned_program["outline_thickness"] = self.outline_thickness
+        self.outline_skinned_program["tex"] = 0
+        self.outline_skinned_program["bone_texture"] = 1
+        self.outline_skinned_program["bone_texture_width"] = 64
+
     def _create_toon_shaders(self):
         self.toon_program = self.ctx.program(
             vertex_shader=_load_shader("toon.vert"),
@@ -123,6 +140,29 @@ class Renderer:
         ], dtype='u1')
         self.gradient_texture = self.ctx.texture((4, 1), 3, gradient_data.tobytes())
         self.gradient_texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+
+    def _create_skinned_shaders(self):
+        self.skinned_program = self.ctx.program(
+            vertex_shader=_load_shader("skinned.vert"),
+            fragment_shader=_load_shader("toon.frag")
+        )
+        self.skinned_program["light_dir"] = (0.0, 0.5, -1.0)
+        self.skinned_program["has_texture"] = False
+        self.skinned_program["tex"] = 0
+        self.skinned_program["bone_texture"] = 1
+        self.skinned_program["gradient_map"] = 2
+        self.skinned_program["shadow_thresh"] = 0.2
+        self.skinned_program["rim_power"] = 3.0
+        self.skinned_program["rim_color"] = (1.0, 0.95, 0.9)
+        self.skinned_debug = False
+        self.skinned_debug_scale = 1.5
+
+    def _reload_bone_texture(self, debug_scale=1.0):
+        """重新加载骨骼纹理（用于调试模式）"""
+        if self.pmx_model is None:
+            return
+        bone_tex_data, tex_width, tex_height = self.pmx_model.get_bone_texture_data(debug_scale)
+        self.bone_texture.write(bone_tex_data.tobytes())
 
     def _create_world_axis(self):
         axis_length = 50.0
@@ -229,6 +269,16 @@ class Renderer:
             self.show_toon = not self.show_toon
             print(f"Toon shading: {'ON' if self.show_toon else 'OFF'}")
 
+        if key == glfw.KEY_K and action == glfw.PRESS:
+            self.show_skinned = not self.show_skinned
+            self.skinned_debug = not self.skinned_debug
+            if self.skinned_debug:
+                self._reload_bone_texture(self.skinned_debug_scale)
+                print(f"Skinned rendering: ON (debug scale={self.skinned_debug_scale})")
+            else:
+                self._reload_bone_texture(1.0)
+                print(f"Skinned rendering: OFF")
+
         if key == glfw.KEY_R and action == glfw.PRESS:
             self.camera.reset()
             print("Camera reset to default position")
@@ -238,6 +288,7 @@ class Renderer:
             print(f"Idle animation: {'ON' if self.idle_animation_enabled else 'OFF'}")
 
     def load_model(self, pmx_model: PmxModel, texture_dir: str = ""):
+        self.pmx_model = pmx_model
         positions = np.array([(v.position[0], v.position[1], v.position[2]) for v in pmx_model.vertices], dtype='f4')
 
         min_pos = positions.min(axis=0)
@@ -288,6 +339,49 @@ class Renderer:
             self.outline_program,
             [
                 (self.ctx.buffer(vertices), '3f 3f 2f', 'in_position', 'in_normal', 'in_uv'),
+            ],
+            self.ctx.buffer(indices)
+        )
+
+        print(f"\nLoading skeleton data...")
+        skinning_data = pmx_model.get_all_skinning_vertex_data()
+        bone_tex_data, tex_width, tex_height = pmx_model.get_bone_texture_data()
+        
+        print(f"  Bone count: {pmx_model.bone_count}")
+        print(f"  Bone texture size: {tex_width}x{tex_height}")
+        
+        skinned_positions = np.zeros_like(skinning_data['positions'])
+        for i in range(len(skinned_positions) // 3):
+            skinned_positions[i*3] = (skinning_data['positions'][i*3] - center[0]) * self.model_scale
+            skinned_positions[i*3 + 1] = (skinning_data['positions'][i*3 + 1] - min_pos[1]) * self.model_scale
+            skinned_positions[i*3 + 2] = (skinning_data['positions'][i*3 + 2] - center[2]) * self.model_scale
+        
+        self.bone_texture = self.ctx.texture((tex_width, tex_height), 4, bone_tex_data.tobytes(), dtype='f4')
+        self.bone_texture.filter = (moderngl.NEAREST, moderngl.NEAREST)
+        self.bone_texture.repeat_x = False
+        self.bone_texture.repeat_y = False
+        self.bone_texture_width = tex_width
+        
+        self.skinned_vao = self.ctx.vertex_array(
+            self.skinned_program,
+            [
+                (self.ctx.buffer(skinned_positions), '3f', 'in_position'),
+                (self.ctx.buffer(skinning_data['normals']), '3f', 'in_normal'),
+                (self.ctx.buffer(skinning_data['uvs']), '2f', 'in_uv'),
+                (self.ctx.buffer(skinning_data['bone_indices']), '4i', 'in_bone_indices'),
+                (self.ctx.buffer(skinning_data['bone_weights']), '4f', 'in_bone_weights'),
+            ],
+            self.ctx.buffer(indices)
+        )
+
+        self.skinned_outline_vao = self.ctx.vertex_array(
+            self.outline_skinned_program,
+            [
+                (self.ctx.buffer(skinned_positions), '3f', 'in_position'),
+                (self.ctx.buffer(skinning_data['normals']), '3f', 'in_normal'),
+                (self.ctx.buffer(skinning_data['uvs']), '2f', 'in_uv'),
+                (self.ctx.buffer(skinning_data['bone_indices']), '4i', 'in_bone_indices'),
+                (self.ctx.buffer(skinning_data['bone_weights']), '4f', 'in_bone_weights'),
             ],
             self.ctx.buffer(indices)
         )
@@ -413,10 +507,19 @@ class Renderer:
                 self.ctx.enable(moderngl.CULL_FACE)
                 self.ctx.cull_face = 'front'
 
-                self.outline_program["projection"].write(projection.T.tobytes())
-                self.outline_program["view"].write(view.T.tobytes())
-                self.outline_program["model"].write(model.tobytes())
-                self.outline_program["outline_thickness"] = self.outline_thickness
+                if self.show_skinned and self.skinned_outline_vao:
+                    outline_shader = self.outline_skinned_program
+                    outline_vao = self.skinned_outline_vao
+                    outline_shader["bone_texture_width"] = self.bone_texture_width
+                    self.bone_texture.use(1)
+                else:
+                    outline_shader = self.outline_program
+                    outline_vao = self.outline_vao
+
+                outline_shader["projection"].write(projection.T.tobytes())
+                outline_shader["view"].write(view.T.tobytes())
+                outline_shader["model"].write(model.tobytes())
+                outline_shader["outline_thickness"] = self.outline_thickness
 
                 for batch in self.material_batches:
                     tex_idx = batch['texture_index']
@@ -424,22 +527,29 @@ class Renderer:
                         self.textures[tex_idx].use(0)
                     else:
                         self.ctx.texture((1, 1), 1).use(0)
-                    self.outline_vao.render(moderngl.TRIANGLES, vertices=batch['count'], first=batch['first'])
+                    outline_vao.render(moderngl.TRIANGLES, vertices=batch['count'], first=batch['first'])
 
                 self.ctx.disable(moderngl.CULL_FACE)
 
             if self.model_vao and self.material_batches:
-                shader = self.toon_program if self.show_toon else self.program
-                vao = self.toon_vao if self.show_toon else self.model_vao
+                if self.show_skinned and self.skinned_vao:
+                    shader = self.skinned_program
+                    vao = self.skinned_vao
+                    shader["bone_texture_width"] = self.bone_texture_width
+                    self.bone_texture.use(1)
+                    shader["camera_pos"] = (self.camera.x, self.camera.y, self.camera.z)
+                    self.gradient_texture.use(2)
+                else:
+                    shader = self.toon_program if self.show_toon else self.program
+                    vao = self.toon_vao if self.show_toon else self.model_vao
+                    if self.show_toon:
+                        shader["camera_pos"] = (self.camera.x, self.camera.y, self.camera.z)
+                        self.gradient_texture.use(1)
 
                 shader["projection"].write(projection.T.tobytes())
                 shader["view"].write(view.T.tobytes())
                 shader["model"].write(model.tobytes())
                 shader["light_dir"] = (0.0, 0.5, -1.0)
-
-                if self.show_toon:
-                    shader["camera_pos"] = (self.camera.x, self.camera.y, self.camera.z)
-                    self.gradient_texture.use(1)
 
                 for batch in self.material_batches:
                     tex_idx = batch['texture_index']
@@ -516,6 +626,7 @@ def main():
     print("  G key: Toggle ground grid display")
     print("  O key: Toggle outline display")
     print("  T key: Toggle toon shading")
+    print("  K key: Toggle GPU skinning")
     print("  R key: Reset camera to default position")
     print("  I key: Toggle idle animation")
     print("Starting render loop...")
