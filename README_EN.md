@@ -6,7 +6,7 @@
 
 ## Overview
 
-This program is a high-performance PMX model renderer with GPU skeletal animation support. Master can use it to load MMD format 3D models and perform real-time rendering and interaction.
+This program is a PMX model renderer with GPU skeletal animation support. Master can use it to load MMD format 3D models and perform real-time rendering and interaction.
 
 ## Project Structure
 
