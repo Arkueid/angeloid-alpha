@@ -1,7 +1,7 @@
 import glfw
 import moderngl
 import numpy as np
-from load_pmx import PmxModel
+from load_pmx import PmxModel, VpdLoader, pack_matrices_to_texture
 from PIL import Image
 import os
 import json
@@ -154,14 +154,49 @@ class Renderer:
         self.skinned_program["shadow_thresh"] = 0.2
         self.skinned_program["rim_power"] = 3.0
         self.skinned_program["rim_color"] = (1.0, 0.95, 0.9)
+        
+        self.skinned_program_notoon = self.ctx.program(
+            vertex_shader=_load_shader("skinned.vert"),
+            fragment_shader=_load_shader("main.frag")
+        )
+        self.skinned_program_notoon["light_dir"] = (0.0, 0.5, -1.0)
+        self.skinned_program_notoon["has_texture"] = False
+        self.skinned_program_notoon["tex"] = 0
+        self.skinned_program_notoon["bone_texture"] = 1
+        
         self.skinned_debug = False
         self.skinned_debug_scale = 1.5
+        self.vpd_poses = None
+        self.vpd_pose_applied = False
 
-    def _reload_bone_texture(self, debug_scale=1.0):
-        """重新加载骨骼纹理（用于调试模式）"""
+    def _load_vpd_poses(self, vpd_path):
+        """加载 VPD 姿势文件"""
+        try:
+            self.vpd_poses = VpdLoader.load(vpd_path)
+            matched = 0
+            if self.pmx_model:
+                bone_names = {b.name for b in self.pmx_model.get_bones()}
+                matched = len(set(self.vpd_poses.keys()) & bone_names)
+            print(f"Loaded VPD poses: {len(self.vpd_poses)} bones, {matched} matched with model")
+            return True
+        except Exception as e:
+            print(f"Failed to load VPD: {e}")
+            return False
+
+    def _reload_bone_texture(self, debug_scale=1.0, use_pose=False):
+        """重新加载骨骼纹理（用于调试模式或应用姿势）"""
         if self.pmx_model is None:
             return
-        bone_tex_data, tex_width, tex_height = self.pmx_model.get_bone_texture_data(debug_scale)
+        transform_params = {
+            'center': self.model_center,
+            'min_y': self.model_min_pos[1],
+            'scale': self.model_scale
+        }
+        if use_pose and self.vpd_poses:
+            matrices = self.pmx_model.get_bone_matrices_with_pose(self.vpd_poses, debug_scale=1.0, transform_params=transform_params)
+            bone_tex_data, tex_width, tex_height = pack_matrices_to_texture(matrices)
+        else:
+            bone_tex_data, tex_width, tex_height = self.pmx_model.get_bone_texture_data(debug_scale, transform_params=transform_params)
         self.bone_texture.write(bone_tex_data.tobytes())
 
     def _create_world_axis(self):
@@ -272,12 +307,22 @@ class Renderer:
         if key == glfw.KEY_K and action == glfw.PRESS:
             self.show_skinned = not self.show_skinned
             self.skinned_debug = not self.skinned_debug
-            if self.skinned_debug:
-                self._reload_bone_texture(self.skinned_debug_scale)
-                print(f"Skinned rendering: ON (debug scale={self.skinned_debug_scale})")
+            if self.show_skinned:
+                debug_scale = 1.0 if self.vpd_pose_applied else (self.skinned_debug_scale if self.skinned_debug else 1.0)
+                self._reload_bone_texture(debug_scale, use_pose=self.vpd_pose_applied)
+                print(f"Skinned rendering: ON (debug={self.skinned_debug})")
             else:
-                self._reload_bone_texture(1.0)
+                self._reload_bone_texture(1.0, use_pose=False)
                 print(f"Skinned rendering: OFF")
+
+        if key == glfw.KEY_P and action == glfw.PRESS:
+            if self.vpd_poses:
+                self.vpd_pose_applied = not self.vpd_pose_applied
+                if self.show_skinned:
+                    self._reload_bone_texture(1.0, use_pose=self.vpd_pose_applied)
+                print(f"VPD pose: {'ON' if self.vpd_pose_applied else 'OFF'}")
+            else:
+                print("No VPD pose loaded")
 
         if key == glfw.KEY_R and action == glfw.PRESS:
             self.camera.reset()
@@ -291,6 +336,10 @@ class Renderer:
         self.pmx_model = pmx_model
         positions = np.array([(v.position[0], v.position[1], v.position[2]) for v in pmx_model.vertices], dtype='f4')
 
+        vpd_path = "resources/vpd/自然站姿.vpd"
+        if os.path.exists(vpd_path):
+            self._load_vpd_poses(vpd_path)
+
         min_pos = positions.min(axis=0)
         max_pos = positions.max(axis=0)
         center = (min_pos + max_pos) / 2
@@ -301,6 +350,7 @@ class Renderer:
         print(f"Model center: {center}, max dimension: {max_size}")
 
         self.model_center = center.tolist()
+        self.model_min_pos = min_pos.tolist()
         self.model_scale = 2.0 / max_size if max_size > 0 else 1.0
 
         scaled_size = max_size * self.model_scale
@@ -345,7 +395,12 @@ class Renderer:
 
         print(f"\nLoading skeleton data...")
         skinning_data = pmx_model.get_all_skinning_vertex_data()
-        bone_tex_data, tex_width, tex_height = pmx_model.get_bone_texture_data()
+        transform_params = {
+            'center': self.model_center,
+            'min_y': self.model_min_pos[1],
+            'scale': self.model_scale
+        }
+        bone_tex_data, tex_width, tex_height = pmx_model.get_bone_texture_data(transform_params=transform_params)
         
         print(f"  Bone count: {pmx_model.bone_count}")
         print(f"  Bone texture size: {tex_width}x{tex_height}")
@@ -364,6 +419,18 @@ class Renderer:
         
         self.skinned_vao = self.ctx.vertex_array(
             self.skinned_program,
+            [
+                (self.ctx.buffer(skinned_positions), '3f', 'in_position'),
+                (self.ctx.buffer(skinning_data['normals']), '3f', 'in_normal'),
+                (self.ctx.buffer(skinning_data['uvs']), '2f', 'in_uv'),
+                (self.ctx.buffer(skinning_data['bone_indices']), '4i', 'in_bone_indices'),
+                (self.ctx.buffer(skinning_data['bone_weights']), '4f', 'in_bone_weights'),
+            ],
+            self.ctx.buffer(indices)
+        )
+        
+        self.skinned_vao_notoon = self.ctx.vertex_array(
+            self.skinned_program_notoon,
             [
                 (self.ctx.buffer(skinned_positions), '3f', 'in_position'),
                 (self.ctx.buffer(skinning_data['normals']), '3f', 'in_normal'),
@@ -467,10 +534,16 @@ class Renderer:
 
             self.ctx.clear(0.15, 0.15, 0.2, 0.0)
             self.ctx.enable(moderngl.DEPTH_TEST)
+            
+            # MMD 使用左手坐标系，翻转 X 轴后三角形缠绕顺序变为 CW
+            self.ctx.front_face = 'cw'
 
             projection = Camera.create_projection_matrix(self.width, self.height)
             view = self.camera.create_view_matrix()
-            model = np.eye(4, dtype='f4')
+            
+            # MMD 到 OpenGL 坐标系转换：翻转 X 轴
+            coord_convert = np.diag([-1, 1, 1, 1]).astype('f4')
+            model = coord_convert
 
             if self.idle_animation_enabled:
                 self.idle_time += delta_time
@@ -533,12 +606,18 @@ class Renderer:
 
             if self.model_vao and self.material_batches:
                 if self.show_skinned and self.skinned_vao:
-                    shader = self.skinned_program
-                    vao = self.skinned_vao
+                    if self.show_toon:
+                        shader = self.skinned_program
+                        vao = self.skinned_vao
+                        shader["camera_pos"] = (self.camera.x, self.camera.y, self.camera.z)
+                        self.gradient_texture.use(2)
+                    else:
+                        shader = self.skinned_program_notoon
+                        vao = self.skinned_vao_notoon
                     shader["bone_texture_width"] = self.bone_texture_width
                     self.bone_texture.use(1)
-                    shader["camera_pos"] = (self.camera.x, self.camera.y, self.camera.z)
-                    self.gradient_texture.use(2)
+                    shader["tex"] = 0
+                    shader["bone_texture"] = 1
                 else:
                     shader = self.toon_program if self.show_toon else self.program
                     vao = self.toon_vao if self.show_toon else self.model_vao
@@ -627,6 +706,7 @@ def main():
     print("  O key: Toggle outline display")
     print("  T key: Toggle toon shading")
     print("  K key: Toggle GPU skinning")
+    print("  P key: Toggle VPD pose")
     print("  R key: Reset camera to default position")
     print("  I key: Toggle idle animation")
     print("Starting render loop...")

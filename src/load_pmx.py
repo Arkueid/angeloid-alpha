@@ -8,18 +8,17 @@ def next_pow2(x):
 
 
 def compute_bone_world_matrices(bones):
-    """计算骨骼的世界变换矩阵（用于绑定姿态显示）"""
+    """计算骨骼的世界变换矩阵（绑定姿态）
+    只包含位置，不包含初始旋转
+    """
     num_bones = len(bones)
     world_mats = np.zeros((num_bones, 4, 4), dtype=np.float32)
     
     for i, bone in enumerate(bones):
-        world_mat = np.eye(4, dtype=np.float32)
-        world_mat[:3, 3] = bone.position
-        
-        if bone.parent_index >= 0:
-            world_mats[i] = world_mats[bone.parent_index] @ world_mat
-        else:
-            world_mats[i] = world_mat
+        world_mats[i] = np.eye(4, dtype=np.float32)
+        world_mats[i, 0, 3] = bone.position[0]
+        world_mats[i, 1, 3] = bone.position[1]
+        world_mats[i, 2, 3] = bone.position[2]
     
     return world_mats
 
@@ -68,6 +67,74 @@ def pack_matrices_to_texture(matrices):
             texture_data[row, col_start + 3] = matrix[:, 3]
     
     return texture_data, tex_width, tex_height
+
+
+class VpdPose:
+    """VPD 姿势数据类"""
+    def __init__(self, bone_name, tx, ty, tz, qx, qy, qz, qw):
+        self.bone_name = bone_name
+        self.position = np.array([tx, ty, tz], dtype=np.float32)
+        self.quaternion = np.array([qx, qy, qz, qw], dtype=np.float32)
+
+    def to_matrix(self):
+        """将四元数和位置转换为 4x4 变换矩阵"""
+        qx, qy, qz, qw = self.quaternion
+        xx, yy, zz = qx*qx, qy*qy, qz*qz
+        xy, yz, xz = qx*qy, qy*qz, qx*qz
+        wx, wy, wz = qw*qx, qw*qy, qw*qz
+
+        matrix = np.eye(4, dtype=np.float32)
+        matrix[0, 0] = 1 - 2*(yy + zz)
+        matrix[0, 1] = 2*(xy - wz)
+        matrix[0, 2] = 2*(xz + wy)
+        matrix[1, 0] = 2*(xy + wz)
+        matrix[1, 1] = 1 - 2*(xx + zz)
+        matrix[1, 2] = 2*(yz - wx)
+        matrix[2, 0] = 2*(xz - wy)
+        matrix[2, 1] = 2*(yz + wx)
+        matrix[2, 2] = 1 - 2*(xx + yy)
+        matrix[:3, 3] = self.position
+        return matrix
+
+
+class VpdLoader:
+    """VPD 姿势文件加载器"""
+    @staticmethod
+    def load(file_path):
+        """加载 VPD 文件并返回姿势数据字典 {bone_name: VpdPose}"""
+        with open(file_path, 'rb') as f:
+            raw = f.read()
+
+        try:
+            text = raw.decode('cp932')
+        except:
+            text = raw.decode('utf-8', errors='ignore')
+
+        lines = text.split('\n')
+        poses = {}
+
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            if line.startswith('Bone'):
+                parts = line.replace('Bone', '').split('{')
+                bone_idx = int(parts[0])
+                bone_name = parts[1].replace('}', '')
+
+                i += 1
+                trans_line = lines[i].split('//')[0].replace(';', '').strip()
+                trans_parts = [p.strip() for p in trans_line.split(',')]
+                tx, ty, tz = float(trans_parts[0]), float(trans_parts[1]), float(trans_parts[2])
+
+                i += 1
+                quat_line = lines[i].split('//')[0].replace(';', '').strip()
+                quat_parts = [p.strip() for p in quat_line.split(',')]
+                qx, qy, qz, qw = float(quat_parts[0]), float(quat_parts[1]), float(quat_parts[2]), float(quat_parts[3])
+
+                poses[bone_name] = VpdPose(bone_name, tx, ty, tz, qx, qy, qz, qw)
+            i += 1
+
+        return poses
 
 
 class BoneDeform:
@@ -183,6 +250,25 @@ class Bone:
         if parent_world_pos is None:
             return self.position.copy()
         return parent_world_pos + self.position
+
+    def get_init_rotation_matrix(self):
+        """获取骨骼的初始旋转矩阵（从骨骼局部坐标系到世界坐标系）"""
+        if self.local_x_vector is not None and self.local_z_vector is not None:
+            x_norm = np.linalg.norm(self.local_x_vector)
+            z_norm = np.linalg.norm(self.local_z_vector)
+            
+            if x_norm > 0.001 and z_norm > 0.001:
+                local_x = self.local_x_vector
+                local_z = self.local_z_vector
+                local_y = np.cross(local_z, local_x)
+                
+                init_rot = np.eye(3, dtype=np.float32)
+                init_rot[:, 0] = local_x
+                init_rot[:, 1] = local_y
+                init_rot[:, 2] = local_z
+                return init_rot
+        
+        return np.eye(3, dtype=np.float32)
 
 
 class PmxModel:
@@ -308,12 +394,90 @@ class PmxModel:
         bones = self.get_bones()
         return compute_bind_pose_matrices(bones, debug_scale)
 
-    def get_bone_texture_data(self, debug_scale=1.0):
+    def get_bone_texture_data(self, debug_scale=1.0, transform_params=None):
         """获取打包后的骨骼纹理数据
         debug_scale: 调试缩放因子
+        transform_params: 顶点变换参数 {'center': [x,y,z], 'min_y': float, 'scale': float}
         """
-        bind_pose_mats = self.get_bind_pose_matrices(debug_scale)
-        return pack_matrices_to_texture(bind_pose_mats)
+        matrices = self.get_bind_pose_matrices(debug_scale)
+        
+        if transform_params:
+            center = transform_params['center']
+            min_y = transform_params['min_y']
+            scale = transform_params['scale']
+            
+            offset = np.array([center[0], min_y, center[2]])
+            offset_scaled = scale * offset
+            
+            for i in range(len(matrices)):
+                M = matrices[i]
+                R = M[:3, :3]
+                t = M[:3, 3]
+                
+                t_new = t * scale + (R - np.eye(3)) @ offset_scaled
+                matrices[i, :3, 3] = t_new
+        
+        return pack_matrices_to_texture(matrices)
+
+    def get_bone_matrices_with_pose(self, vpd_poses, debug_scale=1.0, transform_params=None):
+        """根据 VPD 姿势计算骨骼矩阵
+        vpd_poses: VpdLoader.load() 返回的姿势字典 {bone_name: VpdPose}
+        transform_params: 顶点变换参数 {'center': [x,y,z], 'min_y': float, 'scale': float}
+        """
+        bones = self.get_bones()
+        num_bones = len(bones)
+        
+        bind_world = compute_bone_world_matrices(bones)
+        
+        pose_world = np.zeros((num_bones, 4, 4), dtype=np.float32)
+        
+        for i in range(num_bones):
+            bone = bones[i]
+            local_mat = np.eye(4, dtype=np.float32)
+            
+            if bone.parent_index >= 0:
+                parent_pos = bones[bone.parent_index].position
+                local_pos = bone.position - parent_pos
+                local_mat[0, 3] = local_pos[0]
+                local_mat[1, 3] = local_pos[1]
+                local_mat[2, 3] = local_pos[2]
+                
+                if bone.name in vpd_poses:
+                    pose = vpd_poses[bone.name]
+                    rot_mat = pose.to_matrix()[:3, :3]
+                    local_mat[:3, :3] = rot_mat
+                
+                pose_world[i] = pose_world[bone.parent_index] @ local_mat
+            else:
+                if bone.name in vpd_poses:
+                    pose = vpd_poses[bone.name]
+                    rot_mat = pose.to_matrix()[:3, :3]
+                    local_mat[:3, :3] = rot_mat
+                pose_world[i] = local_mat
+        
+        matrices = np.zeros((num_bones, 4, 4), dtype=np.float32)
+        for i in range(num_bones):
+            inv_bind = np.linalg.inv(bind_world[i])
+            matrices[i] = pose_world[i] @ inv_bind
+
+        if transform_params:
+            center = transform_params['center']
+            min_y = transform_params['min_y']
+            scale = transform_params['scale']
+            
+            offset = np.array([center[0], min_y, center[2]])
+            offset_scaled = scale * offset
+            
+            for i in range(num_bones):
+                M = matrices[i]
+                R = M[:3, :3]
+                t = M[:3, 3]
+                
+                t_new = t * scale + (R - np.eye(3)) @ offset_scaled
+                
+                matrices[i, :3, 3] = t_new
+
+        return matrices
 
     def get_all_skinning_vertex_data(self):
         """获取完整的蒙皮顶点数据（位置、法线、UV、骨骼索引、骨骼权重）"""
