@@ -100,6 +100,7 @@ class Renderer:
         )
         self.outline_program["outline_color"] = (0.0, 0.0, 0.0)
         self.outline_program["outline_thickness"] = self.outline_thickness
+        self.outline_program["tex"] = 0
 
     def _create_toon_shaders(self):
         self.toon_program = self.ctx.program(
@@ -286,7 +287,7 @@ class Renderer:
         self.outline_vao = self.ctx.vertex_array(
             self.outline_program,
             [
-                (self.ctx.buffer(vertices), '3f 3f 8x', 'in_position', 'in_normal'),
+                (self.ctx.buffer(vertices), '3f 3f 2f', 'in_position', 'in_normal', 'in_uv'),
             ],
             self.ctx.buffer(indices)
         )
@@ -370,7 +371,7 @@ class Renderer:
 
             self.camera.update(self.window, delta_time)
 
-            self.ctx.clear(0.15, 0.15, 0.2)
+            self.ctx.clear(0.15, 0.15, 0.2, 0.0)
             self.ctx.enable(moderngl.DEPTH_TEST)
 
             projection = Camera.create_projection_matrix(self.width, self.height)
@@ -418,6 +419,11 @@ class Renderer:
                 self.outline_program["outline_thickness"] = self.outline_thickness
 
                 for batch in self.material_batches:
+                    tex_idx = batch['texture_index']
+                    if 0 <= tex_idx < len(self.textures) and self.textures[tex_idx]:
+                        self.textures[tex_idx].use(0)
+                    else:
+                        self.ctx.texture((1, 1), 1).use(0)
                     self.outline_vao.render(moderngl.TRIANGLES, vertices=batch['count'], first=batch['first'])
 
                 self.ctx.disable(moderngl.CULL_FACE)
