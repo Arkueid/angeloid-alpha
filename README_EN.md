@@ -6,7 +6,19 @@
 
 ## Overview
 
-This program is a PMX model renderer with GPU skeletal animation support. Master can use it to load MMD format 3D models and perform real-time rendering and interaction.
+This program is a PMX model renderer with GPU skeletal animation and VMD animation playback support. Master can use it to load MMD format 3D models and perform real-time rendering and interaction.
+
+## Features
+
+- ✅ PMX model loading and rendering
+- ✅ GPU skeletal skinning animation
+- ✅ VPD pose loading
+- ✅ VMD animation playback (bone animation + morph animation)
+- ✅ Multiple VMD mixing playback
+- ✅ Morph expression system (Vertex/UV/Bone/Material/Group)
+- ✅ Toon shading
+- ✅ Edge outline
+- ✅ Multiple model switching
 
 ## Project Structure
 
@@ -15,15 +27,51 @@ mmd-demo/
 ├── src/
 │   ├── pmx_reader.py      # PMX model loading
 │   ├── vpd_loader.py      # VPD pose loading
+│   ├── vmd_loader.py      # VMD animation loading
 │   ├── bone_transform.py  # Bone matrix calculation
 │   ├── renderer.py        # Main renderer
 │   └── camera.py          # Camera control
 ├── resources/
 │   ├── shaders/           # GLSL shaders
 │   ├── models/            # PMX model files
-│   └── vpd/               # VPD pose files
+│   ├── vpd/               # VPD pose files
+│   └── vmd/               # VMD animation files
 └── run.py                 # Entry point
 ```
+
+## Usage
+
+```bash
+# Load default model
+python run.py
+
+# Specify model
+python run.py -m ikaros
+
+# Load VMD animation
+python run.py -v resources/vmd/新地球/动作.vmd
+
+# Load multiple VMDs (mixed playback)
+python run.py -v file1.vmd file2.vmd file3.vmd
+```
+
+### Command Line Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `-m, --model` | Select model (ikaros, chloe, aqua, marine) |
+| `-v, --vmd` | Load VMD animation files (multiple files supported) |
+
+### Keyboard Shortcuts
+
+| Key | Function |
+|-----|----------|
+| K | Toggle skeletal skinning |
+| P | Toggle VPD pose |
+| T | Toggle Toon shading |
+| O | Toggle outline display |
+| Space | Play/Pause VMD animation |
+| ← / → | Adjust animation playback speed |
 
 ## Technical Details
 
@@ -120,6 +168,22 @@ VPD is MMD's pose file format, storing bone rotation and translation:
 
 **Quaternion Conversion**:
 Convert quaternion from VPD to 4x4 rotation matrix for bone transformation.
+
+### VMD Animation Loading
+
+VMD is MMD's animation file format, supporting bone animation and morph animation:
+
+**File Structure**:
+- Bone keyframes: bone name, frame number, position, quaternion rotation, Bezier interpolation curve
+- Morph keyframes: morph name, frame number, weight
+- Camera/Light keyframes (optional)
+
+**Interpolation Implementation**:
+- Bezier curve interpolation: using 64-byte interpolation data from keyframes
+- Quaternion SLERP interpolation: smooth rotation transition
+
+**Multiple VMD Mixing**:
+VmdMixer class supports playing multiple VMD animations simultaneously, automatically blending bone transforms and morph weights.
 
 ## Dependencies
 
