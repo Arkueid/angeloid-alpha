@@ -42,12 +42,13 @@ class Renderer:
         self.ctx.enable(moderngl.DEPTH_TEST)
 
         self.show_outline = True
-        self.outline_thickness = 0.003
+        self.outline_thickness = 0.001
         self.show_toon = True
 
         self._create_shaders()
         self._create_toon_shaders()
         self._create_skinned_shaders()
+        self._create_morph_shaders()
         self._create_axis_shader()
         self._create_outline_shader()
         self._create_world_axis()
@@ -84,6 +85,20 @@ class Renderer:
         self.bone_texture = None
         self.bone_texture_width = 0
         self.show_skinned = False
+        
+        self.morph_weights = {}
+        self.active_morph_index = -1
+        self.morph_weight_value = 0.0
+        self.morph_vbo = None
+        self.uv_morph_vbo = None
+        self.skinned_morph_vao = None
+        self.skinned_morph_vao_notoon = None
+        self.skinned_morph_outline_vao = None
+        self.show_morph = False
+        
+        self.original_material_alphas = {}
+        self.material_morph_alphas = {}
+        self.bone_morph_transforms = {}
 
     def _create_shaders(self):
         self.program = self.ctx.program(
@@ -93,6 +108,7 @@ class Renderer:
         self.program["light_dir"] = (0.0, 0.5, -1.0)
         self.program["has_texture"] = False
         self.program["tex"] = 0
+        self.program["alpha"] = 1.0
 
     def _create_axis_shader(self):
         self.axis_program = self.ctx.program(
@@ -108,6 +124,7 @@ class Renderer:
         self.outline_program["outline_color"] = (0.0, 0.0, 0.0)
         self.outline_program["outline_thickness"] = self.outline_thickness
         self.outline_program["tex"] = 0
+        self.outline_program["alpha"] = 1.0
 
         self.outline_skinned_program = self.ctx.program(
             vertex_shader=_load_shader("outline_skinned.vert"),
@@ -118,6 +135,7 @@ class Renderer:
         self.outline_skinned_program["tex"] = 0
         self.outline_skinned_program["bone_texture"] = 1
         self.outline_skinned_program["bone_texture_width"] = 64
+        self.outline_skinned_program["alpha"] = 1.0
 
     def _create_toon_shaders(self):
         self.toon_program = self.ctx.program(
@@ -131,6 +149,7 @@ class Renderer:
         self.toon_program["has_texture"] = False
         self.toon_program["tex"] = 0
         self.toon_program["gradient_map"] = 1
+        self.toon_program["alpha"] = 1.0
 
         gradient_data = np.array([
             [60, 60, 60],
@@ -154,6 +173,7 @@ class Renderer:
         self.skinned_program["shadow_thresh"] = 0.2
         self.skinned_program["rim_power"] = 3.0
         self.skinned_program["rim_color"] = (1.0, 0.95, 0.9)
+        self.skinned_program["alpha"] = 1.0
         
         self.skinned_program_notoon = self.ctx.program(
             vertex_shader=_load_shader("skinned.vert"),
@@ -163,11 +183,53 @@ class Renderer:
         self.skinned_program_notoon["has_texture"] = False
         self.skinned_program_notoon["tex"] = 0
         self.skinned_program_notoon["bone_texture"] = 1
+        self.skinned_program_notoon["alpha"] = 1.0
         
         self.skinned_debug = False
         self.skinned_debug_scale = 1.5
         self.vpd_poses = None
         self.vpd_pose_applied = False
+
+    def _create_morph_shaders(self):
+        self.morph_program = self.ctx.program(
+            vertex_shader=_load_shader("skinned_morph.vert"),
+            fragment_shader=_load_shader("toon.frag")
+        )
+        self.morph_program["light_dir"] = (0.0, 0.5, -1.0)
+        self.morph_program["has_texture"] = False
+        self.morph_program["tex"] = 0
+        self.morph_program["gradient_map"] = 2
+        self.morph_program["shadow_thresh"] = 0.2
+        self.morph_program["rim_power"] = 3.0
+        self.morph_program["rim_color"] = (1.0, 0.95, 0.9)
+        self.morph_program["morph_weight"] = 0.0
+        self.morph_program["bone_texture_width"] = 64
+        self.morph_program["bone_texture"] = 1
+        self.morph_program["alpha"] = 1.0
+        
+        self.morph_program_notoon = self.ctx.program(
+            vertex_shader=_load_shader("skinned_morph.vert"),
+            fragment_shader=_load_shader("main.frag")
+        )
+        self.morph_program_notoon["light_dir"] = (0.0, 0.5, -1.0)
+        self.morph_program_notoon["has_texture"] = False
+        self.morph_program_notoon["tex"] = 0
+        self.morph_program_notoon["morph_weight"] = 0.0
+        self.morph_program_notoon["bone_texture_width"] = 64
+        self.morph_program_notoon["bone_texture"] = 1
+        self.morph_program_notoon["alpha"] = 1.0
+        
+        self.morph_outline_program = self.ctx.program(
+            vertex_shader=_load_shader("outline_skinned_morph.vert"),
+            fragment_shader=_load_shader("outline.frag")
+        )
+        self.morph_outline_program["outline_color"] = (0.0, 0.0, 0.0)
+        self.morph_outline_program["outline_thickness"] = self.outline_thickness
+        self.morph_outline_program["tex"] = 0
+        self.morph_outline_program["morph_weight"] = 0.0
+        self.morph_outline_program["bone_texture_width"] = 64
+        self.morph_outline_program["bone_texture"] = 1
+        self.morph_outline_program["alpha"] = 1.0
 
     def _load_vpd_poses(self, vpd_path):
         """加载 VPD 姿势文件"""
@@ -198,6 +260,181 @@ class Renderer:
         else:
             bone_tex_data, tex_width, tex_height = self.pmx_model.get_bone_texture_data(debug_scale, transform_params=transform_params)
         self.bone_texture.write(bone_tex_data.tobytes())
+
+    def _update_morph_offsets(self):
+        if self.pmx_model is None or self.morph_vbo is None:
+            return
+        
+        vertex_count = self.pmx_model.vertex_count
+        morph_offsets = np.zeros(vertex_count * 3, dtype='f4')
+        uv_morph_offsets = np.zeros(vertex_count * 2, dtype='f4')
+        self.material_morph_alphas.clear()
+        self.bone_morph_transforms.clear()
+        
+        for morph_name, weight in self.morph_weights.items():
+            if weight == 0.0:
+                continue
+            morph = self.pmx_model.get_morph_by_name(morph_name)
+            if morph is None:
+                continue
+            self._apply_morph_recursive(morph, weight, morph_offsets, uv_morph_offsets, vertex_count)
+        
+        self.morph_vbo.write(morph_offsets.tobytes())
+        if self.uv_morph_vbo:
+            self.uv_morph_vbo.write(uv_morph_offsets.tobytes())
+        
+        if self.bone_morph_transforms:
+            self._apply_bone_morphs_to_texture()
+
+    def _apply_morph_recursive(self, morph, weight, morph_offsets, uv_morph_offsets, vertex_count):
+        from pmx_reader import MORPH_TYPE_GROUP, MORPH_TYPE_VERTEX, MORPH_TYPE_MATERIAL, MORPH_TYPE_UV, MORPH_TYPE_BONE
+        
+        if morph.morph_type == MORPH_TYPE_GROUP:
+            for offset in morph.offsets:
+                child_morph = self.pmx_model.get_morph(offset.morph_index)
+                if child_morph:
+                    child_weight = offset.value * weight
+                    self._apply_morph_recursive(child_morph, child_weight, morph_offsets, uv_morph_offsets, vertex_count)
+        
+        elif morph.morph_type == MORPH_TYPE_VERTEX:
+            for offset in morph.offsets:
+                v_idx = offset.vertex_index
+                if 0 <= v_idx < vertex_count:
+                    morph_offsets[v_idx * 3] += offset.position_offset[0] * weight * self.model_scale
+                    morph_offsets[v_idx * 3 + 1] += offset.position_offset[1] * weight * self.model_scale
+                    morph_offsets[v_idx * 3 + 2] += offset.position_offset[2] * weight * self.model_scale
+        
+        elif morph.morph_type == MORPH_TYPE_UV:
+            for offset in morph.offsets:
+                v_idx = offset.vertex_index
+                if 0 <= v_idx < vertex_count:
+                    uv_morph_offsets[v_idx * 2] += offset.uv_offset[0] * weight
+                    uv_morph_offsets[v_idx * 2 + 1] += offset.uv_offset[1] * weight
+        
+        elif morph.morph_type == MORPH_TYPE_MATERIAL:
+            for offset in morph.offsets:
+                mat_idx = offset.material_index
+                if mat_idx < 0:
+                    continue
+                current_alpha = self.material_morph_alphas.get(mat_idx, self.original_material_alphas.get(mat_idx, 1.0))
+                if offset.calc_mode == 0:
+                    new_alpha = current_alpha * (offset.diffuse[3] * weight + (1 - weight))
+                else:
+                    new_alpha = current_alpha + offset.diffuse[3] * weight
+                self.material_morph_alphas[mat_idx] = max(0.0, min(1.0, new_alpha))
+        
+        elif morph.morph_type == MORPH_TYPE_BONE:
+            for offset in morph.offsets:
+                bone_idx = offset.bone_index
+                if bone_idx < 0:
+                    continue
+                if bone_idx not in self.bone_morph_transforms:
+                    self.bone_morph_transforms[bone_idx] = {
+                        'translation': np.zeros(3, dtype=np.float32),
+                        'rotation': np.array([0, 0, 0, 1], dtype=np.float32)
+                    }
+                self.bone_morph_transforms[bone_idx]['translation'] += offset.position_offset * weight
+                current_rot = self.bone_morph_transforms[bone_idx]['rotation']
+                new_rot = self._quaternion_slerp(current_rot, offset.rotation, weight)
+                self.bone_morph_transforms[bone_idx]['rotation'] = new_rot
+
+    def _quaternion_slerp(self, q1, q2, t):
+        if t <= 0:
+            return q1
+        if t >= 1:
+            return q2.copy()
+        
+        dot = np.dot(q1, q2)
+        if dot < 0:
+            q2 = -q2
+            dot = -dot
+        
+        if dot > 0.9995:
+            result = q1 + t * (q2 - q1)
+            return result / np.linalg.norm(result)
+        
+        theta_0 = np.arccos(np.clip(dot, -1, 1))
+        theta = theta_0 * t
+        
+        sin_theta = np.sin(theta)
+        sin_theta_0 = np.sin(theta_0)
+        
+        s1 = np.cos(theta) - dot * sin_theta / sin_theta_0
+        s2 = sin_theta / sin_theta_0
+        
+        result = s1 * q1 + s2 * q2
+        return result / np.linalg.norm(result)
+
+    def _apply_bone_morphs_to_texture(self):
+        if self.pmx_model is None or self.bone_texture is None:
+            return
+        
+        transform_params = {
+            'center': self.model_center,
+            'min_y': self.model_min_pos[1],
+            'scale': self.model_scale
+        }
+        
+        matrices = self.pmx_model.get_bind_pose_matrices(1.0)
+        
+        for bone_idx, transform in self.bone_morph_transforms.items():
+            if bone_idx >= len(matrices):
+                continue
+            
+            translation = transform['translation'] * self.model_scale
+            rotation = transform['rotation']
+            
+            rot_mat = self._quaternion_to_matrix(rotation)
+            
+            morph_mat = np.eye(4, dtype=np.float32)
+            morph_mat[:3, :3] = rot_mat
+            morph_mat[:3, 3] = translation
+            
+            matrices[bone_idx] = morph_mat @ matrices[bone_idx]
+        
+        if transform_params:
+            center = transform_params['center']
+            min_y = transform_params['min_y']
+            scale = transform_params['scale']
+            
+            offset = np.array([center[0], min_y, center[2]])
+            offset_scaled = scale * offset
+            
+            for i in range(len(matrices)):
+                M = matrices[i]
+                R = M[:3, :3]
+                t = M[:3, 3]
+                
+                t_new = t * scale + (R - np.eye(3)) @ offset_scaled
+                matrices[i, :3, 3] = t_new
+        
+        from bone_transform import pack_matrices_to_texture
+        bone_tex_data, _, _ = pack_matrices_to_texture(matrices)
+        self.bone_texture.write(bone_tex_data.tobytes())
+
+    def _quaternion_to_matrix(self, q):
+        x, y, z, w = q
+        return np.array([
+            [1 - 2*y*y - 2*z*z, 2*x*y - 2*z*w, 2*x*z + 2*y*w],
+            [2*x*y + 2*z*w, 1 - 2*x*x - 2*z*z, 2*y*z - 2*x*w],
+            [2*x*z - 2*y*w, 2*y*z + 2*x*w, 1 - 2*x*x - 2*y*y]
+        ], dtype=np.float32)
+
+    def set_morph_weight(self, morph_name, weight):
+        self.morph_weights[morph_name] = weight
+        self._update_morph_offsets()
+
+    def apply_morph(self, morph_index, weight):
+        if self.pmx_model is None:
+            return
+        morph = self.pmx_model.get_morph(morph_index)
+        if morph:
+            self.morph_weights[morph.name] = weight
+            self._update_morph_offsets()
+
+    def clear_morphs(self):
+        self.morph_weights.clear()
+        self._update_morph_offsets()
 
     def _create_world_axis(self):
         axis_length = 50.0
@@ -332,6 +569,60 @@ class Renderer:
             self.idle_animation_enabled = not self.idle_animation_enabled
             print(f"Idle animation: {'ON' if self.idle_animation_enabled else 'OFF'}")
 
+        if key == glfw.KEY_M and action == glfw.PRESS:
+            self.show_morph = not self.show_morph
+            if self.show_morph:
+                self.show_skinned = True
+                available_morphs = self.pmx_model.get_available_morphs() if self.pmx_model else []
+                if available_morphs:
+                    self.active_morph_index = available_morphs[0].index
+                    print(f"Morph mode: ON (showing morph: {available_morphs[0].name})")
+                else:
+                    print("Morph mode: ON (no available morphs found)")
+            else:
+                self.clear_morphs()
+                print("Morph mode: OFF")
+
+        if key == glfw.KEY_COMMA and action in (glfw.PRESS, glfw.REPEAT):
+            if self.show_morph and self.pmx_model:
+                available_morphs = self.pmx_model.get_available_morphs()
+                if available_morphs:
+                    current_idx = next((i for i, m in enumerate(available_morphs) if m.index == self.active_morph_index), -1)
+                    new_idx = (current_idx - 1) % len(available_morphs)
+                    self.active_morph_index = available_morphs[new_idx].index
+                    self.morph_weights.clear()
+                    self.set_morph_weight(available_morphs[new_idx].name, self.morph_weight_value)
+                    print(f"Active morph: {available_morphs[new_idx].name} (weight={self.morph_weight_value:.2f})")
+
+        if key == glfw.KEY_PERIOD and action in (glfw.PRESS, glfw.REPEAT):
+            if self.show_morph and self.pmx_model:
+                available_morphs = self.pmx_model.get_available_morphs()
+                if available_morphs:
+                    current_idx = next((i for i, m in enumerate(available_morphs) if m.index == self.active_morph_index), -1)
+                    new_idx = (current_idx + 1) % len(available_morphs)
+                    self.active_morph_index = available_morphs[new_idx].index
+                    self.morph_weights.clear()
+                    self.set_morph_weight(available_morphs[new_idx].name, self.morph_weight_value)
+                    print(f"Active morph: {available_morphs[new_idx].name} (weight={self.morph_weight_value:.2f})")
+
+        if key == glfw.KEY_UP and action in (glfw.PRESS, glfw.REPEAT):
+            if self.show_morph:
+                self.morph_weight_value = min(1.0, self.morph_weight_value + 0.1)
+                if self.pmx_model:
+                    morph = self.pmx_model.get_morph(self.active_morph_index)
+                    if morph:
+                        self.set_morph_weight(morph.name, self.morph_weight_value)
+                        print(f"Morph weight: {self.morph_weight_value:.2f}")
+
+        if key == glfw.KEY_DOWN and action in (glfw.PRESS, glfw.REPEAT):
+            if self.show_morph:
+                self.morph_weight_value = max(0.0, self.morph_weight_value - 0.1)
+                if self.pmx_model:
+                    morph = self.pmx_model.get_morph(self.active_morph_index)
+                    if morph:
+                        self.set_morph_weight(morph.name, self.morph_weight_value)
+                        print(f"Morph weight: {self.morph_weight_value:.2f}")
+
     def load_model(self, pmx_model: PmxModel, texture_dir: str = ""):
         self.pmx_model = pmx_model
         positions = np.array([(v.position[0], v.position[1], v.position[2]) for v in pmx_model.vertices], dtype='f4')
@@ -453,6 +744,60 @@ class Renderer:
             self.ctx.buffer(indices)
         )
 
+        morph_offsets = np.zeros(len(skinned_positions), dtype='f4')
+        self.morph_vbo = self.ctx.buffer(morph_offsets)
+        
+        uv_morph_offsets = np.zeros(len(skinning_data['uvs']), dtype='f4')
+        self.uv_morph_vbo = self.ctx.buffer(uv_morph_offsets)
+        
+        self.skinned_morph_vao = self.ctx.vertex_array(
+            self.morph_program,
+            [
+                (self.ctx.buffer(skinned_positions), '3f', 'in_position'),
+                (self.ctx.buffer(skinning_data['normals']), '3f', 'in_normal'),
+                (self.ctx.buffer(skinning_data['uvs']), '2f', 'in_uv'),
+                (self.ctx.buffer(skinning_data['bone_indices']), '4i', 'in_bone_indices'),
+                (self.ctx.buffer(skinning_data['bone_weights']), '4f', 'in_bone_weights'),
+                (self.morph_vbo, '3f', 'in_morph_offset'),
+                (self.uv_morph_vbo, '2f', 'in_uv_morph_offset'),
+            ],
+            self.ctx.buffer(indices)
+        )
+
+        self.skinned_morph_vao_notoon = self.ctx.vertex_array(
+            self.morph_program_notoon,
+            [
+                (self.ctx.buffer(skinned_positions), '3f', 'in_position'),
+                (self.ctx.buffer(skinning_data['normals']), '3f', 'in_normal'),
+                (self.ctx.buffer(skinning_data['uvs']), '2f', 'in_uv'),
+                (self.ctx.buffer(skinning_data['bone_indices']), '4i', 'in_bone_indices'),
+                (self.ctx.buffer(skinning_data['bone_weights']), '4f', 'in_bone_weights'),
+                (self.morph_vbo, '3f', 'in_morph_offset'),
+                (self.uv_morph_vbo, '2f', 'in_uv_morph_offset'),
+            ],
+            self.ctx.buffer(indices)
+        )
+
+        self.skinned_morph_outline_vao = self.ctx.vertex_array(
+            self.morph_outline_program,
+            [
+                (self.ctx.buffer(skinned_positions), '3f', 'in_position'),
+                (self.ctx.buffer(skinning_data['normals']), '3f', 'in_normal'),
+                (self.ctx.buffer(skinning_data['uvs']), '2f', 'in_uv'),
+                (self.ctx.buffer(skinning_data['bone_indices']), '4i', 'in_bone_indices'),
+                (self.ctx.buffer(skinning_data['bone_weights']), '4f', 'in_bone_weights'),
+                (self.morph_vbo, '3f', 'in_morph_offset'),
+                (self.uv_morph_vbo, '2f', 'in_uv_morph_offset'),
+            ],
+            self.ctx.buffer(indices)
+        )
+
+        print(f"\nMorph data:")
+        vertex_morphs = pmx_model.get_vertex_morphs()
+        print(f"  Vertex morph count: {len(vertex_morphs)}")
+        if vertex_morphs:
+            print(f"  Sample morphs: {[m.name for m in vertex_morphs[:5]]}")
+
         self.index_count = len(indices)
 
         print(f"\nMaterial details:")
@@ -489,13 +834,15 @@ class Renderer:
 
         self.material_batches = []
         index_offset = 0
-        for mat in pmx_model.materials:
+        for i, mat in enumerate(pmx_model.materials):
             batch = {
                 'first': index_offset,
                 'count': mat.vertex_count,
-                'texture_index': mat.texture_index
+                'texture_index': mat.texture_index,
+                'material_index': i
             }
             self.material_batches.append(batch)
+            self.original_material_alphas[i] = mat.alpha
             index_offset += mat.vertex_count
 
         print(f"Created {len(self.material_batches)} material batches, total indices: {index_offset}")
@@ -534,6 +881,8 @@ class Renderer:
 
             self.ctx.clear(0.15, 0.15, 0.2, 0.0)
             self.ctx.enable(moderngl.DEPTH_TEST)
+            self.ctx.enable(moderngl.BLEND)
+            self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
             
             # MMD 使用左手坐标系，翻转 X 轴后三角形缠绕顺序变为 CW
             self.ctx.front_face = 'cw'
@@ -580,7 +929,13 @@ class Renderer:
                 self.ctx.enable(moderngl.CULL_FACE)
                 self.ctx.cull_face = 'front'
 
-                if self.show_skinned and self.skinned_outline_vao:
+                if self.show_morph and self.skinned_morph_outline_vao:
+                    outline_shader = self.morph_outline_program
+                    outline_vao = self.skinned_morph_outline_vao
+                    outline_shader["bone_texture_width"] = self.bone_texture_width
+                    outline_shader["morph_weight"] = 1.0
+                    self.bone_texture.use(1)
+                elif self.show_skinned and self.skinned_outline_vao:
                     outline_shader = self.outline_skinned_program
                     outline_vao = self.skinned_outline_vao
                     outline_shader["bone_texture_width"] = self.bone_texture_width
@@ -600,12 +955,33 @@ class Renderer:
                         self.textures[tex_idx].use(0)
                     else:
                         self.ctx.texture((1, 1), 1).use(0)
+                    
+                    mat_idx = batch['material_index']
+                    if mat_idx in self.material_morph_alphas:
+                        outline_shader["alpha"] = self.material_morph_alphas[mat_idx]
+                    else:
+                        outline_shader["alpha"] = self.original_material_alphas.get(mat_idx, 1.0)
+                    
                     outline_vao.render(moderngl.TRIANGLES, vertices=batch['count'], first=batch['first'])
 
                 self.ctx.disable(moderngl.CULL_FACE)
 
             if self.model_vao and self.material_batches:
-                if self.show_skinned and self.skinned_vao:
+                if self.show_morph and self.skinned_morph_vao:
+                    if self.show_toon:
+                        shader = self.morph_program
+                        vao = self.skinned_morph_vao
+                        shader["camera_pos"] = (self.camera.x, self.camera.y, self.camera.z)
+                        self.gradient_texture.use(2)
+                    else:
+                        shader = self.morph_program_notoon
+                        vao = self.skinned_morph_vao_notoon
+                    shader["bone_texture_width"] = self.bone_texture_width
+                    shader["morph_weight"] = 1.0
+                    self.bone_texture.use(1)
+                    shader["tex"] = 0
+                    shader["bone_texture"] = 1
+                elif self.show_skinned and self.skinned_vao:
                     if self.show_toon:
                         shader = self.skinned_program
                         vao = self.skinned_vao
@@ -637,6 +1013,12 @@ class Renderer:
                         shader["has_texture"] = True
                     else:
                         shader["has_texture"] = False
+
+                    mat_idx = batch['material_index']
+                    if mat_idx in self.material_morph_alphas:
+                        shader["alpha"] = self.material_morph_alphas[mat_idx]
+                    else:
+                        shader["alpha"] = self.original_material_alphas.get(mat_idx, 1.0)
 
                     vao.render(moderngl.TRIANGLES, vertices=batch['count'], first=batch['first'])
 
@@ -709,6 +1091,9 @@ def main():
     print("  P key: Toggle VPD pose")
     print("  R key: Reset camera to default position")
     print("  I key: Toggle idle animation")
+    print("  M key: Toggle morph mode")
+    print("  < / > keys: Switch between morphs")
+    print("  Up/Down keys: Adjust morph weight")
     print("Starting render loop...")
     renderer.render()
     renderer.close()

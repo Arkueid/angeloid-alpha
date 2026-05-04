@@ -1,4 +1,10 @@
-from pmx_reader import PmxModel, Bone, BoneDeform, IkData, IkLink
+from pmx_reader import (
+    PmxModel, Bone, BoneDeform, IkData, IkLink,
+    Morph, VertexMorphOffset, UVMorphOffset, BoneMorphOffset,
+    MaterialMorphOffset, GroupMorphOffset,
+    MORPH_TYPE_GROUP, MORPH_TYPE_VERTEX, MORPH_TYPE_BONE,
+    MORPH_TYPE_UV, MORPH_TYPE_MATERIAL
+)
 from vpd_loader import VpdLoader, VpdPose
 from bone_transform import (
     compute_bone_world_matrices,
@@ -13,6 +19,17 @@ __all__ = [
     'BoneDeform',
     'IkData',
     'IkLink',
+    'Morph',
+    'VertexMorphOffset',
+    'UVMorphOffset',
+    'BoneMorphOffset',
+    'MaterialMorphOffset',
+    'GroupMorphOffset',
+    'MORPH_TYPE_GROUP',
+    'MORPH_TYPE_VERTEX',
+    'MORPH_TYPE_BONE',
+    'MORPH_TYPE_UV',
+    'MORPH_TYPE_MATERIAL',
     'VpdLoader',
     'VpdPose',
     'compute_bone_world_matrices',

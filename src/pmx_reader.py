@@ -189,6 +189,172 @@ class Bone:
         return np.eye(3, dtype=np.float32)
 
 
+MORPH_TYPE_GROUP = 0
+MORPH_TYPE_VERTEX = 1
+MORPH_TYPE_BONE = 2
+MORPH_TYPE_UV = 3
+MORPH_TYPE_UV_EXT1 = 4
+MORPH_TYPE_UV_EXT2 = 5
+MORPH_TYPE_UV_EXT3 = 6
+MORPH_TYPE_UV_EXT4 = 7
+MORPH_TYPE_MATERIAL = 8
+
+
+class VertexMorphOffset:
+    def __init__(self, offset):
+        self.vertex_index = offset.vertex_index
+        self.position_offset = np.array([
+            offset.position_offset.x,
+            offset.position_offset.y,
+            offset.position_offset.z
+        ], dtype=np.float32)
+
+
+class UVMorphOffset:
+    def __init__(self, offset):
+        self.vertex_index = offset.vertex_index
+        self.uv_offset = np.array([
+            offset.uv.x,
+            offset.uv.y
+        ], dtype=np.float32)
+
+
+class BoneMorphOffset:
+    def __init__(self, offset):
+        self.bone_index = offset.bone_index
+        self.position_offset = np.array([
+            offset.position.x,
+            offset.position.y,
+            offset.position.z
+        ], dtype=np.float32)
+        self.rotation = np.array([
+            offset.rotation.x,
+            offset.rotation.y,
+            offset.rotation.z,
+            offset.rotation.w
+        ], dtype=np.float32)
+
+
+class MaterialMorphOffset:
+    def __init__(self, offset):
+        self.material_index = offset.material_index
+        self.calc_mode = offset.calc_mode
+        self.diffuse = np.array([
+            offset.diffuse.r,
+            offset.diffuse.g,
+            offset.diffuse.b,
+            offset.diffuse.a
+        ], dtype=np.float32) if offset.diffuse else np.zeros(4, dtype=np.float32)
+        self.specular = np.array([
+            offset.specular.r,
+            offset.specular.g,
+            offset.specular.b
+        ], dtype=np.float32) if offset.specular else np.zeros(3, dtype=np.float32)
+        self.specular_factor = offset.specular_factor
+        self.ambient = np.array([
+            offset.ambient.r,
+            offset.ambient.g,
+            offset.ambient.b
+        ], dtype=np.float32) if offset.ambient else np.zeros(3, dtype=np.float32)
+        self.edge_color = np.array([
+            offset.edge_color.r,
+            offset.edge_color.g,
+            offset.edge_color.b,
+            offset.edge_color.a
+        ], dtype=np.float32) if offset.edge_color else np.zeros(4, dtype=np.float32)
+        self.edge_size = offset.edge_size
+        self.texture_factor = np.array([
+            offset.texture_factor.r,
+            offset.texture_factor.g,
+            offset.texture_factor.b,
+            offset.texture_factor.a
+        ], dtype=np.float32) if offset.texture_factor else np.zeros(4, dtype=np.float32)
+        self.sphere_texture_factor = np.array([
+            offset.sphere_texture_factor.r,
+            offset.sphere_texture_factor.g,
+            offset.sphere_texture_factor.b,
+            offset.sphere_texture_factor.a
+        ], dtype=np.float32) if offset.sphere_texture_factor else np.zeros(4, dtype=np.float32)
+        self.toon_texture_factor = np.array([
+            offset.toon_texture_factor.r,
+            offset.toon_texture_factor.g,
+            offset.toon_texture_factor.b,
+            offset.toon_texture_factor.a
+        ], dtype=np.float32) if offset.toon_texture_factor else np.zeros(4, dtype=np.float32)
+
+
+class GroupMorphOffset:
+    def __init__(self, offset):
+        self.morph_index = offset.morph_index
+        self.value = offset.value
+
+
+class Morph:
+    def __init__(self, morph, index):
+        self._morph = morph
+        self.index = index
+        self.name = morph.name
+        self.english_name = morph.english_name
+        self.panel = morph.panel
+        self.morph_type = morph.morph_type
+        self._offsets = None
+    
+    @property
+    def offsets(self):
+        if self._offsets is None:
+            self._offsets = self._parse_offsets()
+        return self._offsets
+    
+    def _parse_offsets(self):
+        if self.morph_type == MORPH_TYPE_VERTEX:
+            if self._morph.offsets is None:
+                return []
+            return [VertexMorphOffset(o) for o in self._morph.offsets]
+        elif self.morph_type == MORPH_TYPE_UV:
+            if self._morph.offsets is None:
+                return []
+            return [UVMorphOffset(o) for o in self._morph.offsets]
+        elif self.morph_type == MORPH_TYPE_BONE:
+            if self._morph.offsets is None:
+                return []
+            return [BoneMorphOffset(o) for o in self._morph.offsets]
+        elif self.morph_type == MORPH_TYPE_MATERIAL:
+            if hasattr(self._morph, 'data') and self._morph.data:
+                return [MaterialMorphOffset(o) for o in self._morph.data]
+            elif self._morph.offsets:
+                return [MaterialMorphOffset(o) for o in self._morph.offsets]
+            return []
+        elif self.morph_type == MORPH_TYPE_GROUP:
+            if self._morph.offsets is None:
+                return []
+            return [GroupMorphOffset(o) for o in self._morph.offsets]
+        else:
+            return []
+    
+    @property
+    def is_vertex_morph(self):
+        return self.morph_type == MORPH_TYPE_VERTEX
+    
+    @property
+    def is_group_morph(self):
+        return self.morph_type == MORPH_TYPE_GROUP
+    
+    @property
+    def is_bone_morph(self):
+        return self.morph_type == MORPH_TYPE_BONE
+    
+    @property
+    def is_uv_morph(self):
+        return self.morph_type == MORPH_TYPE_UV
+    
+    @property
+    def is_material_morph(self):
+        return self.morph_type == MORPH_TYPE_MATERIAL
+    
+    def __repr__(self):
+        return f"Morph(name={self.name}, type={self.morph_type}, offsets={len(self.offsets)})"
+
+
 class PmxModel:
     def __init__(self, path: str):
         self._model = pmx_reader.read_from_file(path)
@@ -264,6 +430,50 @@ class PmxModel:
         if 0 <= index < self.bone_count:
             return Bone(self._model.bones[index], index)
         return None
+
+    def get_morphs(self):
+        return [Morph(morph, i) for i, morph in enumerate(self._model.morphs)]
+
+    def get_morph(self, index):
+        if 0 <= index < self.morph_count:
+            return Morph(self._model.morphs[index], index)
+        return None
+
+    def get_morph_by_name(self, name):
+        for i, morph in enumerate(self._model.morphs):
+            if morph.name == name or morph.english_name == name:
+                return Morph(morph, i)
+        return None
+
+    def get_vertex_morphs(self):
+        return [Morph(m, i) for i, m in enumerate(self._model.morphs) if m.morph_type == MORPH_TYPE_VERTEX]
+
+    def get_group_morphs(self):
+        return [Morph(m, i) for i, m in enumerate(self._model.morphs) if m.morph_type == MORPH_TYPE_GROUP]
+
+    def get_material_morphs(self):
+        return [Morph(m, i) for i, m in enumerate(self._model.morphs) if m.morph_type == MORPH_TYPE_MATERIAL]
+
+    def get_available_morphs(self):
+        from pmx_reader import MORPH_TYPE_VERTEX, MORPH_TYPE_GROUP, MORPH_TYPE_MATERIAL, MORPH_TYPE_UV, MORPH_TYPE_BONE
+        return [Morph(m, i) for i, m in enumerate(self._model.morphs) 
+                if m.morph_type in (MORPH_TYPE_VERTEX, MORPH_TYPE_GROUP, MORPH_TYPE_MATERIAL, MORPH_TYPE_UV, MORPH_TYPE_BONE)]
+
+    def get_morph_offsets_data(self, morph_indices, weights=None):
+        vertex_offsets = {}
+        for i, morph_idx in enumerate(morph_indices):
+            if morph_idx < 0 or morph_idx >= self.morph_count:
+                continue
+            morph = self.get_morph(morph_idx)
+            if not morph.is_vertex_morph:
+                continue
+            weight = weights[i] if weights and i < len(weights) else 1.0
+            for offset in morph.offsets:
+                v_idx = offset.vertex_index
+                if v_idx not in vertex_offsets:
+                    vertex_offsets[v_idx] = np.zeros(3, dtype=np.float32)
+                vertex_offsets[v_idx] += offset.position_offset * weight
+        return vertex_offsets
 
     def get_deforms(self):
         return [BoneDeform(v.deform) for v in self._model.vertices]

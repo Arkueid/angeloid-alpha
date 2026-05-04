@@ -8,10 +8,15 @@ in vec3 v_world_pos;
 uniform vec3 light_dir;
 uniform sampler2D tex;
 uniform bool has_texture;
+uniform float alpha;
 
 out vec4 fragColor;
 
 void main() {
+    if (alpha < 0.01) {
+        discard;
+    }
+    
     vec3 normal = normalize(v_normal);
     vec3 light = normalize(light_dir);
 
@@ -32,5 +37,5 @@ void main() {
 
     vec3 result = color * (ambient + diff * 0.4);
     result = clamp(result, 0.0, 1.0);
-    fragColor = vec4(result, 1.0);
+    fragColor = vec4(result, alpha);
 }

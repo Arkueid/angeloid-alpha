@@ -10,6 +10,7 @@ uniform vec3 camera_pos;
 uniform sampler2D tex;
 uniform bool has_texture;
 uniform sampler2D gradient_map;
+uniform float alpha;
 
 uniform float shadow_thresh;
 uniform float rim_power;
@@ -18,6 +19,10 @@ uniform vec3 rim_color;
 out vec4 fragColor;
 
 void main() {
+    if (alpha < 0.01) {
+        discard;
+    }
+    
     vec3 normal = normalize(v_normal);
     vec3 light = normalize(light_dir);
     vec3 view_dir = normalize(camera_pos - v_world_pos);
@@ -49,5 +54,5 @@ void main() {
     vec3 result = shaded_color + rim_contribution;
     result = clamp(result, 0.0, 1.0);
 
-    fragColor = vec4(result, tex_color.a);
+    fragColor = vec4(result, tex_color.a * alpha);
 }
