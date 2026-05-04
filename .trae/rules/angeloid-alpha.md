@@ -24,3 +24,7 @@ feat: 简短描述
 
 Co-authored-by: GLM-5 <noreply@zhipu.ai>
 ```
+
+## 提交之前待办
+* 更新 plan.md
+* 检查本rule文件是否也committed，如果没有需要提交
