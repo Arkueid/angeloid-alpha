@@ -1,3 +1,6 @@
+---
+alwaysApply: false
+---
 ```ini
 python-path=.venv/
 models-path=resources/models/path
