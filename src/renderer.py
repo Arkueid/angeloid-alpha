@@ -2,6 +2,7 @@ import glfw
 import moderngl
 import numpy as np
 from load_pmx import PmxModel, VpdLoader, pack_matrices_to_texture
+from vmd_loader import VmdLoader, VmdPlayer, VmdAnimation, VmdMixer
 from PIL import Image
 import os
 import json
@@ -94,11 +95,16 @@ class Renderer:
         self.skinned_morph_vao = None
         self.skinned_morph_vao_notoon = None
         self.skinned_morph_outline_vao = None
-        self.show_morph = False
+        self.show_morph = True
         
         self.original_material_alphas = {}
         self.material_morph_alphas = {}
         self.bone_morph_transforms = {}
+        
+        self.vmd_mixer = None
+        self.vmd_playing = False
+        self.vmd_loop = True
+        self.vmd_fps = 30.0
 
     def _create_shaders(self):
         self.program = self.ctx.program(
@@ -245,6 +251,62 @@ class Renderer:
             print(f"Failed to load VPD: {e}")
             return False
 
+    def load_vmd(self, vmd_path: str) -> bool:
+        """加载 VMD 动画文件（支持多个 VMD 叠加）"""
+        try:
+            animation = VmdLoader.load(vmd_path)
+            
+            if self.vmd_mixer is None:
+                self.vmd_mixer = VmdMixer(self.vmd_fps)
+            
+            self.vmd_mixer.add_vmd(animation)
+            
+            bone_count = len(animation.bone_keyframes)
+            morph_count = len(animation.morph_keyframes)
+            max_frame = animation.max_frame
+            
+            print(f"Loaded VMD: {vmd_path}")
+            print(f"  Model: {animation.model_name}")
+            print(f"  Bone animations: {bone_count}")
+            print(f"  Morph animations: {morph_count}")
+            print(f"  Duration: {max_frame / self.vmd_fps:.2f}s ({max_frame} frames)")
+            print(f"  Total VMD layers: {len(self.vmd_mixer.players)}")
+            
+            return True
+        except Exception as e:
+            print(f"Failed to load VMD: {e}")
+            return False
+
+    def clear_vmd(self):
+        """清除所有 VMD 动画"""
+        if self.vmd_mixer:
+            self.vmd_mixer.clear()
+            self.vmd_playing = False
+
+    def play_vmd(self):
+        """播放 VMD 动画"""
+        if self.vmd_mixer and self.vmd_mixer.players:
+            self.vmd_playing = True
+            self.vmd_mixer.play()
+            self.show_skinned = True
+            self.show_morph = True
+            self.idle_animation_enabled = False
+            print("VMD animation: PLAYING")
+
+    def pause_vmd(self):
+        """暂停 VMD 动画"""
+        if self.vmd_mixer and self.vmd_mixer.players:
+            self.vmd_playing = False
+            self.vmd_mixer.pause()
+            print("VMD animation: PAUSED")
+
+    def stop_vmd(self):
+        """停止 VMD 动画"""
+        if self.vmd_mixer and self.vmd_mixer.players:
+            self.vmd_playing = False
+            self.vmd_mixer.stop()
+            print("VMD animation: STOPPED")
+
     def _reload_bone_texture(self, debug_scale=1.0, use_pose=False):
         """重新加载骨骼纹理（用于调试模式或应用姿势）"""
         if self.pmx_model is None:
@@ -261,7 +323,131 @@ class Renderer:
             bone_tex_data, tex_width, tex_height = self.pmx_model.get_bone_texture_data(debug_scale, transform_params=transform_params)
         self.bone_texture.write(bone_tex_data.tobytes())
 
-    def _update_morph_offsets(self):
+    def _apply_vmd_frame(self):
+        """应用当前 VMD 帧到骨骼和 Morph"""
+        if self.pmx_model is None or self.vmd_mixer is None:
+            return
+        
+        bone_poses = {}
+        for bone in self.pmx_model.get_bones():
+            transform = self.vmd_mixer.get_bone_transform(bone.name)
+            if transform is not None:
+                position, rotation = transform
+                bone_poses[bone.name] = (position, rotation)
+        
+        morph_weights = self.vmd_mixer.get_active_morphs()
+        if morph_weights:
+            self.morph_weights = morph_weights
+            self._update_morph_offsets(skip_bone_morphs=True)
+        
+        if bone_poses:
+            self._apply_vmd_bone_transforms(bone_poses, apply_bone_morphs=True)
+        
+        if int(self.vmd_mixer.current_frame) % 100 == 0 and self.vmd_mixer.current_frame < 1:
+            print(f"VMD frame: {self.vmd_mixer.current_frame:.0f}/{self.vmd_mixer.max_frame}, bones: {len(bone_poses)}, morphs: {len(morph_weights)}")
+
+    def _apply_vmd_bone_transforms(self, bone_poses: dict, apply_bone_morphs=False):
+        """应用 VMD 骨骼变换到骨骼纹理"""
+        if self.pmx_model is None or self.bone_texture is None:
+            return
+        
+        transform_params = {
+            'center': self.model_center,
+            'min_y': self.model_min_pos[1],
+            'scale': self.model_scale
+        }
+        
+        bones = self.pmx_model.get_bones()
+        num_bones = len(bones)
+        
+        bind_world = [np.eye(4, dtype=np.float32) for _ in range(num_bones)]
+        for i, bone in enumerate(bones):
+            if bone.parent_index >= 0:
+                parent_pos = bones[bone.parent_index].position
+                local_pos = bone.position - parent_pos
+                local_mat = np.eye(4, dtype=np.float32)
+                local_mat[0, 3] = local_pos[0]
+                local_mat[1, 3] = local_pos[1]
+                local_mat[2, 3] = local_pos[2]
+                bind_world[i] = bind_world[bone.parent_index] @ local_mat
+            else:
+                bind_world[i][0, 3] = bone.position[0]
+                bind_world[i][1, 3] = bone.position[1]
+                bind_world[i][2, 3] = bone.position[2]
+        
+        pose_world = [np.eye(4, dtype=np.float32) for _ in range(num_bones)]
+        
+        for i, bone in enumerate(bones):
+            local_mat = np.eye(4, dtype=np.float32)
+            
+            if bone.parent_index >= 0:
+                parent_pos = bones[bone.parent_index].position
+                local_pos = bone.position - parent_pos
+                local_mat[0, 3] = local_pos[0]
+                local_mat[1, 3] = local_pos[1]
+                local_mat[2, 3] = local_pos[2]
+                
+                if apply_bone_morphs and i in self.bone_morph_transforms:
+                    morph_transform = self.bone_morph_transforms[i]
+                    morph_rot = self._quaternion_to_matrix(morph_transform['rotation'])
+                    morph_mat = np.eye(4, dtype=np.float32)
+                    morph_mat[:3, :3] = morph_rot
+                    morph_mat[:3, 3] = morph_transform['translation']
+                    local_mat = morph_mat @ local_mat
+                
+                if bone.name in bone_poses:
+                    position, rotation = bone_poses[bone.name]
+                    rot_mat = self._quaternion_to_matrix(rotation)
+                    local_mat[:3, :3] = rot_mat
+                    local_mat[0, 3] += position[0]
+                    local_mat[1, 3] += position[1]
+                    local_mat[2, 3] += position[2]
+                
+                pose_world[i] = pose_world[bone.parent_index] @ local_mat
+            else:
+                if apply_bone_morphs and i in self.bone_morph_transforms:
+                    morph_transform = self.bone_morph_transforms[i]
+                    morph_rot = self._quaternion_to_matrix(morph_transform['rotation'])
+                    morph_mat = np.eye(4, dtype=np.float32)
+                    morph_mat[:3, :3] = morph_rot
+                    morph_mat[:3, 3] = morph_transform['translation']
+                    local_mat = morph_mat @ local_mat
+                
+                if bone.name in bone_poses:
+                    position, rotation = bone_poses[bone.name]
+                    rot_mat = self._quaternion_to_matrix(rotation)
+                    local_mat[:3, :3] = rot_mat
+                    local_mat[0, 3] += position[0]
+                    local_mat[1, 3] += position[1]
+                    local_mat[2, 3] += position[2]
+                pose_world[i] = local_mat
+        
+        matrices = np.zeros((num_bones, 4, 4), dtype=np.float32)
+        for i in range(num_bones):
+            inv_bind = np.linalg.inv(bind_world[i])
+            matrices[i] = pose_world[i] @ inv_bind
+        
+        if transform_params:
+            center = transform_params['center']
+            min_y = transform_params['min_y']
+            scale = transform_params['scale']
+            
+            offset = np.array([center[0], min_y, center[2]])
+            offset_scaled = scale * offset
+            
+            for i in range(num_bones):
+                M = matrices[i]
+                R = M[:3, :3]
+                t = M[:3, 3]
+                
+                t_new = t * scale + (R - np.eye(3)) @ offset_scaled
+                matrices[i, :3, 3] = t_new
+        
+        from bone_transform import pack_matrices_to_texture
+        bone_tex_data, _, _ = pack_matrices_to_texture(matrices)
+        self.bone_texture.write(bone_tex_data.tobytes())
+
+    def _update_morph_offsets(self, skip_bone_morphs=False):
         if self.pmx_model is None or self.morph_vbo is None:
             return
         
@@ -277,16 +463,16 @@ class Renderer:
             morph = self.pmx_model.get_morph_by_name(morph_name)
             if morph is None:
                 continue
-            self._apply_morph_recursive(morph, weight, morph_offsets, uv_morph_offsets, vertex_count)
+            self._apply_morph_recursive(morph, weight, morph_offsets, uv_morph_offsets, vertex_count, skip_bone_morphs)
         
         self.morph_vbo.write(morph_offsets.tobytes())
         if self.uv_morph_vbo:
             self.uv_morph_vbo.write(uv_morph_offsets.tobytes())
         
-        if self.bone_morph_transforms:
+        if not skip_bone_morphs and self.bone_morph_transforms:
             self._apply_bone_morphs_to_texture()
 
-    def _apply_morph_recursive(self, morph, weight, morph_offsets, uv_morph_offsets, vertex_count):
+    def _apply_morph_recursive(self, morph, weight, morph_offsets, uv_morph_offsets, vertex_count, skip_bone_morphs=False):
         from pmx_reader import MORPH_TYPE_GROUP, MORPH_TYPE_VERTEX, MORPH_TYPE_MATERIAL, MORPH_TYPE_UV, MORPH_TYPE_BONE
         
         if morph.morph_type == MORPH_TYPE_GROUP:
@@ -294,7 +480,7 @@ class Renderer:
                 child_morph = self.pmx_model.get_morph(offset.morph_index)
                 if child_morph:
                     child_weight = offset.value * weight
-                    self._apply_morph_recursive(child_morph, child_weight, morph_offsets, uv_morph_offsets, vertex_count)
+                    self._apply_morph_recursive(child_morph, child_weight, morph_offsets, uv_morph_offsets, vertex_count, skip_bone_morphs)
         
         elif morph.morph_type == MORPH_TYPE_VERTEX:
             for offset in morph.offsets:
@@ -623,6 +809,33 @@ class Renderer:
                         self.set_morph_weight(morph.name, self.morph_weight_value)
                         print(f"Morph weight: {self.morph_weight_value:.2f}")
 
+        if key == glfw.KEY_SPACE and action == glfw.PRESS:
+            if self.vmd_mixer and self.vmd_mixer.players:
+                if self.vmd_playing:
+                    self.pause_vmd()
+                else:
+                    self.play_vmd()
+            else:
+                print("No VMD animation loaded")
+
+        if key == glfw.KEY_L and action == glfw.PRESS:
+            self.vmd_loop = not self.vmd_loop
+            print(f"VMD loop: {'ON' if self.vmd_loop else 'OFF'}")
+
+        if key == glfw.KEY_LEFT_BRACKET and action in (glfw.PRESS, glfw.REPEAT):
+            if self.vmd_mixer and self.vmd_mixer.players:
+                new_frame = max(0, self.vmd_mixer.current_frame - 30)
+                self.vmd_mixer.set_frame(new_frame)
+                self._apply_vmd_frame()
+                print(f"VMD frame: {self.vmd_mixer.current_frame:.0f}/{self.vmd_mixer.max_frame}")
+
+        if key == glfw.KEY_RIGHT_BRACKET and action in (glfw.PRESS, glfw.REPEAT):
+            if self.vmd_mixer and self.vmd_mixer.players:
+                new_frame = min(self.vmd_mixer.max_frame, self.vmd_mixer.current_frame + 30)
+                self.vmd_mixer.set_frame(new_frame)
+                self._apply_vmd_frame()
+                print(f"VMD frame: {self.vmd_mixer.current_frame:.0f}/{self.vmd_mixer.max_frame}")
+
     def load_model(self, pmx_model: PmxModel, texture_dir: str = ""):
         self.pmx_model = pmx_model
         positions = np.array([(v.position[0], v.position[1], v.position[2]) for v in pmx_model.vertices], dtype='f4')
@@ -907,6 +1120,11 @@ class Renderer:
                 ], dtype='f4')
                 model = model @ breath @ sway
 
+            if self.vmd_playing and self.vmd_mixer:
+                self.vmd_mixer.loop = self.vmd_loop
+                self.vmd_mixer.update(delta_time)
+                self._apply_vmd_frame()
+
             if self.show_ground_grid:
                 self.ctx.disable(moderngl.DEPTH_TEST)
                 self.axis_program["projection"].write(projection.T.tobytes())
@@ -1056,6 +1274,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="PMX Model Viewer")
     parser.add_argument("--model", "-m", default="ikaros-origin", choices=MODELS.keys(), help="Model to load")
+    parser.add_argument("--vmd", "-v", nargs='*', default=None, help="VMD animation files to load (multiple files supported)")
     args = parser.parse_args()
 
     proj_root = Path(__file__).parent.parent
@@ -1078,6 +1297,19 @@ def main():
     print("Loading model to GPU...")
     renderer.load_model(model, texture_dir)
 
+    if args.vmd:
+        print(f"Loading {len(args.vmd)} VMD file(s)...")
+        for vmd_file in args.vmd:
+            vmd_path = proj_root / vmd_file
+            if vmd_path.exists():
+                renderer.load_vmd(str(vmd_path))
+                print(f"  Loaded: {vmd_file}")
+            else:
+                print(f"  VMD file not found: {vmd_path}")
+        if renderer.vmd_mixer and renderer.vmd_mixer.players:
+            print(f"Total VMD layers: {len(renderer.vmd_mixer.players)}")
+            renderer.play_vmd()
+
     print("FPS Camera Controls:")
     print("  Left mouse drag: Rotate camera view")
     print("  W/A/S/D: Move forward/left/backward/right")
@@ -1094,6 +1326,10 @@ def main():
     print("  M key: Toggle morph mode")
     print("  < / > keys: Switch between morphs")
     print("  Up/Down keys: Adjust morph weight")
+    print("VMD Animation Controls:")
+    print("  Space: Play/Pause VMD animation")
+    print("  L key: Toggle VMD loop")
+    print("  [ / ] keys: Step backward/forward 30 frames")
     print("Starting render loop...")
     renderer.render()
     renderer.close()

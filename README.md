@@ -6,7 +6,19 @@
 
 ## 概述
 
-本程序是一个PMX模型渲染器，支持GPU骨骼动画。主人可以用来加载MMD格式的3D模型，并进行实时渲染和交互。
+本程序是一个PMX模型渲染器，支持GPU骨骼动画和VMD动画播放。主人可以用来加载MMD格式的3D模型，并进行实时渲染和交互。
+
+## 功能特性
+
+- ✅ PMX模型加载与渲染
+- ✅ GPU骨骼蒙皮动画
+- ✅ VPD姿势加载
+- ✅ VMD动画播放（骨骼动画 + 表情动画）
+- ✅ 多VMD混合播放
+- ✅ Morph表情系统（Vertex/UV/Bone/Material/Group）
+- ✅ Toon卡通着色
+- ✅ 边缘描边
+- ✅ 多模型切换
 
 ## 项目结构
 
@@ -15,15 +27,51 @@ mmd-demo/
 ├── src/
 │   ├── pmx_reader.py      # PMX模型加载
 │   ├── vpd_loader.py      # VPD姿势加载
+│   ├── vmd_loader.py      # VMD动画加载
 │   ├── bone_transform.py  # 骨骼矩阵计算
 │   ├── renderer.py        # 主渲染器
 │   └── camera.py          # 摄像机控制
 ├── resources/
 │   ├── shaders/           # GLSL着色器
 │   ├── models/            # PMX模型文件
-│   └── vpd/               # VPD姿势文件
+│   ├── vpd/               # VPD姿势文件
+│   └── vmd/               # VMD动画文件
 └── run.py                 # 入口文件
 ```
+
+## 使用方法
+
+```bash
+# 加载默认模型
+python run.py
+
+# 指定模型
+python run.py -m ikaros
+
+# 加载VMD动画
+python run.py -v resources/vmd/新地球/动作.vmd
+
+# 加载多个VMD（混合播放）
+python run.py -v file1.vmd file2.vmd file3.vmd
+```
+
+### 命令行参数
+
+| 参数 | 说明 |
+|------|------|
+| `-m, --model` | 选择模型 (ikaros, chloe, aqua, marine) |
+| `-v, --vmd` | 加载VMD动画文件（支持多个文件） |
+
+### 快捷键
+
+| 按键 | 功能 |
+|------|------|
+| K | 切换骨骼蒙皮渲染 |
+| P | 切换VPD姿势 |
+| T | 切换Toon着色 |
+| O | 切换描边显示 |
+| Space | 播放/暂停VMD动画 |
+| ← / → | 调整动画播放速度 |
 
 ## 技术细节
 
@@ -120,6 +168,22 @@ VPD是MMD的姿势文件格式，存储骨骼的旋转和位移：
 
 **四元数转换**：
 将VPD中的四元数转换为4x4旋转矩阵，用于骨骼变换。
+
+### VMD动画加载
+
+VMD是MMD的动画文件格式，支持骨骼动画和表情动画：
+
+**文件结构**：
+- 骨骼关键帧：骨骼名称、帧号、位置、四元数旋转、贝塞尔插值曲线
+- 表情关键帧：Morph名称、帧号、权重
+- 相机/灯光关键帧（可选）
+
+**插值实现**：
+- 贝塞尔曲线插值：使用关键帧中的64字节插值数据
+- 四元数SLERP插值：平滑旋转过渡
+
+**多VMD混合**：
+VmdMixer类支持同时播放多个VMD动画，自动混合骨骼变换和表情权重。
 
 ## 依赖
 
