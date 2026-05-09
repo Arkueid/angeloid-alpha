@@ -25,6 +25,9 @@ void main() {
     }
 
     vec3 normal = normalize(v_normal);
+    if (!gl_FrontFacing) {
+        normal = -normal;
+    }
     vec3 light = normalize(light_dir);
     vec3 view_dir = normalize(camera_pos - v_world_pos);
 

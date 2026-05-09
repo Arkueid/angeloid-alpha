@@ -19,6 +19,9 @@ void main() {
     }
 
     vec3 normal = normalize(v_normal);
+    if (!gl_FrontFacing) {
+        normal = -normal;
+    }
     vec3 light = normalize(light_dir);
 
     float diff = max(dot(normal, light), 0.0);
