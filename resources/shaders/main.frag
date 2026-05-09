@@ -9,6 +9,7 @@ uniform vec3 light_dir;
 uniform sampler2D tex;
 uniform bool has_texture;
 uniform float alpha;
+uniform vec3 material_color;
 
 out vec4 fragColor;
 
@@ -16,7 +17,7 @@ void main() {
     if (alpha < 0.01) {
         discard;
     }
-    
+
     vec3 normal = normalize(v_normal);
     vec3 light = normalize(light_dir);
 
@@ -31,8 +32,7 @@ void main() {
             discard;
         }
     } else {
-        float height_shade = (v_position.y + 10.0) / 20.0;
-        color = vec3(0.9 * height_shade + 0.3, 0.7 * height_shade + 0.2, 0.6 * height_shade + 0.2);
+        color = material_color;
     }
 
     vec3 result = color * (ambient + diff * 0.4);

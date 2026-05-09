@@ -115,6 +115,7 @@ class Renderer:
         self.program["has_texture"] = False
         self.program["tex"] = 0
         self.program["alpha"] = 1.0
+        self.program["material_color"] = (1.0, 1.0, 1.0)
 
     def _create_axis_shader(self):
         self.axis_program = self.ctx.program(
@@ -156,6 +157,7 @@ class Renderer:
         self.toon_program["tex"] = 0
         self.toon_program["gradient_map"] = 1
         self.toon_program["alpha"] = 1.0
+        self.toon_program["material_color"] = (1.0, 1.0, 1.0)
 
         gradient_data = np.array([
             [60, 60, 60],
@@ -180,6 +182,7 @@ class Renderer:
         self.skinned_program["rim_power"] = 3.0
         self.skinned_program["rim_color"] = (1.0, 0.95, 0.9)
         self.skinned_program["alpha"] = 1.0
+        self.skinned_program["material_color"] = (1.0, 1.0, 1.0)
         
         self.skinned_program_notoon = self.ctx.program(
             vertex_shader=_load_shader("skinned.vert"),
@@ -190,6 +193,7 @@ class Renderer:
         self.skinned_program_notoon["tex"] = 0
         self.skinned_program_notoon["bone_texture"] = 1
         self.skinned_program_notoon["alpha"] = 1.0
+        self.skinned_program_notoon["material_color"] = (1.0, 1.0, 1.0)
         
         self.skinned_debug = False
         self.skinned_debug_scale = 1.5
@@ -212,7 +216,8 @@ class Renderer:
         self.morph_program["bone_texture_width"] = 64
         self.morph_program["bone_texture"] = 1
         self.morph_program["alpha"] = 1.0
-        
+        self.morph_program["material_color"] = (1.0, 1.0, 1.0)
+
         self.morph_program_notoon = self.ctx.program(
             vertex_shader=_load_shader("skinned_morph.vert"),
             fragment_shader=_load_shader("main.frag")
@@ -224,6 +229,7 @@ class Renderer:
         self.morph_program_notoon["bone_texture_width"] = 64
         self.morph_program_notoon["bone_texture"] = 1
         self.morph_program_notoon["alpha"] = 1.0
+        self.morph_program_notoon["material_color"] = (1.0, 1.0, 1.0)
         
         self.morph_outline_program = self.ctx.program(
             vertex_shader=_load_shader("outline_skinned_morph.vert"),
@@ -1046,6 +1052,7 @@ class Renderer:
                     self.textures.append(None)
 
         self.material_batches = []
+        self.material_colors = {}
         index_offset = 0
         for i, mat in enumerate(pmx_model.materials):
             batch = {
@@ -1056,6 +1063,11 @@ class Renderer:
             }
             self.material_batches.append(batch)
             self.original_material_alphas[i] = mat.alpha
+            self.material_colors[i] = (
+                mat.diffuse_color.r,
+                mat.diffuse_color.g,
+                mat.diffuse_color.b
+            )
             index_offset += mat.vertex_count
 
         print(f"Created {len(self.material_batches)} material batches, total indices: {index_offset}")
@@ -1231,6 +1243,10 @@ class Renderer:
                         shader["has_texture"] = True
                     else:
                         shader["has_texture"] = False
+                        mat_idx = batch['material_index']
+                        if mat_idx in self.material_colors:
+                            color = self.material_colors[mat_idx]
+                            shader["material_color"] = color
 
                     mat_idx = batch['material_index']
                     if mat_idx in self.material_morph_alphas:
@@ -1273,7 +1289,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="PMX Model Viewer")
-    parser.add_argument("--model", "-m", default="ikaros-origin", choices=MODELS.keys(), help="Model to load")
+    parser.add_argument("--model", "-m", default="ikaros-uniform", choices=MODELS.keys(), help="Model to load")
     parser.add_argument("--vmd", "-v", nargs='*', default=None, help="VMD animation files to load (multiple files supported)")
     args = parser.parse_args()
 

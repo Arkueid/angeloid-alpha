@@ -11,6 +11,7 @@ uniform sampler2D tex;
 uniform bool has_texture;
 uniform sampler2D gradient_map;
 uniform float alpha;
+uniform vec3 material_color;
 
 uniform float shadow_thresh;
 uniform float rim_power;
@@ -22,7 +23,7 @@ void main() {
     if (alpha < 0.01) {
         discard;
     }
-    
+
     vec3 normal = normalize(v_normal);
     vec3 light = normalize(light_dir);
     vec3 view_dir = normalize(camera_pos - v_world_pos);
@@ -37,8 +38,7 @@ void main() {
             discard;
         }
     } else {
-        float height_shade = (v_position.y + 10.0) / 20.0;
-        tex_color = vec4(0.9 * height_shade + 0.3, 0.7 * height_shade + 0.2, 0.6 * height_shade + 0.2, 1.0);
+        tex_color = vec4(material_color, 1.0);
     }
 
     vec3 base_color = tex_color.rgb;
