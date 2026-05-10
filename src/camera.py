@@ -111,7 +111,7 @@ class Camera:
         return rot_x_mat @ rot_y_mat @ trans
 
     @staticmethod
-    def create_projection_matrix(width, height, fov=45.0, near=0.01, far=1000.0):
+    def create_projection_matrix(width, height, fov=45.0, near=0.1, far=500.0):
         aspect = width / height
         f = 1.0 / np.tan(np.radians(fov) / 2)
         proj = np.array([

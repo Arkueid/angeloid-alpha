@@ -17,6 +17,12 @@ uniform float shadow_thresh;
 uniform float rim_power;
 uniform vec3 rim_color;
 
+uniform sampler2D toon_tex;
+uniform bool has_toon;
+
+uniform sampler2D sphere_tex;
+uniform int sphere_mode;
+
 out vec4 fragColor;
 
 void main() {
@@ -46,10 +52,26 @@ void main() {
 
     vec3 base_color = tex_color.rgb;
 
-    float gradient_lookup = shadow * 0.5 + 0.2;
-    vec3 gradient_color = texture(gradient_map, vec2(gradient_lookup, 0.5)).rgb;
+    vec3 shaded_color;
+    if (has_toon) {
+        float toon_uv_y = (1.0 - NdotL) * 0.5;
+        vec3 toon_color = texture(toon_tex, vec2(0.5, toon_uv_y)).rgb;
+        shaded_color = base_color * toon_color;
+    } else {
+        shaded_color = base_color * (0.6 + NdotL * 0.4);
+    }
 
-    vec3 shaded_color = base_color * gradient_color;
+    vec2 sphere_uv = normal.xy * 0.5 + 0.5;
+    if (sphere_mode == 1) {
+        vec3 sphere_color = texture(sphere_tex, sphere_uv).rgb;
+        shaded_color = shaded_color * sphere_color;
+    } else if (sphere_mode == 2) {
+        vec3 sphere_color = texture(sphere_tex, sphere_uv).rgb;
+        shaded_color = shaded_color + sphere_color * 0.5;
+    } else if (sphere_mode == 3) {
+        vec3 sphere_color = texture(sphere_tex, v_uv).rgb;
+        shaded_color = shaded_color * sphere_color;
+    }
 
     float rim = pow(1.0 - max(dot(view_dir, normal), 0.0), rim_power);
     vec3 rim_contribution = rim * rim_color * 0.5;

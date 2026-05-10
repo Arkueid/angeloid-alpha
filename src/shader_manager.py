@@ -104,6 +104,10 @@ class ShaderManager:
         self._set_uniform(self.programs['toon'], "gradient_map", 1)
         self._set_uniform(self.programs['toon'], "alpha", 1.0)
         self._set_uniform(self.programs['toon'], "material_color", (1.0, 1.0, 1.0))
+        self._set_uniform(self.programs['toon'], "toon_tex", 4)
+        self._set_uniform(self.programs['toon'], "has_toon", False)
+        self._set_uniform(self.programs['toon'], "sphere_tex", 3)
+        self._set_uniform(self.programs['toon'], "sphere_mode", 0)
 
     def _create_skinned_shader(self):
         self.programs['skinned'] = _compile_shader(

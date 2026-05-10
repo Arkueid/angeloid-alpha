@@ -173,6 +173,7 @@ class Renderer:
         glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
         glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
         glfw.window_hint(glfw.DOUBLEBUFFER, True)
+        glfw.window_hint(glfw.DEPTH_BITS, 24)
 
         self.window = glfw.create_window(width, height, title, None, None)
         if not self.window:
@@ -238,10 +239,10 @@ class Renderer:
         self.skinned_debug_scale = 1.5
         
         self.dummy_texture = None
+        self._uniform_cache = {}
 
     def _create_world_axis(self):
-        axis_length = 50.0
-        arrow_size = 3.0
+        axis_length = 5.0
 
         axis_vertices = []
         for axis in range(3):
@@ -254,28 +255,6 @@ class Renderer:
 
             axis_vertices.extend(start + color)
             axis_vertices.extend(end + color)
-
-            start_neg = [0.0, 0.0, 0.0]
-            start_neg[axis] = -axis_length
-            axis_vertices.extend(start + color)
-            axis_vertices.extend(start_neg + color)
-
-            base = end.copy()
-            base[axis] -= arrow_size
-
-            perp1 = [0.0, 0.0, 0.0]
-            perp2 = [0.0, 0.0, 0.0]
-            perp_indices = [(axis + 1) % 3, (axis + 2) % 3]
-            perp1[perp_indices[0]] = arrow_size * 0.5
-            perp2[perp_indices[1]] = arrow_size * 0.5
-
-            arrow_tip1 = [base[i] + perp1[i] for i in range(3)]
-            arrow_tip2 = [base[i] + perp2[i] for i in range(3)]
-
-            axis_vertices.extend(end + color)
-            axis_vertices.extend(arrow_tip1 + color)
-            axis_vertices.extend(end + color)
-            axis_vertices.extend(arrow_tip2 + color)
 
         axis_vertices = np.array(axis_vertices, dtype='f4')
         
@@ -466,7 +445,13 @@ class Renderer:
                 print(f"VMD frame: {self.animation_controller.vmd_mixer.current_frame:.0f}/{self.animation_controller.vmd_mixer.max_frame}")
 
     def _set_uniform(self, program, name, value):
-        location = glGetUniformLocation(program, name)
+        cache_key = (program, name)
+        if cache_key in self._uniform_cache:
+            location = self._uniform_cache[cache_key]
+        else:
+            location = glGetUniformLocation(program, name)
+            self._uniform_cache[cache_key] = location
+        
         if location == -1:
             return
         if isinstance(value, (int, bool)):
@@ -482,7 +467,13 @@ class Renderer:
                 glUniform4f(location, *value)
 
     def _set_uniform_matrix(self, program, name, matrix):
-        location = glGetUniformLocation(program, name)
+        cache_key = (program, name)
+        if cache_key in self._uniform_cache:
+            location = self._uniform_cache[cache_key]
+        else:
+            location = glGetUniformLocation(program, name)
+            self._uniform_cache[cache_key] = location
+        
         if location == -1:
             return
         glUniformMatrix4fv(location, 1, GL_FALSE, matrix.astype('f4').tobytes())
@@ -760,13 +751,20 @@ class Renderer:
 
         self.material_batches = []
         original_material_alphas = {}
+        self.material_edges = {}
+        self.material_specular = {}
+        self.material_ambient = {}
+        self.material_sphere = {}
+        self.material_toon = {}
         index_offset = 0
         for i, mat in enumerate(pmx_model.materials):
+            has_edge = mat.hasFlag(0x08)
             batch = {
                 'first': index_offset,
                 'count': mat.vertex_count,
                 'texture_index': mat.texture_index,
-                'material_index': i
+                'material_index': i,
+                'has_edge': has_edge
             }
             self.material_batches.append(batch)
             original_material_alphas[i] = mat.alpha
@@ -775,9 +773,38 @@ class Renderer:
                 mat.diffuse_color.g,
                 mat.diffuse_color.b
             )
+            self.material_edges[i] = {
+                'color': (mat.edge_color.r, mat.edge_color.g, mat.edge_color.b, mat.edge_color.a),
+                'size': mat.edge_size,
+                'has_edge': has_edge
+            }
+            self.material_specular[i] = {
+                'color': (mat.specular_color.r, mat.specular_color.g, mat.specular_color.b),
+                'factor': mat.specular_factor
+            }
+            self.material_ambient[i] = (
+                mat.ambient_color.r,
+                mat.ambient_color.g,
+                mat.ambient_color.b
+            )
+            self.material_sphere[i] = {
+                'texture_index': mat.sphere_texture_index,
+                'mode': mat.sphere_mode
+            }
+            self.material_toon[i] = {
+                'texture_index': mat.toon_texture_index,
+                'sharing_flag': mat.toon_sharing_flag
+            }
             index_offset += mat.vertex_count
 
         print(f"Created {len(self.material_batches)} material batches, total indices: {index_offset}")
+        
+        print(f"\nMaterial sphere info:")
+        for i, mat in enumerate(pmx_model.materials):
+            sphere_idx = mat.sphere_texture_index
+            sphere_mode = mat.sphere_mode
+            if sphere_idx >= 0 and sphere_idx < len(self.textures) and self.textures[sphere_idx]:
+                print(f"  Material {i} '{mat.name}': sphere_mode={sphere_mode}, sphere_tex_idx={sphere_idx}, texture={pmx_model.textures[sphere_idx] if sphere_idx < len(pmx_model.textures) else 'N/A'}")
 
         self.animation_controller.set_model(
             pmx_model, self.bone_texture, self.model_center, self.model_min_pos, self.model_scale
@@ -859,7 +886,8 @@ class Renderer:
                 glUseProgram(axis_program)
                 self._set_uniform_matrix(axis_program, "projection", projection.T)
                 self._set_uniform_matrix(axis_program, "view", view.T)
-                self._set_uniform_matrix(axis_program, "model", model)
+                identity = np.eye(4, dtype='f4')
+                self._set_uniform_matrix(axis_program, "model", identity)
                 glLineWidth(2.0)
                 self.grid_vao.render(GL_LINES)
                 glEnable(GL_DEPTH_TEST)
@@ -870,7 +898,8 @@ class Renderer:
                 glUseProgram(axis_program)
                 self._set_uniform_matrix(axis_program, "projection", projection.T)
                 self._set_uniform_matrix(axis_program, "view", view.T)
-                self._set_uniform_matrix(axis_program, "model", model)
+                identity = np.eye(4, dtype='f4')
+                self._set_uniform_matrix(axis_program, "model", identity)
                 glLineWidth(3.0)
                 self.axis_vao.render(GL_LINES)
                 glEnable(GL_DEPTH_TEST)
@@ -900,18 +929,26 @@ class Renderer:
                 self._set_uniform_matrix(outline_shader, "projection", projection.T)
                 self._set_uniform_matrix(outline_shader, "view", view.T)
                 self._set_uniform_matrix(outline_shader, "model", model)
-                self._set_uniform(outline_shader, "outline_thickness", self.outline_thickness)
 
                 for batch in self.material_batches:
+                    if not batch['has_edge']:
+                        continue
+                    
+                    mat_idx = batch['material_index']
+                    edge_info = self.material_edges.get(mat_idx, {})
+                    edge_color = edge_info.get('color', (0.0, 0.0, 0.0, 1.0))
+                    edge_size = edge_info.get('size', 1.0)
+                    
                     tex_idx = batch['texture_index']
                     if 0 <= tex_idx < len(self.textures) and self.textures[tex_idx]:
                         self.textures[tex_idx].bind(0)
                     else:
                         self.dummy_texture.bind(0)
                     
-                    mat_idx = batch['material_index']
                     alpha = self.morph_controller.get_material_alpha(mat_idx)
                     self._set_uniform(outline_shader, "alpha", alpha)
+                    self._set_uniform(outline_shader, "outline_color", edge_color[:3])
+                    self._set_uniform(outline_shader, "outline_thickness", edge_size * 0.001)
                     
                     outline_vao.render(GL_TRIANGLES, count=batch['count'], first=batch['first'])
 
@@ -969,6 +1006,8 @@ class Renderer:
                 self._set_uniform_matrix(shader, "model", model)
                 self._set_uniform(shader, "light_dir", (0.0, 0.5, -1.0))
                 self._set_uniform(shader, "tex", 0)
+                self._set_uniform(shader, "sphere_tex", 3)
+                self._set_uniform(shader, "toon_tex", 4)
 
                 for batch in self.material_batches:
                     tex_idx = batch['texture_index']
@@ -985,6 +1024,40 @@ class Renderer:
                     mat_idx = batch['material_index']
                     alpha = self.morph_controller.get_material_alpha(mat_idx)
                     self._set_uniform(shader, "alpha", alpha)
+                    
+                    if mat_idx in self.material_specular:
+                        spec = self.material_specular[mat_idx]
+                        self._set_uniform(shader, "specular_color", spec['color'])
+                        self._set_uniform(shader, "specular_factor", spec['factor'])
+                    else:
+                        self._set_uniform(shader, "specular_color", (0.0, 0.0, 0.0))
+                        self._set_uniform(shader, "specular_factor", 1.0)
+                    
+                    if mat_idx in self.material_ambient:
+                        self._set_uniform(shader, "ambient_color", self.material_ambient[mat_idx])
+                    else:
+                        self._set_uniform(shader, "ambient_color", (0.5, 0.5, 0.5))
+                    
+                    sphere_info = self.material_sphere.get(mat_idx, {'texture_index': -1, 'mode': 0})
+                    sphere_tex_idx = sphere_info['texture_index']
+                    sphere_mode = sphere_info['mode']
+                    
+                    if sphere_tex_idx >= 0 and sphere_tex_idx < len(self.textures) and self.textures[sphere_tex_idx]:
+                        glActiveTexture(GL_TEXTURE3)
+                        self.textures[sphere_tex_idx].bind(3)
+                        self._set_uniform(shader, "sphere_mode", sphere_mode)
+                    else:
+                        self._set_uniform(shader, "sphere_mode", 0)
+                    
+                    toon_info = self.material_toon.get(mat_idx, {'texture_index': -1, 'sharing_flag': 0})
+                    toon_tex_idx = toon_info['texture_index']
+                    
+                    if toon_tex_idx >= 0 and toon_tex_idx < len(self.textures) and self.textures[toon_tex_idx]:
+                        glActiveTexture(GL_TEXTURE4)
+                        self.textures[toon_tex_idx].bind(4)
+                        self._set_uniform(shader, "has_toon", True)
+                    else:
+                        self._set_uniform(shader, "has_toon", False)
 
                     vao.render(GL_TRIANGLES, count=batch['count'], first=batch['first'])
 
