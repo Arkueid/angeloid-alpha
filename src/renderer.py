@@ -918,12 +918,12 @@ class Renderer:
             glEnable(GL_BLEND)
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
             
-            glFrontFace(GL_CW)
+            glFrontFace(GL_CCW)
 
             projection = Camera.create_projection_matrix(self.width, self.height)
             view = self.camera.create_view_matrix()
             
-            coord_convert = np.diag([-1, 1, 1, 1]).astype('f4')
+            coord_convert = np.diag([-1, 1, -1, 1]).astype('f4')
             model = coord_convert
 
             if self.idle_animation_enabled:

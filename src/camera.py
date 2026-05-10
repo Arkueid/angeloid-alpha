@@ -6,9 +6,9 @@ class Camera:
     def __init__(self):
         self.x = 0.0
         self.y = 0.0
-        self.z = -10.0
+        self.z = 10.0
         self.rot_x = 0.0
-        self.rot_y = 180
+        self.rot_y = 0
         self.speed = 5.0
         self.mouse_sensitivity = 0.1
         self.is_panning = False
@@ -18,9 +18,9 @@ class Camera:
     def reset(self):
         self.x = 0.0
         self.y = 0.0
-        self.z = -10.0
+        self.z = 10.0
         self.rot_x = 0.0
-        self.rot_y = 180
+        self.rot_y = 0
 
     def update(self, window, delta_time):
         speed = self.speed * delta_time
