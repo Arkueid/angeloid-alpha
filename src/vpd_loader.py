@@ -46,7 +46,7 @@ class VpdLoader:
             line = lines[i].strip()
             if line.startswith('Bone'):
                 parts = line.replace('Bone', '').split('{')
-                bone_idx = int(parts[0])
+                int(parts[0])
                 bone_name = parts[1].replace('}', '')
 
                 i += 1

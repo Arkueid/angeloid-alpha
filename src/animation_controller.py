@@ -21,6 +21,7 @@ class AnimationController:
         self.model_scale = 1.0
         
         self.bone_morph_transforms: Dict[int, Dict] = {}
+        self.current_bone_matrices: Optional[np.ndarray] = None
 
     def set_model(self, pmx_model, bone_texture, model_center, model_min_pos, model_scale):
         self.pmx_model = pmx_model
@@ -121,13 +122,7 @@ class AnimationController:
     def _apply_vmd_bone_transforms(self, bone_poses: dict, apply_bone_morphs=False):
         if self.pmx_model is None or self.bone_texture is None:
             return
-        
-        transform_params = {
-            'center': self.model_center,
-            'min_y': self.model_min_pos[1],
-            'scale': self.model_scale
-        }
-        
+
         bones = self.pmx_model.get_bones()
         num_bones = len(bones)
         
@@ -197,23 +192,9 @@ class AnimationController:
         for i in range(num_bones):
             inv_bind = np.linalg.inv(bind_world[i])
             matrices[i] = pose_world[i] @ inv_bind
-        
-        if transform_params:
-            center = transform_params['center']
-            min_y = transform_params['min_y']
-            scale = transform_params['scale']
-            
-            offset = np.array([center[0], min_y, center[2]])
-            offset_scaled = scale * offset
-            
-            for i in range(num_bones):
-                M = matrices[i]
-                R = M[:3, :3]
-                t = M[:3, 3]
-                
-                t_new = t * scale + (R - np.eye(3)) @ offset_scaled
-                matrices[i, :3, 3] = t_new
-        
+
+        self.current_bone_matrices = matrices.copy()
+
         from bone_transform import pack_matrices_to_texture
         bone_tex_data, _, _ = pack_matrices_to_texture(matrices)
         self.bone_texture.write(bone_tex_data.tobytes())
@@ -221,17 +202,18 @@ class AnimationController:
     def reload_bone_texture(self, debug_scale=1.0, use_pose=False):
         if self.pmx_model is None:
             return
-        transform_params = {
+        {
             'center': self.model_center,
             'min_y': self.model_min_pos[1],
             'scale': self.model_scale
         }
         if use_pose and self.vpd_poses:
-            matrices = self.pmx_model.get_bone_matrices_with_pose(self.vpd_poses, debug_scale=1.0, transform_params=transform_params)
-            bone_tex_data, tex_width, tex_height = pack_matrices_to_texture(matrices)
+            matrices = self.pmx_model.get_bone_matrices_with_pose(self.vpd_poses, debug_scale=1.0, transform_params=None)
         else:
-            bone_tex_data, tex_width, tex_height = self.pmx_model.get_bone_texture_data(debug_scale, transform_params=transform_params)
+            matrices = self.pmx_model.get_bind_pose_matrices(debug_scale)
+        bone_tex_data, tex_width, tex_height = pack_matrices_to_texture(matrices)
         self.bone_texture.write(bone_tex_data.tobytes())
+        self.current_bone_matrices = matrices.copy()
 
     @staticmethod
     def _quaternion_to_matrix(q):

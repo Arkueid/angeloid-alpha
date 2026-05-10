@@ -1,7 +1,8 @@
 from pmx_reader import (
     PmxModel, Bone, BoneDeform, IkData, IkLink,
     Morph, VertexMorphOffset, UVMorphOffset, BoneMorphOffset,
-    MaterialMorphOffset, GroupMorphOffset,
+    MaterialMorphOffset, GroupMorphOffset, RigidBody,
+    RIGID_SHAPE_SPHERE, RIGID_SHAPE_BOX, RIGID_SHAPE_CAPSULE,
     MORPH_TYPE_GROUP, MORPH_TYPE_VERTEX, MORPH_TYPE_BONE,
     MORPH_TYPE_UV, MORPH_TYPE_MATERIAL
 )
@@ -11,6 +12,7 @@ from bone_transform import (
     compute_bind_pose_matrices,
     pack_matrices_to_texture,
     get_bone_matrices_with_pose,
+    create_all_rigid_body_lines,
 )
 
 __all__ = [
@@ -25,6 +27,10 @@ __all__ = [
     'BoneMorphOffset',
     'MaterialMorphOffset',
     'GroupMorphOffset',
+    'RigidBody',
+    'RIGID_SHAPE_SPHERE',
+    'RIGID_SHAPE_BOX',
+    'RIGID_SHAPE_CAPSULE',
     'MORPH_TYPE_GROUP',
     'MORPH_TYPE_VERTEX',
     'MORPH_TYPE_BONE',
@@ -36,4 +42,5 @@ __all__ = [
     'compute_bind_pose_matrices',
     'pack_matrices_to_texture',
     'get_bone_matrices_with_pose',
+    'create_all_rigid_body_lines',
 ]

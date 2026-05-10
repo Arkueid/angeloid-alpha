@@ -33,7 +33,6 @@ class Camera:
         front_z = -np.cos(rot_y_rad) * np.cos(rot_x_rad)
 
         right_x = np.cos(rot_y_rad)
-        right_y = 0
         right_z = -np.sin(rot_y_rad)
 
         if glfw.get_key(window, glfw.KEY_W) == glfw.PRESS:

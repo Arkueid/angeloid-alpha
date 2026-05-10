@@ -27,6 +27,7 @@ class ShaderManager:
     def _create_all_shaders(self):
         self._create_main_shader()
         self._create_axis_shader()
+        self._create_rigidbody_shader()
         self._create_outline_shader()
         self._create_toon_shader()
         self._create_skinned_shader()
@@ -65,6 +66,13 @@ class ShaderManager:
             _load_shader("axis.vert"),
             _load_shader("axis.frag")
         )
+
+    def _create_rigidbody_shader(self):
+        self.programs['rigidbody'] = _compile_shader(
+            _load_shader("rigidbody.vert"),
+            _load_shader("rigidbody.frag")
+        )
+        print(f"Rigidbody shader created: program_id={self.programs['rigidbody']}")
 
     def _create_outline_shader(self):
         self.programs['outline'] = _compile_shader(

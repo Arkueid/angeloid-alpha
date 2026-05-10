@@ -101,6 +101,56 @@ class IkData:
         self.links = [IkLink(link) for link in ik.link]
 
 
+RIGID_SHAPE_SPHERE = 0
+RIGID_SHAPE_BOX = 1
+RIGID_SHAPE_CAPSULE = 2
+
+
+class RigidBody:
+    def __init__(self, rigid_body, index):
+        self._rigid_body = rigid_body
+        self.index = index
+        self.name = rigid_body.name
+        self.english_name = rigid_body.english_name
+        self.bone_index = rigid_body.bone_index
+        self.collision_group = rigid_body.collision_group
+        self.no_collision_group = rigid_body.no_collision_group
+        self.shape_type = rigid_body.shape_type
+        self.shape_size = np.array([
+            rigid_body.shape_size.x,
+            rigid_body.shape_size.y,
+            rigid_body.shape_size.z
+        ], dtype=np.float32)
+        self.shape_position = np.array([
+            rigid_body.shape_position.x,
+            rigid_body.shape_position.y,
+            rigid_body.shape_position.z
+        ], dtype=np.float32)
+        self.shape_rotation = np.array([
+            rigid_body.shape_rotation.x,
+            rigid_body.shape_rotation.y,
+            rigid_body.shape_rotation.z
+        ], dtype=np.float32)
+        self.mass = rigid_body.param.mass
+        self.linear_damping = rigid_body.param.linear_damping
+        self.angular_damping = rigid_body.param.angular_damping
+        self.restitution = rigid_body.param.restitution
+        self.friction = rigid_body.param.friction
+        self.mode = rigid_body.mode
+
+    @property
+    def is_sphere(self):
+        return self.shape_type == RIGID_SHAPE_SPHERE
+
+    @property
+    def is_box(self):
+        return self.shape_type == RIGID_SHAPE_BOX
+
+    @property
+    def is_capsule(self):
+        return self.shape_type == RIGID_SHAPE_CAPSULE
+
+
 class Bone:
     def __init__(self, bone, index):
         self._bone = bone
@@ -423,6 +473,23 @@ class PmxModel:
     def display_slots(self):
         return self._model.display_slots
 
+    @property
+    def rigidbodies(self):
+        return getattr(self._model, 'rigidbodies', [])
+
+    @property
+    def rigidbody_count(self) -> int:
+        return len(getattr(self._model, 'rigidbodies', []))
+
+    def get_rigidbodies(self):
+        return [RigidBody(rb, i) for i, rb in enumerate(getattr(self._model, 'rigidbodies', []))]
+
+    def get_rigidbody(self, index):
+        rigidbodies = getattr(self._model, 'rigidbodies', [])
+        if 0 <= index < len(rigidbodies):
+            return RigidBody(rigidbodies[index], index)
+        return None
+
     def get_bones(self):
         return [Bone(bone, i) for i, bone in enumerate(self._model.bones)]
 
@@ -541,22 +608,6 @@ class PmxModel:
 
     def get_bone_texture_data(self, debug_scale=1.0, transform_params=None):
         matrices = self.get_bind_pose_matrices(debug_scale)
-        
-        if transform_params:
-            center = transform_params['center']
-            min_y = transform_params['min_y']
-            scale = transform_params['scale']
-            
-            offset = np.array([center[0], min_y, center[2]])
-            offset_scaled = scale * offset
-            
-            for i in range(len(matrices)):
-                M = matrices[i]
-                R = M[:3, :3]
-                t = M[:3, 3]
-                
-                t_new = t * scale + (R - np.eye(3)) @ offset_scaled
-                matrices[i, :3, 3] = t_new
         
         return pack_matrices_to_texture(matrices)
 
