@@ -221,6 +221,8 @@ class Renderer:
         self.skinned_vao = None
         self.pmx_model = None
         self.textures = []
+        self.default_toon_index = -1
+        self.default_toon_texture = None
         self.material_batches = []
         self.index_count = 0
         
@@ -298,6 +300,20 @@ class Renderer:
         glEnableVertexAttribArray(1)
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 24, ctypes.c_void_p(12))
         self.grid_vao.vertex_count = len(grid_vertices) // 6
+
+    def _select_default_toon(self, r, g, b):
+        if not self.default_toons:
+            return None
+        brightness = 0.299 * r + 0.587 * g + 0.114 * b
+        best_toon = None
+        best_diff = float('inf')
+        for toon_name, toon_info in self.default_toons.items():
+            shadow = toon_info['shadow_brightness']
+            diff = abs(brightness - shadow)
+            if diff < best_diff:
+                best_diff = diff
+                best_toon = toon_name
+        return best_toon
 
     def _on_resize(self, window, width, height):
         self.width = width
@@ -749,6 +765,39 @@ class Renderer:
                     print(f"  [{i}] Failed: {tex_name} - {e}")
                     self.textures.append(None)
 
+        proj_root = Path(__file__).parent.parent
+        self.default_toons = {}
+        self.default_toon_textures = []
+        default_toon_name = 'toon01.bmp'
+        toon_path = proj_root / 'resources' / 'toon' / default_toon_name
+        if os.path.exists(toon_path):
+            try:
+                img = Image.open(toon_path).convert('RGBA')
+                arr = np.array(img)
+                left_half = arr[:, :arr.shape[1]//2, :]
+                shadow_brightness = left_half.mean() / 255.0
+                tex = Texture(img.size[0], img.size[1], 4, img.tobytes())
+                tex.set_filter(GL_LINEAR, GL_LINEAR)
+                tex.set_repeat(True, True)
+                tex_idx = len(self.textures)
+                self.textures.append(tex)
+                self.default_toons[default_toon_name] = {
+                    'index': tex_idx,
+                    'texture': tex,
+                    'shadow_brightness': shadow_brightness
+                }
+                print(f"  [toon] {default_toon_name}: shadow={shadow_brightness:.3f}, index={tex_idx}")
+                self.default_toon_textures = [default_toon_name]
+                print(f"  [toon] Using unified default toon: {default_toon_name}")
+            except Exception as e:
+                print(f"  [toon] {default_toon_name}: Failed - {e}")
+                self.default_toon_textures = []
+        else:
+            print(f"  [toon] {default_toon_name}: Not found")
+            self.default_toon_textures = []
+        self.default_toon_index = -1
+        self.default_toon_texture = None
+
         self.material_batches = []
         original_material_alphas = {}
         self.material_edges = {}
@@ -791,10 +840,17 @@ class Renderer:
                 'texture_index': mat.sphere_texture_index,
                 'mode': mat.sphere_mode
             }
-            self.material_toon[i] = {
-                'texture_index': mat.toon_texture_index,
-                'sharing_flag': mat.toon_sharing_flag
-            }
+            if mat.toon_texture_index >= 0:
+                self.material_toon[i] = {
+                    'texture_index': mat.toon_texture_index,
+                    'sharing_flag': mat.toon_sharing_flag
+                }
+            else:
+                default_toon = self.default_toons.get('toon01.bmp')
+                self.material_toon[i] = {
+                    'texture_index': default_toon['index'] if default_toon else -1,
+                    'sharing_flag': 0
+                }
             index_offset += mat.vertex_count
 
         print(f"Created {len(self.material_batches)} material batches, total indices: {index_offset}")
@@ -805,6 +861,13 @@ class Renderer:
             sphere_mode = mat.sphere_mode
             if sphere_idx >= 0 and sphere_idx < len(self.textures) and self.textures[sphere_idx]:
                 print(f"  Material {i} '{mat.name}': sphere_mode={sphere_mode}, sphere_tex_idx={sphere_idx}, texture={pmx_model.textures[sphere_idx] if sphere_idx < len(pmx_model.textures) else 'N/A'}")
+        
+        print(f"\nMaterial toon info:")
+        for i, mat in enumerate(pmx_model.materials):
+            toon_info = self.material_toon.get(i, {})
+            toon_idx = toon_info.get('texture_index', -1)
+            if toon_idx >= 0 and toon_idx >= len(pmx_model.textures):
+                print(f"  Material {i} '{mat.name}': toon_idx={toon_idx} (default toon01.bmp)")
 
         self.animation_controller.set_model(
             pmx_model, self.bone_texture, self.model_center, self.model_min_pos, self.model_scale
