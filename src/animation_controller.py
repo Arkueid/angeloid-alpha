@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional
 from load_pmx import VpdLoader, pack_matrices_to_texture
 from vmd_loader import VmdLoader, VmdMixer
 
