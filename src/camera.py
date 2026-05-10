@@ -9,8 +9,8 @@ class Camera:
         self.z = -10.0
         self.rot_x = 0.0
         self.rot_y = 180
-        self.speed = 20.0
-        self.mouse_sensitivity = 0.05
+        self.speed = 5.0
+        self.mouse_sensitivity = 0.1
         self.is_panning = False
         self.last_mouse_x = 0
         self.last_mouse_y = 0

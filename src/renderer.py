@@ -1150,6 +1150,18 @@ MODELS = {
     "aqua-swimwear": ("resources/models/Aqua_Swimwear_1.0/Aqua_Swimwear_1.0.pmx", "resources/models/Aqua_Swimwear_1.0/textures"),
     "marine-swimwear": ("resources/models/Marine_Swmwear_1.01/Marine_Swmwear_1.01.pmx", "resources/models/Marine_Swmwear_1.01/textures"),
     "aqua-basebody": ("resources/models/Aqua_BaseBody_R15_0.9/Aqua_BaseBody_R15_0.9.pmx", "resources/models/Aqua_BaseBody_R15_0.9/textures"),
+    "aqua-sailor": ("resources/models/Aqua_Sailor_0.8/Aqua_Sailor_0.8.pmx", "resources/models/Aqua_Sailor_0.8/textures"),
+    "brujas": ("resources/models/Brujas/Brujas.pmx", "resources/models/Brujas"),
+    "lamy-swimwear": ("resources/models/Lamy_Swimwear_1.0/Lamy_Swimwear_1.0.pmx", "resources/models/Lamy_Swimwear_1.0/textures"),
+    "lulum": ("resources/models/lulum/lulum_1.0.pmx", "resources/models/lulum/textures"),
+    "marine-jk1": ("resources/models/Marine_JK1_Set_1.01/Marine_JK1_1.0.pmx", "resources/models/Marine_JK1_Set_1.01/textures"),
+    "marine-jk1-hi": ("resources/models/Marine_JK1_Set_1.01/Marine_JK1_Hi_1.0.pmx", "resources/models/Marine_JK1_Set_1.01/textures"),
+    "rurudo-lion": ("resources/models/RurudoLion_1.0/RurudoLion_1.0.pmx", "resources/models/RurudoLion_1.0/textures"),
+    "rurudo-lion-hi": ("resources/models/RurudoLion_1.0/RurudoLion_Hi_1.0.pmx", "resources/models/RurudoLion_1.0/textures"),
+    "卢西娅": ("resources/models/卢西娅/卢西娅.pmx", "resources/models/卢西娅/textures"),
+    "卢西娅-摘帽": ("resources/models/卢西娅/卢西娅_摘帽.pmx", "resources/models/卢西娅/textures"),
+    "卢西娅-武器1": ("resources/models/卢西娅/武器1.pmx", "resources/models/卢西娅/textures"),
+    "卢西娅-武器2": ("resources/models/卢西娅/武器2.pmx", "resources/models/卢西娅/textures"),
 }
 
 
