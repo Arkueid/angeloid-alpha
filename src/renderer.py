@@ -332,7 +332,7 @@ class Renderer:
 
     def _on_scroll(self, window, xoffset, yoffset):
         self.camera.on_scroll(window, xoffset, yoffset)
-        print(f"Camera speed: {self.camera.speed:.1f}")
+        print(f"Camera speed: {self.camera.speed:.3f}")
 
     def _on_key(self, window, key, scancode, action, mods):
         if key == glfw.KEY_ESCAPE and action == glfw.PRESS:

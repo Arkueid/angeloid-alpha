@@ -76,8 +76,21 @@ class Camera:
             self.last_mouse_y = ypos
 
     def on_scroll(self, window, xoffset, yoffset):
-        self.speed += yoffset * 0.5
-        self.speed = max(1.0, min(20.0, self.speed))
+        if yoffset > 0:
+            if self.speed >= 0.1:
+                self.speed += 0.1
+            elif self.speed >= 0.01:
+                self.speed += 0.01
+            else:
+                self.speed += 0.001
+        else:
+            if round(self.speed, 2) > 0.1:
+                self.speed -= 0.1
+            elif round(self.speed, 2) > 0.01:
+                self.speed -= 0.01
+            else:
+                self.speed -= 0.001
+        self.speed = max(0.001, min(20.0, self.speed))
 
     def create_view_matrix(self):
         rot_x = np.radians(self.rot_x)
