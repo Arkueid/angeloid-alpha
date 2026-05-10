@@ -151,6 +151,57 @@ class RigidBody:
         return self.shape_type == RIGID_SHAPE_CAPSULE
 
 
+class Joint:
+    def __init__(self, joint, index):
+        self._joint = joint
+        self.index = index
+        self.name = joint.name
+        self.english_name = joint.english_name
+        self.joint_type = joint.joint_type
+        self.rigidbody_index_a = joint.rigidbody_index_a
+        self.rigidbody_index_b = joint.rigidbody_index_b
+        self.position = np.array([
+            joint.position.x,
+            joint.position.y,
+            joint.position.z
+        ], dtype=np.float32)
+        self.rotation = np.array([
+            joint.rotation.x,
+            joint.rotation.y,
+            joint.rotation.z
+        ], dtype=np.float32)
+        self.translation_limit_min = np.array([
+            joint.translation_limit_min.x,
+            joint.translation_limit_min.y,
+            joint.translation_limit_min.z
+        ], dtype=np.float32)
+        self.translation_limit_max = np.array([
+            joint.translation_limit_max.x,
+            joint.translation_limit_max.y,
+            joint.translation_limit_max.z
+        ], dtype=np.float32)
+        self.rotation_limit_min = np.array([
+            joint.rotation_limit_min.x,
+            joint.rotation_limit_min.y,
+            joint.rotation_limit_min.z
+        ], dtype=np.float32)
+        self.rotation_limit_max = np.array([
+            joint.rotation_limit_max.x,
+            joint.rotation_limit_max.y,
+            joint.rotation_limit_max.z
+        ], dtype=np.float32)
+        self.spring_constant_translation = np.array([
+            joint.spring_constant_translation.x,
+            joint.spring_constant_translation.y,
+            joint.spring_constant_translation.z
+        ], dtype=np.float32)
+        self.spring_constant_rotation = np.array([
+            joint.spring_constant_rotation.x,
+            joint.spring_constant_rotation.y,
+            joint.spring_constant_rotation.z
+        ], dtype=np.float32)
+
+
 class Bone:
     def __init__(self, bone, index):
         self._bone = bone
@@ -488,6 +539,23 @@ class PmxModel:
         rigidbodies = getattr(self._model, 'rigidbodies', [])
         if 0 <= index < len(rigidbodies):
             return RigidBody(rigidbodies[index], index)
+        return None
+
+    @property
+    def joints(self):
+        return getattr(self._model, 'joints', [])
+
+    @property
+    def joint_count(self) -> int:
+        return len(getattr(self._model, 'joints', []))
+
+    def get_joints(self):
+        return [Joint(j, i) for i, j in enumerate(getattr(self._model, 'joints', []))]
+
+    def get_joint(self, index):
+        joints = getattr(self._model, 'joints', [])
+        if 0 <= index < len(joints):
+            return Joint(joints[index], index)
         return None
 
     def get_bones(self):

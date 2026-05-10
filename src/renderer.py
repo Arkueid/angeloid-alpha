@@ -3,7 +3,7 @@ from OpenGL.GL import *
 import numpy as np
 import ctypes
 from load_pmx import PmxModel
-from bone_transform import create_rigid_body_local_data
+from bone_transform import create_rigid_body_local_data, create_all_joint_markers
 from PIL import Image
 import os
 import json
@@ -201,6 +201,7 @@ class Renderer:
         self.show_world_axis = True
         self.show_ground_grid = True
         self.show_rigidbody = False
+        self.show_joint = False
 
         glfw.set_mouse_button_callback(self.window, self._on_mouse_button)
         glfw.set_cursor_pos_callback(self.window, self._on_cursor_pos)
@@ -352,7 +353,8 @@ class Renderer:
 
         if key == glfw.KEY_B and action == glfw.PRESS:
             self.show_rigidbody = not self.show_rigidbody
-            print(f"Rigidbody: {'ON' if self.show_rigidbody else 'OFF'}")
+            self.show_joint = self.show_rigidbody
+            print(f"Rigidbody & Joint: {'ON' if self.show_rigidbody else 'OFF'}")
 
         if key == glfw.KEY_T and action == glfw.PRESS:
             self.show_toon = not self.show_toon
@@ -901,6 +903,34 @@ class Renderer:
             self.rigidbody_vaos = []
             print(f"No rigidbodies found in model")
 
+        joints = pmx_model.get_joints()
+        self.joints = joints
+        if joints:
+            joint_vertices, joint_colors = create_all_joint_markers(joints, self.rigidbodies)
+            if len(joint_vertices) > 0:
+                self.joint_vaos = []
+                vao = VAO()
+                vao.bind()
+                vbo_pos = glGenBuffers(1)
+                glBindBuffer(GL_ARRAY_BUFFER, vbo_pos)
+                glBufferData(GL_ARRAY_BUFFER, joint_vertices.nbytes, joint_vertices, GL_STATIC_DRAW)
+                glEnableVertexAttribArray(0)
+                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
+                vbo_col = glGenBuffers(1)
+                glBindBuffer(GL_ARRAY_BUFFER, vbo_col)
+                glBufferData(GL_ARRAY_BUFFER, joint_colors.nbytes, joint_colors, GL_STATIC_DRAW)
+                glEnableVertexAttribArray(1)
+                glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
+                vao.vbos = [vbo_pos, vbo_col]
+                vao.vertex_count = len(joint_vertices)
+                self.joint_vaos.append(vao)
+                print(f"Created {len(self.joint_vaos)} joint VAOs with {len(joint_vertices)} vertices")
+            else:
+                self.joint_vaos = []
+        else:
+            self.joint_vaos = []
+            print(f"No joints found in model")
+
         self.dummy_texture = Texture(1, 1, 1, np.array([255], dtype='u1').tobytes())
 
     def _save_screenshot(self):
@@ -1173,6 +1203,24 @@ class Renderer:
                     glDisable(GL_BLEND)
                     glEnable(GL_CULL_FACE)
                     glEnable(GL_DEPTH_TEST)
+
+            if self.show_joint and self.joint_vaos:
+                glDisable(GL_DEPTH_TEST)
+                glDisable(GL_CULL_FACE)
+                glEnable(GL_BLEND)
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+                rb_program = self.shader_manager.get_program('rigidbody')
+                glUseProgram(rb_program)
+                self._set_uniform_matrix(rb_program, "projection", projection.T)
+                self._set_uniform_matrix(rb_program, "view", view.T)
+                self._set_uniform_matrix(rb_program, "model", model)
+                self._set_uniform_matrix(rb_program, "bone_matrix", np.eye(4).T)
+                glLineWidth(1.0)
+                for vao in self.joint_vaos:
+                    vao.render(GL_LINES)
+                glDisable(GL_BLEND)
+                glEnable(GL_CULL_FACE)
+                glEnable(GL_DEPTH_TEST)
 
             glfw.swap_buffers(self.window)
 

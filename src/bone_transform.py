@@ -181,8 +181,6 @@ def create_rigid_body_lines(rigid_body, color=(1.0, 1.0, 0.0)):
                 theta2 = (j + 1) * 2 * np.pi / num_theta
                 x1_next = r * np.sin(phi1) * np.cos(theta2)
                 z1_next = r * np.sin(phi1) * np.sin(theta2)
-                x2_next = r * np.sin(phi2) * np.cos(theta2)
-                z2_next = r * np.sin(phi2) * np.sin(theta2)
                 vertices.extend([[x1, y1_top, z1], [x1_next, y1_top, z1_next]])
                 vertices.extend([[x1, y1_bottom, z1], [x1_next, y1_bottom, z1_next]])
         for j in range(num_theta):
@@ -239,6 +237,134 @@ def create_all_rigid_body_lines(rigidbodies):
     for i, rb in enumerate(rigidbodies):
         color = colors[i % len(colors)]
         verts, cols = create_rigid_body_lines(rb, color)
+        if len(verts) > 0:
+            all_vertices.append(verts)
+            all_colors.append(cols)
+
+    if not all_vertices:
+        return np.array([], dtype=np.float32).reshape(0, 3), np.array([], dtype=np.float32).reshape(0, 3)
+
+    all_vertices = np.vstack(all_vertices)
+    all_colors = np.vstack(all_colors)
+    return all_vertices, all_colors
+
+
+JOINT_TYPE_SPRING = 0
+JOINT_TYPE_HINGE = 1
+JOINT_TYPE_BALL = 2
+JOINT_TYPE_SLIDER = 3
+JOINT_TYPE_CONE_TWIST = 4
+
+
+def create_joint_marker_lines(joint, color=(0.0, 1.0, 0.0), size=0.05):
+    vertices = []
+    x, y, z = joint.position
+    rx, ry, rz = joint.rotation
+
+    if joint.joint_type == JOINT_TYPE_SPRING:
+        vertices.extend([
+            [x - size, y, z], [x + size, y, z],
+            [x, y - size, z], [x, y + size, z],
+            [x, y, z - size], [x, y, z + size],
+        ])
+    elif joint.joint_type == JOINT_TYPE_HINGE:
+        cx, cy, cz = np.cos(rx), np.cos(ry), np.cos(rz)
+        sx, sy, sz = np.sin(rx), np.sin(ry), np.sin(rz)
+        axis_len = size * 2
+        vertices.extend([
+            [x - cx * axis_len, y - cy * axis_len, z - cz * axis_len],
+            [x + cx * axis_len, y + cy * axis_len, z + cz * axis_len],
+        ])
+    elif joint.joint_type == JOINT_TYPE_BALL:
+        for i in range(8):
+            angle = i * np.pi / 4
+            x1 = x + size * np.cos(angle)
+            y1 = y + size * np.sin(angle)
+            x2 = x + size * np.cos(angle + np.pi / 4)
+            y2 = y + size * np.sin(angle + np.pi / 4)
+            vertices.extend([[x1, y1, z], [x2, y2, z]])
+        for i in range(8):
+            angle = i * np.pi / 4
+            x1 = x + size * np.cos(angle)
+            z1 = z + size * np.sin(angle)
+            x2 = x + size * np.cos(angle + np.pi / 4)
+            z2 = z + size * np.sin(angle + np.pi / 4)
+            vertices.extend([[x1, y, z1], [x2, y, z2]])
+    elif joint.joint_type == JOINT_TYPE_SLIDER:
+        cx, cy, cz = np.cos(rx), np.cos(ry), np.cos(rz)
+        sx, sy, sz = np.sin(rx), np.sin(ry), np.sin(rz)
+        axis_len = size * 2
+        vertices.extend([
+            [x - cx * axis_len, y - cy * axis_len, z - cz * axis_len],
+            [x + cx * axis_len, y + cy * axis_len, z + cz * axis_len],
+        ])
+        perp1 = np.array([-sy, sx, 0])
+        perp2 = np.array([sz, 0, -sx])
+        vertices.extend([
+            [x, y, z],
+            [x + perp1[0] * size * 0.5, y + perp1[1] * size * 0.5, z + perp1[2] * size * 0.5],
+        ])
+        vertices.extend([
+            [x, y, z],
+            [x + perp2[0] * size * 0.5, y + perp2[1] * size * 0.5, z + perp2[2] * size * 0.5],
+        ])
+    elif joint.joint_type == JOINT_TYPE_CONE_TWIST:
+        for i in range(6):
+            angle = i * np.pi / 3
+            x1 = x + size * np.cos(angle)
+            z1 = z + size * np.sin(angle)
+            x2 = x + size * np.cos(angle + np.pi / 3)
+            z2 = z + size * np.sin(angle + np.pi / 3)
+            vertices.extend([[x1, y, z1], [x2, y, z2]])
+        vertices.extend([[x, y, z], [x, y + size, z]])
+    else:
+        vertices.extend([
+            [x - size, y, z], [x + size, y, z],
+            [x, y - size, z], [x, y + size, z],
+            [x, y, z - size], [x, y, z + size],
+        ])
+
+    vertices = np.array(vertices, dtype=np.float32)
+    colors = np.tile(color, (len(vertices), 1)).astype(np.float32)
+    return vertices, colors
+
+
+def create_all_joint_markers(joints, rigidbodies=None):
+    all_vertices = []
+    all_colors = []
+    colors = [
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (1.0, 1.0, 0.0),
+        (1.0, 0.0, 1.0),
+        (0.0, 1.0, 1.0),
+        (1.0, 0.5, 0.0),
+        (0.5, 1.0, 0.0),
+        (0.0, 1.0, 0.5),
+        (0.5, 0.0, 1.0),
+        (1.0, 0.0, 0.5),
+        (0.0, 0.5, 1.0),
+    ]
+    pair_to_color = {}
+    color_index = 0
+    for joint in joints:
+        rb_a_bone = -1
+        rb_b_bone = -1
+        if rigidbodies is not None:
+            if 0 <= joint.rigidbody_index_a < len(rigidbodies):
+                rb_a_bone = rigidbodies[joint.rigidbody_index_a].bone_index
+            if 0 <= joint.rigidbody_index_b < len(rigidbodies):
+                rb_b_bone = rigidbodies[joint.rigidbody_index_b].bone_index
+        if rb_a_bone == rb_b_bone and rb_a_bone >= 0:
+            key = ('bone', rb_a_bone)
+        else:
+            key = (joint.rigidbody_index_a, joint.rigidbody_index_b)
+        if key not in pair_to_color:
+            pair_to_color[key] = colors[color_index % len(colors)]
+            color_index += 1
+        color = pair_to_color[key]
+        verts, cols = create_joint_marker_lines(joint, color)
         if len(verts) > 0:
             all_vertices.append(verts)
             all_colors.append(cols)
