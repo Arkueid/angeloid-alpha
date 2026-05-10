@@ -217,6 +217,11 @@ class Renderer:
         self.idle_breath_intensity = 0.005
         self.idle_sway_intensity = 0.01
         self.idle_head_intensity = 0.008
+        self.idle_blink_enabled = True
+        self.idle_blink_time = 0.0
+        self.idle_blink_interval = 4.0
+        self.idle_blink_duration = 0.15
+        self.idle_blink_morph_names = ["blink", "blink_l", "blink_r", "まばたき", "まぶたき"]
 
         self.model_vao = None
         self.outline_vao = None
@@ -384,7 +389,10 @@ class Renderer:
 
         if key == glfw.KEY_I and action == glfw.PRESS:
             self.idle_animation_enabled = not self.idle_animation_enabled
-            print(f"Idle animation: {'ON' if self.idle_animation_enabled else 'OFF'}")
+            self.idle_blink_enabled = self.idle_animation_enabled
+            if self.idle_animation_enabled:
+                self.idle_blink_time = 0.0
+            print(f"Idle animation: {'ON' if self.idle_animation_enabled else 'OFF'} (blink: {'ON' if self.idle_blink_enabled else 'OFF'})")
 
         if key == glfw.KEY_M and action == glfw.PRESS:
             self.show_morph = not self.show_morph
@@ -993,6 +1001,26 @@ class Renderer:
                     [0, 0, 0, 1]
                 ], dtype='f4')
                 model = model @ breath @ sway
+
+                if self.idle_blink_enabled and self.pmx_model:
+                    self.idle_blink_time += delta_time
+                    blink_weight = 0.0
+                    if self.idle_blink_time >= self.idle_blink_interval:
+                        blink_progress = (self.idle_blink_time - self.idle_blink_interval) / self.idle_blink_duration
+                        if blink_progress < 0.5:
+                            blink_weight = blink_progress * 2.0
+                        else:
+                            blink_weight = (1.0 - blink_progress) * 2.0
+                        if blink_progress >= 1.0:
+                            self.idle_blink_time = 0.0
+                    if blink_weight > 0.0:
+                        for morph_name in self.idle_blink_morph_names:
+                            self.morph_controller.set_morph_weight(morph_name, blink_weight)
+                    else:
+                        for morph_name in self.idle_blink_morph_names:
+                            if morph_name in self.morph_controller.morph_weights:
+                                del self.morph_controller.morph_weights[morph_name]
+                        self.morph_controller._update_morph_offsets()
 
             self.animation_controller.update(delta_time)
             if self.animation_controller.vmd_playing:
