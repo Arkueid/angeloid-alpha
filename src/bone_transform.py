@@ -377,6 +377,53 @@ def create_all_joint_markers(joints, rigidbodies=None):
     return all_vertices, all_colors
 
 
+def create_joint_local_data(joints, rigidbodies=None, joint_size=0.05):
+    colors = [
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (1.0, 1.0, 0.0),
+        (1.0, 0.0, 1.0),
+        (0.0, 1.0, 1.0),
+        (1.0, 0.5, 0.0),
+        (0.5, 1.0, 0.0),
+        (0.0, 1.0, 0.5),
+        (0.5, 0.0, 1.0),
+        (1.0, 0.0, 0.5),
+        (0.0, 0.5, 1.0),
+    ]
+    pair_to_color = {}
+    color_index = 0
+    result = []
+    for joint in joints:
+        rb_a_bone = -1
+        rb_b_bone = -1
+        if rigidbodies is not None:
+            if 0 <= joint.rigidbody_index_a < len(rigidbodies):
+                rb_a_bone = rigidbodies[joint.rigidbody_index_a].bone_index
+            if 0 <= joint.rigidbody_index_b < len(rigidbodies):
+                rb_b_bone = rigidbodies[joint.rigidbody_index_b].bone_index
+        if rb_a_bone == rb_b_bone and rb_a_bone >= 0:
+            key = ('bone', rb_a_bone)
+        else:
+            key = (joint.rigidbody_index_a, joint.rigidbody_index_b)
+        if key not in pair_to_color:
+            pair_to_color[key] = colors[color_index % len(colors)]
+            color_index += 1
+        color = pair_to_color[key]
+        verts, _ = create_joint_marker_lines(joint, color, joint_size)
+        if len(verts) > 0:
+            bone_index = rb_a_bone if rb_a_bone >= 0 else (rb_b_bone if rb_b_bone >= 0 else -1)
+            cols = np.tile(color, (len(verts), 1)).astype(np.float32)
+            result.append({
+                'vertices': verts,
+                'colors': cols,
+                'bone_index': bone_index,
+                'count': len(verts)
+            })
+    return result
+
+
 def create_rigid_body_local_data(rigidbodies):
     colors = [
         (1.0, 1.0, 0.0),

@@ -22,6 +22,7 @@ class AnimationController:
         
         self.bone_morph_transforms: Dict[int, Dict] = {}
         self.current_bone_matrices: Optional[np.ndarray] = None
+        self.pose_world_matrices: Optional[np.ndarray] = None
 
     def set_model(self, pmx_model, bone_texture, model_center, model_min_pos, model_scale):
         self.pmx_model = pmx_model
@@ -119,13 +120,8 @@ class AnimationController:
         
         return morph_weights
 
-    def _apply_vmd_bone_transforms(self, bone_poses: dict, apply_bone_morphs=False):
-        if self.pmx_model is None or self.bone_texture is None:
-            return
-
-        bones = self.pmx_model.get_bones()
+    def _compute_bone_world_hierarchy(self, bones, bone_poses=None, bone_morphs=False):
         num_bones = len(bones)
-        
         bind_world = [np.eye(4, dtype=np.float32) for _ in range(num_bones)]
         for i, bone in enumerate(bones):
             if bone.parent_index >= 0:
@@ -140,46 +136,39 @@ class AnimationController:
                 bind_world[i][0, 3] = bone.position[0]
                 bind_world[i][1, 3] = bone.position[1]
                 bind_world[i][2, 3] = bone.position[2]
-        
         pose_world = [np.eye(4, dtype=np.float32) for _ in range(num_bones)]
-        
         for i, bone in enumerate(bones):
             local_mat = np.eye(4, dtype=np.float32)
-            
             if bone.parent_index >= 0:
                 parent_pos = bones[bone.parent_index].position
                 local_pos = bone.position - parent_pos
                 local_mat[0, 3] = local_pos[0]
                 local_mat[1, 3] = local_pos[1]
                 local_mat[2, 3] = local_pos[2]
-                
-                if apply_bone_morphs and i in self.bone_morph_transforms:
+                if bone_morphs and i in self.bone_morph_transforms:
                     morph_transform = self.bone_morph_transforms[i]
                     morph_rot = self._quaternion_to_matrix(morph_transform['rotation'])
                     morph_mat = np.eye(4, dtype=np.float32)
                     morph_mat[:3, :3] = morph_rot
                     morph_mat[:3, 3] = morph_transform['translation']
                     local_mat = morph_mat @ local_mat
-                
-                if bone.name in bone_poses:
+                if bone_poses and bone.name in bone_poses:
                     position, rotation = bone_poses[bone.name]
                     rot_mat = self._quaternion_to_matrix(rotation)
                     local_mat[:3, :3] = rot_mat
                     local_mat[0, 3] += position[0]
                     local_mat[1, 3] += position[1]
                     local_mat[2, 3] += position[2]
-                
                 pose_world[i] = pose_world[bone.parent_index] @ local_mat
             else:
-                if apply_bone_morphs and i in self.bone_morph_transforms:
+                if bone_morphs and i in self.bone_morph_transforms:
                     morph_transform = self.bone_morph_transforms[i]
                     morph_rot = self._quaternion_to_matrix(morph_transform['rotation'])
                     morph_mat = np.eye(4, dtype=np.float32)
                     morph_mat[:3, :3] = morph_rot
                     morph_mat[:3, 3] = morph_transform['translation']
                     local_mat = morph_mat @ local_mat
-                
-                if bone.name in bone_poses:
+                if bone_poses and bone.name in bone_poses:
                     position, rotation = bone_poses[bone.name]
                     rot_mat = self._quaternion_to_matrix(rotation)
                     local_mat[:3, :3] = rot_mat
@@ -187,11 +176,45 @@ class AnimationController:
                     local_mat[1, 3] += position[1]
                     local_mat[2, 3] += position[2]
                 pose_world[i] = local_mat
-        
+        return bind_world, pose_world
+
+    def _apply_vmd_bone_transforms(self, bone_poses: dict, apply_bone_morphs=False):
+        if self.pmx_model is None or self.bone_texture is None:
+            return
+
+        transform_params = {
+            'center': self.model_center,
+            'min_y': self.model_min_pos[1],
+            'scale': self.model_scale
+        }
+
+        bones = self.pmx_model.get_bones()
+        num_bones = len(bones)
+
+        bind_world, pose_world = self._compute_bone_world_hierarchy(
+            bones, bone_poses, apply_bone_morphs)
+        self.pose_world_matrices = np.array([m.copy() for m in pose_world], dtype=np.float32)
+
         matrices = np.zeros((num_bones, 4, 4), dtype=np.float32)
         for i in range(num_bones):
             inv_bind = np.linalg.inv(bind_world[i])
             matrices[i] = pose_world[i] @ inv_bind
+
+        if transform_params:
+            center = transform_params['center']
+            min_y = transform_params['min_y']
+            scale = transform_params['scale']
+
+            offset = np.array([center[0], min_y, center[2]])
+            offset_scaled = scale * offset
+
+            for i in range(num_bones):
+                M = matrices[i]
+                R = M[:3, :3]
+                t = M[:3, 3]
+
+                t_new = t * scale + (R - np.eye(3)) @ offset_scaled
+                matrices[i, :3, 3] = t_new
 
         self.current_bone_matrices = matrices.copy()
 
@@ -202,15 +225,52 @@ class AnimationController:
     def reload_bone_texture(self, debug_scale=1.0, use_pose=False):
         if self.pmx_model is None:
             return
-        {
+        transform_params = {
             'center': self.model_center,
             'min_y': self.model_min_pos[1],
             'scale': self.model_scale
         }
+        bones = self.pmx_model.get_bones()
         if use_pose and self.vpd_poses:
-            matrices = self.pmx_model.get_bone_matrices_with_pose(self.vpd_poses, debug_scale=1.0, transform_params=None)
+            matrices = self.pmx_model.get_bone_matrices_with_pose(self.vpd_poses, debug_scale=1.0, transform_params=transform_params)
+            bones_list = self.pmx_model.get_bones()
+            n_bones = len(bones_list)
+            pose_world = [np.eye(4, dtype=np.float32) for _ in range(n_bones)]
+            for i, bone in enumerate(bones_list):
+                local_mat = np.eye(4, dtype=np.float32)
+                if bone.parent_index >= 0:
+                    parent_pos = bones_list[bone.parent_index].position
+                    local_pos = bone.position - parent_pos
+                    local_mat[0, 3] = local_pos[0]
+                    local_mat[1, 3] = local_pos[1]
+                    local_mat[2, 3] = local_pos[2]
+                    if bone.name in self.vpd_poses:
+                        rot_mat = self.vpd_poses[bone.name].to_matrix()[:3, :3]
+                        local_mat[:3, :3] = rot_mat
+                    pose_world[i] = pose_world[bone.parent_index] @ local_mat
+                else:
+                    if bone.name in self.vpd_poses:
+                        rot_mat = self.vpd_poses[bone.name].to_matrix()[:3, :3]
+                        local_mat[:3, :3] = rot_mat
+                    pose_world[i] = local_mat
+            self.pose_world_matrices = np.array([m.copy() for m in pose_world], dtype=np.float32)
         else:
             matrices = self.pmx_model.get_bind_pose_matrices(debug_scale)
+            bind_world = [np.eye(4, dtype=np.float32) for _ in range(len(bones))]
+            for i, bone in enumerate(bones):
+                if bone.parent_index >= 0:
+                    parent_pos = bones[bone.parent_index].position
+                    local_pos = bone.position - parent_pos
+                    local_mat = np.eye(4, dtype=np.float32)
+                    local_mat[0, 3] = local_pos[0]
+                    local_mat[1, 3] = local_pos[1]
+                    local_mat[2, 3] = local_pos[2]
+                    bind_world[i] = bind_world[bone.parent_index] @ local_mat
+                else:
+                    bind_world[i][0, 3] = bone.position[0]
+                    bind_world[i][1, 3] = bone.position[1]
+                    bind_world[i][2, 3] = bone.position[2]
+            self.pose_world_matrices = np.array([m.copy() for m in bind_world], dtype=np.float32)
         bone_tex_data, tex_width, tex_height = pack_matrices_to_texture(matrices)
         self.bone_texture.write(bone_tex_data.tobytes())
         self.current_bone_matrices = matrices.copy()

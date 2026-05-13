@@ -676,7 +676,23 @@ class PmxModel:
 
     def get_bone_texture_data(self, debug_scale=1.0, transform_params=None):
         matrices = self.get_bind_pose_matrices(debug_scale)
-        
+
+        if transform_params:
+            center = transform_params['center']
+            min_y = transform_params['min_y']
+            scale = transform_params['scale']
+            
+            offset = np.array([center[0], min_y, center[2]])
+            offset_scaled = scale * offset
+            
+            for i in range(len(matrices)):
+                M = matrices[i]
+                R = M[:3, :3]
+                t = M[:3, 3]
+                
+                t_new = t * scale + (R - np.eye(3)) @ offset_scaled
+                matrices[i, :3, 3] = t_new
+                
         return pack_matrices_to_texture(matrices)
 
     def get_bone_matrices_with_pose(self, vpd_poses, debug_scale=1.0, transform_params=None):
