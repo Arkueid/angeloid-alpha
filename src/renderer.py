@@ -202,6 +202,7 @@ class Renderer:
         self.show_ground_grid = True
         self.show_rigidbody = False
         self.show_joint = False
+        self.show_model = True
 
         glfw.set_mouse_button_callback(self.window, self._on_mouse_button)
         glfw.set_cursor_pos_callback(self.window, self._on_cursor_pos)
@@ -360,6 +361,10 @@ class Renderer:
             self.show_rigidbody = not self.show_rigidbody
             self.show_joint = self.show_rigidbody
             print(f"Rigidbody & Joint: {'ON' if self.show_rigidbody else 'OFF'}")
+
+        if key == glfw.KEY_H and action == glfw.PRESS:
+            self.show_model = not self.show_model
+            print(f"Model mesh: {'ON' if self.show_model else 'OFF'}")
 
         if key == glfw.KEY_T and action == glfw.PRESS:
             self.show_toon = not self.show_toon
@@ -1003,6 +1008,7 @@ class Renderer:
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
             
             glFrontFace(GL_CW)
+            glDisable(GL_CULL_FACE)
 
             projection = Camera.create_projection_matrix(self.width, self.height)
             view = self.camera.create_view_matrix()
@@ -1071,7 +1077,7 @@ class Renderer:
                 self.axis_vao.render(GL_LINES)
                 glEnable(GL_DEPTH_TEST)
 
-            if self.show_outline and self.outline_vao and self.material_batches:
+            if self.show_model and self.show_outline and self.outline_vao and self.material_batches:
                 glEnable(GL_CULL_FACE)
                 glCullFace(GL_FRONT)
 
@@ -1121,7 +1127,7 @@ class Renderer:
 
                 glDisable(GL_CULL_FACE)
 
-            if self.model_vao and self.material_batches:
+            if self.show_model and self.model_vao and self.material_batches:
                 if self.show_morph and self.skinned_morph_vao:
                     if self.show_toon:
                         shader = self.shader_manager.get_program('morph')
@@ -1227,6 +1233,9 @@ class Renderer:
                         self._set_uniform(shader, "has_toon", False)
 
                     vao.render(GL_TRIANGLES, count=batch['count'], first=batch['first'])
+
+            if (self.show_rigidbody and self.rigidbody_vao) or (self.show_joint and self.joint_vao):
+                glClear(GL_DEPTH_BUFFER_BIT)
 
             if self.show_rigidbody and self.rigidbody_vao:
                 glEnable(GL_DEPTH_TEST)
@@ -1357,6 +1366,8 @@ def main():
     print("  Mouse scroll: Adjust movement speed")
     print("  X key: Toggle world axis display")
     print("  G key: Toggle ground grid display")
+    print("  B key: Toggle rigidbody & joint display")
+    print("  H key: Toggle model mesh display")
     print("  O key: Toggle outline display")
     print("  T key: Toggle toon shading")
     print("  K key: Toggle GPU skinning")
