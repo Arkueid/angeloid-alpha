@@ -24,6 +24,8 @@ Python environment: `.venv/`
 - Commit messages: concise summary line, bullet details
 - Use `Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>`
 - Keep commits focused, don't mix unrelated changes
+- Only commit when the user explicitly asks. Do not auto-commit.
+- When the user asks to commit, also update README.md / README_EN.md / CLAUDE.md if stale
 
 ## Problem solving
 - Don't work around issues — fix root causes
