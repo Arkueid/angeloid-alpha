@@ -3,7 +3,7 @@ from OpenGL.GL import *
 import numpy as np
 import ctypes
 from load_pmx import PmxModel
-from bone_transform import create_rigid_body_local_data, create_joint_local_data
+from bone_transform import create_rigid_body_batched, create_joint_batched
 from PIL import Image
 import os
 import json
@@ -896,56 +896,50 @@ class Renderer:
         rigidbodies = pmx_model.get_rigidbodies()
         self.rigidbodies = rigidbodies
         if rigidbodies:
-            rb_local_data = create_rigid_body_local_data(rigidbodies)
-            self.rigidbody_vaos = []
-            for rb_data in rb_local_data:                
-                vao = VAO()
-                vao.bind()
-                vbo_pos = glGenBuffers(1)
-                glBindBuffer(GL_ARRAY_BUFFER, vbo_pos)
-                glBufferData(GL_ARRAY_BUFFER, rb_data['vertices'].nbytes, rb_data['vertices'], GL_STATIC_DRAW)
-                glEnableVertexAttribArray(0)
-                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-                vbo_col = glGenBuffers(1)
-                glBindBuffer(GL_ARRAY_BUFFER, vbo_col)
-                glBufferData(GL_ARRAY_BUFFER, rb_data['colors'].nbytes, rb_data['colors'], GL_STATIC_DRAW)
-                glEnableVertexAttribArray(1)
-                glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-                vao.vbos = [vbo_pos, vbo_col]
-                vao.vertex_count = rb_data['count']
-                vao.bone_index = rb_data['bone_index']
-                self.rigidbody_vaos.append(vao)
-            print(f"Created {len(self.rigidbody_vaos)} rigidbody VAOs")
+            rb_verts, rb_cols = create_rigid_body_batched(rigidbodies)
+            self.rigidbody_vao = VAO()
+            self.rigidbody_vao.bind()
+            vbo_pos = glGenBuffers(1)
+            glBindBuffer(GL_ARRAY_BUFFER, vbo_pos)
+            glBufferData(GL_ARRAY_BUFFER, rb_verts.nbytes, rb_verts, GL_STATIC_DRAW)
+            glEnableVertexAttribArray(0)
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
+            vbo_col = glGenBuffers(1)
+            glBindBuffer(GL_ARRAY_BUFFER, vbo_col)
+            glBufferData(GL_ARRAY_BUFFER, rb_cols.nbytes, rb_cols, GL_STATIC_DRAW)
+            glEnableVertexAttribArray(1)
+            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
+            self.rigidbody_vao.vbos = [vbo_pos, vbo_col]
+            self.rigidbody_vao.vertex_count = len(rb_verts)
+            self.rigidbody_vao.unbind()
+            print(f"Created rigidbody VAO: {len(rb_verts)} vertices ({len(rigidbodies)} rigidbodies batched)")
         else:
-            self.rigidbody_vaos = []
+            self.rigidbody_vao = None
             print(f"No rigidbodies found in model")
 
         joints = pmx_model.get_joints()
         self.joints = joints
         if joints:
             joint_marker_size = 0.04 / self.model_scale if self.model_scale > 0 else 0.04
-            joint_local_data = create_joint_local_data(joints, self.rigidbodies, joint_marker_size)
-            self.joint_vaos = []
-            for jd in joint_local_data:
-                vao = VAO()
-                vao.bind()
-                vbo_pos = glGenBuffers(1)
-                glBindBuffer(GL_ARRAY_BUFFER, vbo_pos)
-                glBufferData(GL_ARRAY_BUFFER, jd['vertices'].nbytes, jd['vertices'], GL_STATIC_DRAW)
-                glEnableVertexAttribArray(0)
-                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-                vbo_col = glGenBuffers(1)
-                glBindBuffer(GL_ARRAY_BUFFER, vbo_col)
-                glBufferData(GL_ARRAY_BUFFER, jd['colors'].nbytes, jd['colors'], GL_STATIC_DRAW)
-                glEnableVertexAttribArray(1)
-                glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-                vao.vbos = [vbo_pos, vbo_col]
-                vao.vertex_count = jd['count']
-                vao.bone_index = jd['bone_index']
-                self.joint_vaos.append(vao)
-            print(f"Created {len(self.joint_vaos)} joint VAOs")
+            jt_verts, jt_cols = create_joint_batched(joints, self.rigidbodies, joint_marker_size)
+            self.joint_vao = VAO()
+            self.joint_vao.bind()
+            vbo_pos = glGenBuffers(1)
+            glBindBuffer(GL_ARRAY_BUFFER, vbo_pos)
+            glBufferData(GL_ARRAY_BUFFER, jt_verts.nbytes, jt_verts, GL_STATIC_DRAW)
+            glEnableVertexAttribArray(0)
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
+            vbo_col = glGenBuffers(1)
+            glBindBuffer(GL_ARRAY_BUFFER, vbo_col)
+            glBufferData(GL_ARRAY_BUFFER, jt_cols.nbytes, jt_cols, GL_STATIC_DRAW)
+            glEnableVertexAttribArray(1)
+            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
+            self.joint_vao.vbos = [vbo_pos, vbo_col]
+            self.joint_vao.vertex_count = len(jt_verts)
+            self.joint_vao.unbind()
+            print(f"Created joint VAO: {len(jt_verts)} vertices ({len(joints)} joints batched)")
         else:
-            self.joint_vaos = []
+            self.joint_vao = None
             print(f"No joints found in model")
 
         self.dummy_texture = Texture(1, 1, 1, np.array([255], dtype='u1').tobytes())
@@ -1000,7 +994,7 @@ class Renderer:
             if self.idle_animation_enabled:
                 self.idle_time += delta_time
                 breath = np.eye(4, dtype='f4')
-                breath[3, 1] = np.sin(self.idle_time * 1.5) * self.idle_breath_intensity
+                breath[1, 3] = np.sin(self.idle_time * 1.5) * self.idle_breath_intensity
                 sway_angle = np.sin(self.idle_time * 0.7) * self.idle_sway_intensity
                 sway = np.array([
                     [np.cos(sway_angle), 0, np.sin(sway_angle), 0],
@@ -1082,7 +1076,7 @@ class Renderer:
 
                 self._set_uniform_matrix(outline_shader, "projection", projection.T)
                 self._set_uniform_matrix(outline_shader, "view", view.T)
-                self._set_uniform_matrix(outline_shader, "model", model)
+                self._set_uniform_matrix(outline_shader, "model", model.T)
 
                 for batch in self.material_batches:
                     if not batch['has_edge']:
@@ -1157,7 +1151,7 @@ class Renderer:
 
                 self._set_uniform_matrix(shader, "projection", projection.T)
                 self._set_uniform_matrix(shader, "view", view.T)
-                self._set_uniform_matrix(shader, "model", model)
+                self._set_uniform_matrix(shader, "model", model.T)
                 self._set_uniform(shader, "light_dir", (0.0, 0.5, 1.0))
                 self._set_uniform(shader, "tex", 0)
                 self._set_uniform(shader, "sphere_tex", 3)
@@ -1222,50 +1216,41 @@ class Renderer:
                 [0, 0, 1, -self.model_center[2]],
                 [0, 0, 0, 1]
             ], dtype='f4')
+            local_to_view = scale_mat @ translate_mat
 
-            if self.show_rigidbody and self.rigidbody_vaos:
-                bone_world_matrices = self.animation_controller.pose_world_matrices
-                if bone_world_matrices is not None:
-                    glDisable(GL_DEPTH_TEST)
-                    glDisable(GL_CULL_FACE)
-                    glEnable(GL_BLEND)
-                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-                    rb_program = self.shader_manager.get_program('rigidbody')
-                    glUseProgram(rb_program)
-                    self._set_uniform_matrix(rb_program, "projection", projection.T)
-                    self._set_uniform_matrix(rb_program, "view", view.T)
-                    self._set_uniform_matrix(rb_program, "model", model @ scale_mat @ translate_mat)
-                    glLineWidth(1.0)
-                    for vao in self.rigidbody_vaos:
-                        bone_idx = vao.bone_index
-                        if bone_idx >= 0 and bone_idx < len(bone_world_matrices):
-                            bone_mat = bone_world_matrices[bone_idx]
-                            self._set_uniform_matrix(rb_program, "bone_matrix", bone_mat.T)
-                        else:
-                            self._set_uniform_matrix(rb_program, "bone_matrix", np.eye(4).T)
-                        vao.render(GL_LINES)
-                    glDisable(GL_BLEND)
-                    glEnable(GL_CULL_FACE)
-                    glEnable(GL_DEPTH_TEST)
+            if self.show_rigidbody and self.rigidbody_vao:
+                glEnable(GL_DEPTH_TEST)
+                glDepthFunc(GL_LEQUAL)
+                glDisable(GL_CULL_FACE)
+                glEnable(GL_BLEND)
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+                rb_program = self.shader_manager.get_program('rigidbody')
+                glUseProgram(rb_program)
+                self._set_uniform_matrix(rb_program, "projection", projection.T)
+                self._set_uniform_matrix(rb_program, "view", view.T)
+                self._set_uniform_matrix(rb_program, "model", model.T)
+                self._set_uniform_matrix(rb_program, "bone_matrix", local_to_view.T)
+                glLineWidth(1.0)
+                self.rigidbody_vao.render(GL_LINES)
+                glDisable(GL_BLEND)
+                glEnable(GL_CULL_FACE)
 
-            if self.show_joint and self.joint_vaos:
-                if self.animation_controller.pose_world_matrices is not None:
-                    glDisable(GL_DEPTH_TEST)
-                    glDisable(GL_CULL_FACE)
-                    glEnable(GL_BLEND)
-                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-                    rb_program = self.shader_manager.get_program('rigidbody')
-                    glUseProgram(rb_program)
-                    self._set_uniform_matrix(rb_program, "projection", projection.T)
-                    self._set_uniform_matrix(rb_program, "view", view.T)
-                    self._set_uniform_matrix(rb_program, "model", model @ scale_mat @ translate_mat)
-                    glLineWidth(1.0)
-                    for vao in self.joint_vaos:
-                        self._set_uniform_matrix(rb_program, "bone_matrix", np.eye(4, dtype='f4').T)
-                        vao.render(GL_LINES)
-                    glDisable(GL_BLEND)
-                    glEnable(GL_CULL_FACE)
-                    glEnable(GL_DEPTH_TEST)
+            if self.show_joint and self.joint_vao:
+                glEnable(GL_DEPTH_TEST)
+                glDepthFunc(GL_LEQUAL)
+                glDisable(GL_CULL_FACE)
+                glEnable(GL_BLEND)
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+                rb_program = self.shader_manager.get_program('rigidbody')
+                glUseProgram(rb_program)
+                self._set_uniform_matrix(rb_program, "projection", projection.T)
+                self._set_uniform_matrix(rb_program, "view", view.T)
+                self._set_uniform_matrix(rb_program, "model", model.T)
+                self._set_uniform_matrix(rb_program, "bone_matrix", local_to_view.T)
+                glLineWidth(1.0)
+                self.joint_vao.render(GL_LINES)
+                glDisable(GL_BLEND)
+                glEnable(GL_CULL_FACE)
 
             glfw.swap_buffers(self.window)
 

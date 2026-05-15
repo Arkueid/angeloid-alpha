@@ -446,6 +446,24 @@ def create_rigid_body_local_data(rigidbodies):
     return result
 
 
+def create_rigid_body_batched(rigidbodies):
+    rb_data = create_rigid_body_local_data(rigidbodies)
+    if not rb_data:
+        return np.array([], dtype=np.float32).reshape(0, 3), np.array([], dtype=np.float32).reshape(0, 3)
+    all_verts = np.vstack([d['vertices'] for d in rb_data])
+    all_cols = np.vstack([d['colors'] for d in rb_data])
+    return all_verts, all_cols
+
+
+def create_joint_batched(joints, rigidbodies=None, joint_size=0.05):
+    jd_list = create_joint_local_data(joints, rigidbodies, joint_size)
+    if not jd_list:
+        return np.array([], dtype=np.float32).reshape(0, 3), np.array([], dtype=np.float32).reshape(0, 3)
+    all_verts = np.vstack([d['vertices'] for d in jd_list])
+    all_cols = np.vstack([d['colors'] for d in jd_list])
+    return all_verts, all_cols
+
+
 def create_rigid_body_lines_with_bones(rigidbodies, bone_matrices, transform_params=None):
     all_vertices = []
     all_colors = []
