@@ -223,9 +223,10 @@ class AnimationController:
         bones = self.pmx_model.get_bones()
         num_bones = len(bones)
 
-        bind_world, pose_world = self._compute_bone_world_hierarchy(
+        bind_world, _ = self._compute_bone_world_hierarchy(
             bones, bone_poses, apply_bone_morphs)
-        self.pose_world_matrices = self._compute_pose_world(bones, bone_poses)
+        pose_world = self._compute_pose_world(bones, bone_poses)
+        self.pose_world_matrices = pose_world
 
         matrices = np.zeros((num_bones, 4, 4), dtype=np.float32)
         for i in range(num_bones):
@@ -257,18 +258,42 @@ class AnimationController:
     def reload_bone_texture(self, debug_scale=1.0, use_pose=False):
         if self.pmx_model is None:
             return
+        bones = self.pmx_model.get_bones()
+        num_bones = len(bones)
+        bind_world, _ = self._compute_bone_world_hierarchy(bones)
+        if use_pose and self.vpd_poses:
+            pose_world = self._compute_pose_world(bones, self.vpd_poses)
+        else:
+            pose_world = self._compute_pose_world(bones)
+        self.pose_world_matrices = pose_world
+
+        matrices = np.zeros((num_bones, 4, 4), dtype=np.float32)
+        for i in range(num_bones):
+            inv_bind = np.linalg.inv(bind_world[i])
+            matrices[i] = pose_world[i] @ inv_bind
+            if debug_scale != 1.0:
+                matrices[i, 0, 0] = debug_scale
+                matrices[i, 1, 1] = debug_scale
+                matrices[i, 2, 2] = debug_scale
+
         transform_params = {
             'center': self.model_center,
             'min_y': self.model_min_pos[1],
             'scale': self.model_scale
         }
-        bones = self.pmx_model.get_bones()
-        if use_pose and self.vpd_poses:
-            matrices = self.pmx_model.get_bone_matrices_with_pose(self.vpd_poses, debug_scale=1.0, transform_params=transform_params)
-            self.pose_world_matrices = self._compute_pose_world(bones, self.vpd_poses)
-        else:
-            matrices = self.pmx_model.get_bind_pose_matrices(debug_scale)
-            self.pose_world_matrices = self._compute_pose_world(bones)
+        if transform_params:
+            center = transform_params['center']
+            min_y = transform_params['min_y']
+            scale = transform_params['scale']
+            offset = np.array([center[0], min_y, center[2]])
+            offset_scaled = scale * offset
+            for i in range(num_bones):
+                M = matrices[i]
+                R = M[:3, :3]
+                t = M[:3, 3]
+                t_new = t * scale + (R - np.eye(3)) @ offset_scaled
+                matrices[i, :3, 3] = t_new
+
         bone_tex_data, tex_width, tex_height = pack_matrices_to_texture(matrices)
         self.bone_texture.write(bone_tex_data.tobytes())
         self.current_bone_matrices = matrices.copy()

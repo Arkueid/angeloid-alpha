@@ -509,6 +509,13 @@ class Renderer:
             return
         glUniformMatrix4fv(location, 1, GL_FALSE, matrix.astype('f4').tobytes())
 
+    def _transform_to_normalized(self, verts):
+        cx, my, cz = self.model_center[0], self.model_min_pos[1], self.model_center[2]
+        s = self.model_scale
+        verts[:, 0] = (verts[:, 0] - cx) * s
+        verts[:, 1] = (verts[:, 1] - my) * s
+        verts[:, 2] = (verts[:, 2] - cz) * s
+
     def load_model(self, pmx_model: PmxModel, texture_dir: str = ""):
         self.pmx_model = pmx_model
         positions = np.array([(v.position[0], v.position[1], v.position[2]) for v in pmx_model.vertices], dtype='f4')
@@ -896,7 +903,8 @@ class Renderer:
         rigidbodies = pmx_model.get_rigidbodies()
         self.rigidbodies = rigidbodies
         if rigidbodies:
-            rb_verts, rb_cols = create_rigid_body_batched(rigidbodies)
+            rb_verts, rb_cols, rb_bone_idx = create_rigid_body_batched(rigidbodies)
+            self._transform_to_normalized(rb_verts)
             self.rigidbody_vao = VAO()
             self.rigidbody_vao.bind()
             vbo_pos = glGenBuffers(1)
@@ -909,7 +917,12 @@ class Renderer:
             glBufferData(GL_ARRAY_BUFFER, rb_cols.nbytes, rb_cols, GL_STATIC_DRAW)
             glEnableVertexAttribArray(1)
             glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-            self.rigidbody_vao.vbos = [vbo_pos, vbo_col]
+            vbo_bone = glGenBuffers(1)
+            glBindBuffer(GL_ARRAY_BUFFER, vbo_bone)
+            glBufferData(GL_ARRAY_BUFFER, rb_bone_idx.nbytes, rb_bone_idx, GL_STATIC_DRAW)
+            glEnableVertexAttribArray(2)
+            glVertexAttribIPointer(2, 1, GL_INT, 0, ctypes.c_void_p(0))
+            self.rigidbody_vao.vbos = [vbo_pos, vbo_col, vbo_bone]
             self.rigidbody_vao.vertex_count = len(rb_verts)
             self.rigidbody_vao.unbind()
             print(f"Created rigidbody VAO: {len(rb_verts)} vertices ({len(rigidbodies)} rigidbodies batched)")
@@ -921,7 +934,8 @@ class Renderer:
         self.joints = joints
         if joints:
             joint_marker_size = 0.04 / self.model_scale if self.model_scale > 0 else 0.04
-            jt_verts, jt_cols = create_joint_batched(joints, self.rigidbodies, joint_marker_size)
+            jt_verts, jt_cols, jt_bone_idx = create_joint_batched(joints, self.rigidbodies, joint_marker_size)
+            self._transform_to_normalized(jt_verts)
             self.joint_vao = VAO()
             self.joint_vao.bind()
             vbo_pos = glGenBuffers(1)
@@ -934,7 +948,12 @@ class Renderer:
             glBufferData(GL_ARRAY_BUFFER, jt_cols.nbytes, jt_cols, GL_STATIC_DRAW)
             glEnableVertexAttribArray(1)
             glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-            self.joint_vao.vbos = [vbo_pos, vbo_col]
+            vbo_bone = glGenBuffers(1)
+            glBindBuffer(GL_ARRAY_BUFFER, vbo_bone)
+            glBufferData(GL_ARRAY_BUFFER, jt_bone_idx.nbytes, jt_bone_idx, GL_STATIC_DRAW)
+            glEnableVertexAttribArray(2)
+            glVertexAttribIPointer(2, 1, GL_INT, 0, ctypes.c_void_p(0))
+            self.joint_vao.vbos = [vbo_pos, vbo_col, vbo_bone]
             self.joint_vao.vertex_count = len(jt_verts)
             self.joint_vao.unbind()
             print(f"Created joint VAO: {len(jt_verts)} vertices ({len(joints)} joints batched)")
@@ -1209,15 +1228,6 @@ class Renderer:
 
                     vao.render(GL_TRIANGLES, count=batch['count'], first=batch['first'])
 
-            scale_mat = np.diag([self.model_scale, self.model_scale, self.model_scale, 1]).astype('f4')
-            translate_mat = np.array([
-                [1, 0, 0, -self.model_center[0]],
-                [0, 1, 0, -self.model_min_pos[1]],
-                [0, 0, 1, -self.model_center[2]],
-                [0, 0, 0, 1]
-            ], dtype='f4')
-            local_to_view = scale_mat @ translate_mat
-
             if self.show_rigidbody and self.rigidbody_vao:
                 glEnable(GL_DEPTH_TEST)
                 glDepthFunc(GL_LEQUAL)
@@ -1229,7 +1239,10 @@ class Renderer:
                 self._set_uniform_matrix(rb_program, "projection", projection.T)
                 self._set_uniform_matrix(rb_program, "view", view.T)
                 self._set_uniform_matrix(rb_program, "model", model.T)
-                self._set_uniform_matrix(rb_program, "bone_matrix", local_to_view.T)
+                self._set_uniform(rb_program, "bone_texture_width", self.bone_texture_width)
+                glActiveTexture(GL_TEXTURE1)
+                glBindTexture(GL_TEXTURE_2D, self.bone_texture.texture_id)
+                self._set_uniform(rb_program, "bone_texture", 1)
                 glLineWidth(1.0)
                 self.rigidbody_vao.render(GL_LINES)
                 glDisable(GL_BLEND)
@@ -1246,7 +1259,10 @@ class Renderer:
                 self._set_uniform_matrix(rb_program, "projection", projection.T)
                 self._set_uniform_matrix(rb_program, "view", view.T)
                 self._set_uniform_matrix(rb_program, "model", model.T)
-                self._set_uniform_matrix(rb_program, "bone_matrix", local_to_view.T)
+                self._set_uniform(rb_program, "bone_texture_width", self.bone_texture_width)
+                glActiveTexture(GL_TEXTURE1)
+                glBindTexture(GL_TEXTURE_2D, self.bone_texture.texture_id)
+                self._set_uniform(rb_program, "bone_texture", 1)
                 glLineWidth(1.0)
                 self.joint_vao.render(GL_LINES)
                 glDisable(GL_BLEND)
