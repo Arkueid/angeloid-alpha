@@ -1,7 +1,8 @@
 import numpy as np
 from typing import Dict, Optional
-from load_pmx import VpdLoader, pack_matrices_to_texture
-from vmd_loader import VmdLoader, VmdMixer
+from vpd_loader import VpdLoader
+from bone_math import pack_matrices_to_texture
+from vmd_player import VmdLoader, VmdMixer
 
 
 class AnimationController:
@@ -251,7 +252,7 @@ class AnimationController:
 
         self.current_bone_matrices = matrices.copy()
 
-        from bone_transform import pack_matrices_to_texture
+        from bone_math import pack_matrices_to_texture
         bone_tex_data, _, _ = pack_matrices_to_texture(matrices)
         self.bone_texture.write(bone_tex_data.tobytes())
 

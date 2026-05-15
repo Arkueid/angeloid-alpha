@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Dict
-from pmx_reader import MORPH_TYPE_GROUP, MORPH_TYPE_VERTEX, MORPH_TYPE_MATERIAL, MORPH_TYPE_UV, MORPH_TYPE_BONE
+from pmx_model import MORPH_TYPE_GROUP, MORPH_TYPE_VERTEX, MORPH_TYPE_MATERIAL, MORPH_TYPE_UV, MORPH_TYPE_BONE
 
 
 class MorphController:
@@ -143,7 +143,7 @@ class MorphController:
             
             matrices[bone_idx] = morph_mat @ matrices[bone_idx]
         
-        from bone_transform import pack_matrices_to_texture
+        from bone_math import pack_matrices_to_texture
         bone_tex_data, _, _ = pack_matrices_to_texture(matrices)
         self.bone_texture.write(bone_tex_data.tobytes())
 

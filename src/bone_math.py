@@ -112,6 +112,8 @@ def get_bone_matrices_with_pose(bones, vpd_poses, transform_params=None):
     return matrices
 
 
+import numpy as np
+
 def create_rigid_body_lines(rigid_body, color=(1.0, 1.0, 0.0)):
     if rigid_body.is_box:
         sx, sy, sz = rigid_body.shape_size * 0.5

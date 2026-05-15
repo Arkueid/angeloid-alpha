@@ -2,7 +2,7 @@ from pymeshio.pmx import reader as pmx_reader
 from pymeshio import common
 import numpy as np
 
-from bone_transform import (
+from bone_math import (
     compute_bone_world_matrices,
     compute_bind_pose_matrices,
     pack_matrices_to_texture,
@@ -590,9 +590,8 @@ class PmxModel:
         return [Morph(m, i) for i, m in enumerate(self._model.morphs) if m.morph_type == MORPH_TYPE_MATERIAL]
 
     def get_available_morphs(self):
-        from pmx_reader import MORPH_TYPE_VERTEX, MORPH_TYPE_GROUP, MORPH_TYPE_MATERIAL, MORPH_TYPE_UV, MORPH_TYPE_BONE
-        return [Morph(m, i) for i, m in enumerate(self._model.morphs) 
-                if m.morph_type in (MORPH_TYPE_VERTEX, MORPH_TYPE_GROUP, MORPH_TYPE_MATERIAL, MORPH_TYPE_UV, MORPH_TYPE_BONE)]
+        valid = (MORPH_TYPE_VERTEX, MORPH_TYPE_GROUP, MORPH_TYPE_MATERIAL, MORPH_TYPE_UV, MORPH_TYPE_BONE)
+        return [Morph(m, i) for i, m in enumerate(self._model.morphs) if m.morph_type in valid]
 
     def get_morph_offsets_data(self, morph_indices, weights=None):
         vertex_offsets = {}

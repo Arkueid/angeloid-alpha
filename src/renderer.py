@@ -2,163 +2,17 @@ import glfw
 from OpenGL.GL import *
 import numpy as np
 import ctypes
-from load_pmx import PmxModel
-from bone_transform import create_rigid_body_batched, create_joint_batched
+from gpu import VAO, VBOWrapper, Texture, create_vao_with_buffers
+from pmx_model import PmxModel
+from bone_math import create_rigid_body_batched, create_joint_batched
 from PIL import Image
 import os
 import json
-from pathlib import Path
 
 from camera import Camera
 from shader_manager import ShaderManager
 from animation_controller import AnimationController
 from morph_controller import MorphController
-
-
-class VBOWrapper:
-    def __init__(self, vbo_id):
-        self.vbo_id = vbo_id
-
-    def write(self, data):
-        glBindBuffer(GL_ARRAY_BUFFER, self.vbo_id)
-        if isinstance(data, np.ndarray):
-            glBufferData(GL_ARRAY_BUFFER, data.nbytes, data, GL_DYNAMIC_DRAW)
-        else:
-            glBufferData(GL_ARRAY_BUFFER, len(data), data, GL_DYNAMIC_DRAW)
-
-
-def _create_vao_with_buffers(vertex_buffers, indices):
-    vao = VAO()
-    vao.bind()
-    for location, data, size, dtype in vertex_buffers:
-        vbo = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        if isinstance(data, np.ndarray):
-            glBufferData(GL_ARRAY_BUFFER, data.nbytes, data, GL_STATIC_DRAW)
-        else:
-            glBufferData(GL_ARRAY_BUFFER, len(data), data, GL_STATIC_DRAW)
-        glEnableVertexAttribArray(location)
-        if dtype == GL_INT:
-            glVertexAttribIPointer(location, size, dtype, 0, ctypes.c_void_p(0))
-        else:
-            glVertexAttribPointer(location, size, dtype, GL_FALSE, 0, ctypes.c_void_p(0))
-    ebo = glGenBuffers(1)
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
-    vao.ebo = ebo
-    vao.index_count = len(indices)
-    return vao
-
-
-class VAO:
-    def __init__(self):
-        self.vao_id = glGenVertexArrays(1)
-        self.vbos = []
-        self.ebo = None
-        self.index_count = 0
-        self.vertex_count = 0
-
-    def bind(self):
-        glBindVertexArray(self.vao_id)
-
-    def unbind(self):
-        glBindVertexArray(0)
-
-    def add_vbo(self, data, location, size, dtype=GL_FLOAT, stride=0, offset=0):
-        vbo = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        if isinstance(data, np.ndarray):
-            glBufferData(GL_ARRAY_BUFFER, data.nbytes, data, GL_STATIC_DRAW)
-        else:
-            glBufferData(GL_ARRAY_BUFFER, data, GL_STATIC_DRAW)
-        glEnableVertexAttribArray(location)
-        if dtype == GL_FLOAT:
-            glVertexAttribPointer(location, size, dtype, GL_FALSE, stride, ctypes.c_void_p(offset))
-        elif dtype == GL_INT:
-            glVertexAttribIPointer(location, size, dtype, stride, ctypes.c_void_p(offset))
-        self.vbos.append(vbo)
-        return vbo
-
-    def set_ebo(self, indices):
-        ebo = glGenBuffers(1)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
-        self.ebo = ebo
-        self.index_count = len(indices)
-
-    def update_vbo(self, vbo_index, data):
-        glBindBuffer(GL_ARRAY_BUFFER, self.vbos[vbo_index])
-        glBufferData(GL_ARRAY_BUFFER, data.nbytes, data, GL_DYNAMIC_DRAW)
-
-    def render(self, mode=GL_TRIANGLES, count=None, first=0):
-        self.bind()
-        if self.ebo:
-            count = count if count is not None else self.index_count
-            glDrawElements(mode, count, GL_UNSIGNED_INT, ctypes.c_void_p(first * 4))
-        else:
-            count = count if count is not None else self.vertex_count
-            glDrawArrays(mode, first, count)
-        self.unbind()
-
-    def destroy(self):
-        if self.vbos:
-            glDeleteBuffers(len(self.vbos), self.vbos)
-        if self.ebo:
-            glDeleteBuffers(1, [self.ebo])
-        glDeleteVertexArrays(1, [self.vao_id])
-
-
-class Texture:
-    def __init__(self, width, height, components, data=None, dtype=GL_UNSIGNED_BYTE):
-        self.texture_id = glGenTextures(1)
-        self.width = width
-        self.height = height
-        self.components = components
-        
-        glBindTexture(GL_TEXTURE_2D, self.texture_id)
-        
-        fmt_map = {1: GL_RED, 2: GL_RG, 3: GL_RGB, 4: GL_RGBA}
-        internal_fmt_map = {1: GL_R8, 2: GL_RG8, 3: GL_RGB8, 4: GL_RGBA8}
-        
-        if dtype == GL_FLOAT:
-            internal_fmt_map = {1: GL_R32F, 2: GL_RG32F, 3: GL_RGB32F, 4: GL_RGBA32F}
-        
-        internal_fmt = internal_fmt_map.get(components, GL_RGBA8)
-        fmt = fmt_map.get(components, GL_RGBA)
-        
-        glTexImage2D(GL_TEXTURE_2D, 0, internal_fmt, width, height, 0, fmt, dtype, data)
-        
-    def bind(self, unit=0):
-        glActiveTexture(GL_TEXTURE0 + unit)
-        glBindTexture(GL_TEXTURE_2D, self.texture_id)
-        
-    def set_filter(self, min_filter, mag_filter):
-        glBindTexture(GL_TEXTURE_2D, self.texture_id)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag_filter)
-        
-    def set_repeat(self, repeat_x, repeat_y):
-        glBindTexture(GL_TEXTURE_2D, self.texture_id)
-        wrap_s = GL_REPEAT if repeat_x else GL_CLAMP_TO_EDGE
-        wrap_t = GL_REPEAT if repeat_y else GL_CLAMP_TO_EDGE
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap_s)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap_t)
-
-    def set_mirror_repeat(self, mirror_x, mirror_y):
-        glBindTexture(GL_TEXTURE_2D, self.texture_id)
-        wrap_s = GL_MIRRORED_REPEAT if mirror_x else GL_CLAMP_TO_EDGE
-        wrap_t = GL_MIRRORED_REPEAT if mirror_y else GL_CLAMP_TO_EDGE
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap_s)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap_t)
-
-    def write(self, data, x=0, y=0):
-        glBindTexture(GL_TEXTURE_2D, self.texture_id)
-        fmt_map = {1: GL_RED, 2: GL_RG, 3: GL_RGB, 4: GL_RGBA}
-        fmt = fmt_map.get(self.components, GL_RGBA)
-        glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, self.width, self.height, fmt, GL_FLOAT, data)
-
-    def destroy(self):
-        glDeleteTextures(1, [self.texture_id])
 
 
 class Renderer:
@@ -480,6 +334,74 @@ class Renderer:
                 self.animation_controller.apply_vmd_frame(self.morph_controller)
                 print(f"VMD frame: {self.animation_controller.vmd_mixer.current_frame:.0f}/{self.animation_controller.vmd_mixer.max_frame}")
 
+    def _render_axis_grid(self, projection, view):
+        identity = np.eye(4, dtype='f4')
+        if self.show_ground_grid:
+            glDisable(GL_DEPTH_TEST)
+            axis_program = self.shader_manager.get_program('axis')
+            glUseProgram(axis_program)
+            self._set_uniform_matrix(axis_program, "projection", projection.T)
+            self._set_uniform_matrix(axis_program, "view", view.T)
+            self._set_uniform_matrix(axis_program, "model", identity)
+            glLineWidth(2.0)
+            self.grid_vao.render(GL_LINES)
+            glEnable(GL_DEPTH_TEST)
+
+        if self.show_world_axis:
+            glDisable(GL_DEPTH_TEST)
+            axis_program = self.shader_manager.get_program('axis')
+            glUseProgram(axis_program)
+            self._set_uniform_matrix(axis_program, "projection", projection.T)
+            self._set_uniform_matrix(axis_program, "view", view.T)
+            self._set_uniform_matrix(axis_program, "model", identity)
+            glLineWidth(3.0)
+            self.axis_vao.render(GL_LINES)
+            glEnable(GL_DEPTH_TEST)
+
+    def _render_physics(self, projection, view, model):
+        if (self.show_rigidbody and self.rigidbody_vao) or (self.show_joint and self.joint_vao):
+            glClear(GL_DEPTH_BUFFER_BIT)
+
+        if self.show_rigidbody and self.rigidbody_vao:
+            glEnable(GL_DEPTH_TEST)
+            glDepthFunc(GL_LEQUAL)
+            glDisable(GL_CULL_FACE)
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            rb_program = self.shader_manager.get_program('rigidbody')
+            glUseProgram(rb_program)
+            self._set_uniform_matrix(rb_program, "projection", projection.T)
+            self._set_uniform_matrix(rb_program, "view", view.T)
+            self._set_uniform_matrix(rb_program, "model", model.T)
+            self._set_uniform(rb_program, "bone_texture_width", self.bone_texture_width)
+            glActiveTexture(GL_TEXTURE1)
+            glBindTexture(GL_TEXTURE_2D, self.bone_texture.texture_id)
+            self._set_uniform(rb_program, "bone_texture", 1)
+            glLineWidth(1.0)
+            self.rigidbody_vao.render(GL_LINES)
+            glDisable(GL_BLEND)
+            glEnable(GL_CULL_FACE)
+
+        if self.show_joint and self.joint_vao:
+            glEnable(GL_DEPTH_TEST)
+            glDepthFunc(GL_LEQUAL)
+            glDisable(GL_CULL_FACE)
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            rb_program = self.shader_manager.get_program('rigidbody')
+            glUseProgram(rb_program)
+            self._set_uniform_matrix(rb_program, "projection", projection.T)
+            self._set_uniform_matrix(rb_program, "view", view.T)
+            self._set_uniform_matrix(rb_program, "model", model.T)
+            self._set_uniform(rb_program, "bone_texture_width", self.bone_texture_width)
+            glActiveTexture(GL_TEXTURE1)
+            glBindTexture(GL_TEXTURE_2D, self.bone_texture.texture_id)
+            self._set_uniform(rb_program, "bone_texture", 1)
+            glLineWidth(1.0)
+            self.joint_vao.render(GL_LINES)
+            glDisable(GL_BLEND)
+            glEnable(GL_CULL_FACE)
+
     def _set_uniform(self, program, name, value):
         cache_key = (program, name)
         if cache_key in self._uniform_cache:
@@ -521,12 +443,78 @@ class Renderer:
         verts[:, 1] = (verts[:, 1] - my) * s
         verts[:, 2] = (verts[:, 2] - cz) * s
 
-    def load_model(self, pmx_model: PmxModel, texture_dir: str = ""):
+    @staticmethod
+    def _create_wireframe_vao(verts, colors, bone_indices):
+        vao = VAO()
+        vao.bind()
+        vao.add_vbo(verts, 0, 3)
+        vao.add_vbo(colors, 1, 3)
+        vao.add_vbo(bone_indices, 2, 1, dtype=GL_INT)
+        vao.vertex_count = len(verts)
+        vao.unbind()
+        return vao
+
+    @staticmethod
+    def _add_vbos(vao, vbo_data):
+        for location, data, size, dtype in vbo_data:
+            vbo = glGenBuffers(1)
+            glBindBuffer(GL_ARRAY_BUFFER, vbo)
+            glBufferData(GL_ARRAY_BUFFER, data.nbytes, data, GL_STATIC_DRAW)
+            glEnableVertexAttribArray(location)
+            if dtype == GL_INT:
+                glVertexAttribIPointer(location, size, dtype, 0, ctypes.c_void_p(0))
+            else:
+                glVertexAttribPointer(location, size, dtype, GL_FALSE, 0, ctypes.c_void_p(0))
+
+    @staticmethod
+    def _create_morph_vao(base_vbo_data, morph_offsets, uv_morph_offsets, indices):
+        vao = VAO()
+        vao.bind()
+        Renderer._add_vbos(vao, base_vbo_data)
+        morph_id = glGenBuffers(1)
+        glBindBuffer(GL_ARRAY_BUFFER, morph_id)
+        glBufferData(GL_ARRAY_BUFFER, morph_offsets.nbytes, morph_offsets, GL_DYNAMIC_DRAW)
+        glEnableVertexAttribArray(5)
+        glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
+        uv_id = glGenBuffers(1)
+        glBindBuffer(GL_ARRAY_BUFFER, uv_id)
+        glBufferData(GL_ARRAY_BUFFER, uv_morph_offsets.nbytes, uv_morph_offsets, GL_DYNAMIC_DRAW)
+        glEnableVertexAttribArray(6)
+        glVertexAttribPointer(6, 2, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
+        ebo = glGenBuffers(1)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
+        vao.ebo = ebo
+        vao.index_count = len(indices)
+        vao.unbind()
+        return vao, morph_id, uv_id
+
+    @staticmethod
+    def _create_mesh_vao(vertices, indices):
+        vao = VAO()
+        vao.bind()
+        vbo = glGenBuffers(1)
+        glBindBuffer(GL_ARRAY_BUFFER, vbo)
+        glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+        glEnableVertexAttribArray(0)
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(0))
+        glEnableVertexAttribArray(1)
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(12))
+        glEnableVertexAttribArray(2)
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(24))
+        ebo = glGenBuffers(1)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
+        vao.ebo = ebo
+        vao.index_count = len(indices)
+        vao.unbind()
+        return vao
+
+    def load_model(self, pmx_model: PmxModel, texture_dir: str = "", toon_dir: str = "", vpd_path: str = ""):
         self.pmx_model = pmx_model
         positions = np.array([(v.position[0], v.position[1], v.position[2]) for v in pmx_model.vertices], dtype='f4')
 
-        vpd_path = "resources/vpd/自然站姿.vpd"
-        if os.path.exists(vpd_path):
+        if vpd_path and os.path.exists(vpd_path):
             self.animation_controller.load_vpd(vpd_path)
 
         min_pos = positions.min(axis=0)
@@ -558,56 +546,9 @@ class Renderer:
         vertices = np.array(vertices, dtype='f4')
         indices = np.array(list(pmx_model.indices), dtype='i4')
 
-        self.model_vao = VAO()
-        self.model_vao.bind()
-        vbo = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
-        glEnableVertexAttribArray(0)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(0))
-        glEnableVertexAttribArray(1)
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(12))
-        glEnableVertexAttribArray(2)
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(24))
-        ebo = glGenBuffers(1)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
-        self.model_vao.ebo = ebo
-        self.model_vao.index_count = len(indices)
-
-        self.toon_vao = VAO()
-        self.toon_vao.bind()
-        vbo = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
-        glEnableVertexAttribArray(0)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(0))
-        glEnableVertexAttribArray(1)
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(12))
-        glEnableVertexAttribArray(2)
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(24))
-        ebo = glGenBuffers(1)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
-        self.toon_vao.ebo = ebo
-        self.toon_vao.index_count = len(indices)
-
-        self.outline_vao = VAO()
-        self.outline_vao.bind()
-        vbo = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
-        glEnableVertexAttribArray(0)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(0))
-        glEnableVertexAttribArray(1)
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(12))
-        glEnableVertexAttribArray(2)
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 32, ctypes.c_void_p(24))
-        ebo = glGenBuffers(1)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
-        self.outline_vao.ebo = ebo
-        self.outline_vao.index_count = len(indices)
+        self.model_vao = self._create_mesh_vao(vertices, indices)
+        self.toon_vao = self._create_mesh_vao(vertices, indices)
+        self.outline_vao = self._create_mesh_vao(vertices, indices)
 
         print(f"\nLoading skeleton data...")
         skinning_data = pmx_model.get_all_skinning_vertex_data()
@@ -632,7 +573,7 @@ class Renderer:
         self.bone_texture.set_repeat(False, False)
         self.bone_texture_width = tex_width
         
-        self.skinned_vao = _create_vao_with_buffers([
+        self.skinned_vao = create_vao_with_buffers([
             (0, skinned_positions, 3, GL_FLOAT),
             (1, skinning_data['normals'], 3, GL_FLOAT),
             (2, skinning_data['uvs'], 2, GL_FLOAT),
@@ -640,7 +581,7 @@ class Renderer:
             (4, skinning_data['bone_weights'], 4, GL_FLOAT),
         ], indices)
         
-        self.skinned_vao_notoon = _create_vao_with_buffers([
+        self.skinned_vao_notoon = create_vao_with_buffers([
             (0, skinned_positions, 3, GL_FLOAT),
             (1, skinning_data['normals'], 3, GL_FLOAT),
             (2, skinning_data['uvs'], 2, GL_FLOAT),
@@ -648,7 +589,7 @@ class Renderer:
             (4, skinning_data['bone_weights'], 4, GL_FLOAT),
         ], indices)
 
-        self.skinned_outline_vao = _create_vao_with_buffers([
+        self.skinned_outline_vao = create_vao_with_buffers([
             (0, skinned_positions, 3, GL_FLOAT),
             (1, skinning_data['normals'], 3, GL_FLOAT),
             (2, skinning_data['uvs'], 2, GL_FLOAT),
@@ -658,9 +599,7 @@ class Renderer:
 
         morph_offsets = np.zeros(len(skinned_positions), dtype='f4')
         uv_morph_offsets = np.zeros(len(skinning_data['uvs']), dtype='f4')
-        
-        self.skinned_morph_vao = VAO()
-        self.skinned_morph_vao.bind()
+
         vbo_data = [
             (0, skinned_positions, 3, GL_FLOAT),
             (1, skinning_data['normals'], 3, GL_FLOAT),
@@ -668,87 +607,12 @@ class Renderer:
             (3, skinning_data['bone_indices'], 4, GL_INT),
             (4, skinning_data['bone_weights'], 4, GL_FLOAT),
         ]
-        for location, data, size, dtype in vbo_data:
-            vbo = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            glBufferData(GL_ARRAY_BUFFER, data.nbytes, data, GL_STATIC_DRAW)
-            glEnableVertexAttribArray(location)
-            if dtype == GL_INT:
-                glVertexAttribIPointer(location, size, dtype, 0, ctypes.c_void_p(0))
-            else:
-                glVertexAttribPointer(location, size, dtype, GL_FALSE, 0, ctypes.c_void_p(0))
-        morph_vbo_id = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, morph_vbo_id)
-        glBufferData(GL_ARRAY_BUFFER, morph_offsets.nbytes, morph_offsets, GL_DYNAMIC_DRAW)
-        glEnableVertexAttribArray(5)
-        glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-        uv_morph_vbo_id = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, uv_morph_vbo_id)
-        glBufferData(GL_ARRAY_BUFFER, uv_morph_offsets.nbytes, uv_morph_offsets, GL_DYNAMIC_DRAW)
-        glEnableVertexAttribArray(6)
-        glVertexAttribPointer(6, 2, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-        ebo = glGenBuffers(1)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
-        self.skinned_morph_vao.ebo = ebo
-        self.skinned_morph_vao.index_count = len(indices)
-        
-        morph_vbo = VBOWrapper(morph_vbo_id)
-        uv_morph_vbo = VBOWrapper(uv_morph_vbo_id)
-        
-        self.skinned_morph_vao_notoon = VAO()
-        self.skinned_morph_vao_notoon.bind()
-        for location, data, size, dtype in vbo_data:
-            vbo = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            glBufferData(GL_ARRAY_BUFFER, data.nbytes, data, GL_STATIC_DRAW)
-            glEnableVertexAttribArray(location)
-            if dtype == GL_INT:
-                glVertexAttribIPointer(location, size, dtype, 0, ctypes.c_void_p(0))
-            else:
-                glVertexAttribPointer(location, size, dtype, GL_FALSE, 0, ctypes.c_void_p(0))
-        vbo = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glBufferData(GL_ARRAY_BUFFER, morph_offsets.nbytes, morph_offsets, GL_DYNAMIC_DRAW)
-        glEnableVertexAttribArray(5)
-        glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-        vbo = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glBufferData(GL_ARRAY_BUFFER, uv_morph_offsets.nbytes, uv_morph_offsets, GL_DYNAMIC_DRAW)
-        glEnableVertexAttribArray(6)
-        glVertexAttribPointer(6, 2, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-        ebo = glGenBuffers(1)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
-        self.skinned_morph_vao_notoon.ebo = ebo
-        self.skinned_morph_vao_notoon.index_count = len(indices)
 
-        self.skinned_morph_outline_vao = VAO()
-        self.skinned_morph_outline_vao.bind()
-        for location, data, size, dtype in vbo_data:
-            vbo = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            glBufferData(GL_ARRAY_BUFFER, data.nbytes, data, GL_STATIC_DRAW)
-            glEnableVertexAttribArray(location)
-            if dtype == GL_INT:
-                glVertexAttribIPointer(location, size, dtype, 0, ctypes.c_void_p(0))
-            else:
-                glVertexAttribPointer(location, size, dtype, GL_FALSE, 0, ctypes.c_void_p(0))
-        vbo = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glBufferData(GL_ARRAY_BUFFER, morph_offsets.nbytes, morph_offsets, GL_DYNAMIC_DRAW)
-        glEnableVertexAttribArray(5)
-        glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-        vbo = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        glBufferData(GL_ARRAY_BUFFER, uv_morph_offsets.nbytes, uv_morph_offsets, GL_DYNAMIC_DRAW)
-        glEnableVertexAttribArray(6)
-        glVertexAttribPointer(6, 2, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-        ebo = glGenBuffers(1)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
-        self.skinned_morph_outline_vao.ebo = ebo
-        self.skinned_morph_outline_vao.index_count = len(indices)
+        self.skinned_morph_vao, m_id, uv_id = self._create_morph_vao(vbo_data, morph_offsets, uv_morph_offsets, indices)
+        morph_vbo = VBOWrapper(m_id)
+        uv_morph_vbo = VBOWrapper(uv_id)
+        self.skinned_morph_vao_notoon, _, _ = self._create_morph_vao(vbo_data, morph_offsets, uv_morph_offsets, indices)
+        self.skinned_morph_outline_vao, _, _ = self._create_morph_vao(vbo_data, morph_offsets, uv_morph_offsets, indices)
 
         print(f"\nLoading textures...")
         self.textures = []
@@ -792,12 +656,11 @@ class Renderer:
                     print(f"  [{i}] Failed: {tex_name} - {e}")
                     self.textures.append(None)
 
-        proj_root = Path(__file__).parent.parent
         self.default_toons = {}
         self.default_toon_textures = []
         default_toon_name = 'toon01.bmp'
-        toon_path = proj_root / 'resources' / 'toon' / default_toon_name
-        if os.path.exists(toon_path):
+        toon_path = os.path.join(toon_dir, default_toon_name) if toon_dir else ""
+        if toon_dir and os.path.exists(toon_path):
             try:
                 img = Image.open(toon_path).convert('RGBA')
                 arr = np.array(img)
@@ -910,26 +773,7 @@ class Renderer:
         if rigidbodies:
             rb_verts, rb_cols, rb_bone_idx = create_rigid_body_batched(rigidbodies)
             self._transform_to_normalized(rb_verts)
-            self.rigidbody_vao = VAO()
-            self.rigidbody_vao.bind()
-            vbo_pos = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, vbo_pos)
-            glBufferData(GL_ARRAY_BUFFER, rb_verts.nbytes, rb_verts, GL_STATIC_DRAW)
-            glEnableVertexAttribArray(0)
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-            vbo_col = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, vbo_col)
-            glBufferData(GL_ARRAY_BUFFER, rb_cols.nbytes, rb_cols, GL_STATIC_DRAW)
-            glEnableVertexAttribArray(1)
-            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-            vbo_bone = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, vbo_bone)
-            glBufferData(GL_ARRAY_BUFFER, rb_bone_idx.nbytes, rb_bone_idx, GL_STATIC_DRAW)
-            glEnableVertexAttribArray(2)
-            glVertexAttribIPointer(2, 1, GL_INT, 0, ctypes.c_void_p(0))
-            self.rigidbody_vao.vbos = [vbo_pos, vbo_col, vbo_bone]
-            self.rigidbody_vao.vertex_count = len(rb_verts)
-            self.rigidbody_vao.unbind()
+            self.rigidbody_vao = self._create_wireframe_vao(rb_verts, rb_cols, rb_bone_idx)
             print(f"Created rigidbody VAO: {len(rb_verts)} vertices ({len(rigidbodies)} rigidbodies batched)")
         else:
             self.rigidbody_vao = None
@@ -941,26 +785,7 @@ class Renderer:
             joint_marker_size = 0.04 / self.model_scale if self.model_scale > 0 else 0.04
             jt_verts, jt_cols, jt_bone_idx = create_joint_batched(joints, self.rigidbodies, joint_marker_size)
             self._transform_to_normalized(jt_verts)
-            self.joint_vao = VAO()
-            self.joint_vao.bind()
-            vbo_pos = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, vbo_pos)
-            glBufferData(GL_ARRAY_BUFFER, jt_verts.nbytes, jt_verts, GL_STATIC_DRAW)
-            glEnableVertexAttribArray(0)
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-            vbo_col = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, vbo_col)
-            glBufferData(GL_ARRAY_BUFFER, jt_cols.nbytes, jt_cols, GL_STATIC_DRAW)
-            glEnableVertexAttribArray(1)
-            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
-            vbo_bone = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, vbo_bone)
-            glBufferData(GL_ARRAY_BUFFER, jt_bone_idx.nbytes, jt_bone_idx, GL_STATIC_DRAW)
-            glEnableVertexAttribArray(2)
-            glVertexAttribIPointer(2, 1, GL_INT, 0, ctypes.c_void_p(0))
-            self.joint_vao.vbos = [vbo_pos, vbo_col, vbo_bone]
-            self.joint_vao.vertex_count = len(jt_verts)
-            self.joint_vao.unbind()
+            self.joint_vao = self._create_wireframe_vao(jt_verts, jt_cols, jt_bone_idx)
             print(f"Created joint VAO: {len(jt_verts)} vertices ({len(joints)} joints batched)")
         else:
             self.joint_vao = None
@@ -1053,29 +878,7 @@ class Renderer:
             if self.animation_controller.vmd_playing:
                 self.animation_controller.apply_vmd_frame(self.morph_controller)
 
-            if self.show_ground_grid:
-                glDisable(GL_DEPTH_TEST)
-                axis_program = self.shader_manager.get_program('axis')
-                glUseProgram(axis_program)
-                self._set_uniform_matrix(axis_program, "projection", projection.T)
-                self._set_uniform_matrix(axis_program, "view", view.T)
-                identity = np.eye(4, dtype='f4')
-                self._set_uniform_matrix(axis_program, "model", identity)
-                glLineWidth(2.0)
-                self.grid_vao.render(GL_LINES)
-                glEnable(GL_DEPTH_TEST)
-
-            if self.show_world_axis:
-                glDisable(GL_DEPTH_TEST)
-                axis_program = self.shader_manager.get_program('axis')
-                glUseProgram(axis_program)
-                self._set_uniform_matrix(axis_program, "projection", projection.T)
-                self._set_uniform_matrix(axis_program, "view", view.T)
-                identity = np.eye(4, dtype='f4')
-                self._set_uniform_matrix(axis_program, "model", identity)
-                glLineWidth(3.0)
-                self.axis_vao.render(GL_LINES)
-                glEnable(GL_DEPTH_TEST)
+            self._render_axis_grid(projection, view)
 
             if self.show_model and self.show_outline and self.outline_vao and self.material_batches:
                 glEnable(GL_CULL_FACE)
@@ -1234,48 +1037,7 @@ class Renderer:
 
                     vao.render(GL_TRIANGLES, count=batch['count'], first=batch['first'])
 
-            if (self.show_rigidbody and self.rigidbody_vao) or (self.show_joint and self.joint_vao):
-                glClear(GL_DEPTH_BUFFER_BIT)
-
-            if self.show_rigidbody and self.rigidbody_vao:
-                glEnable(GL_DEPTH_TEST)
-                glDepthFunc(GL_LEQUAL)
-                glDisable(GL_CULL_FACE)
-                glEnable(GL_BLEND)
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-                rb_program = self.shader_manager.get_program('rigidbody')
-                glUseProgram(rb_program)
-                self._set_uniform_matrix(rb_program, "projection", projection.T)
-                self._set_uniform_matrix(rb_program, "view", view.T)
-                self._set_uniform_matrix(rb_program, "model", model.T)
-                self._set_uniform(rb_program, "bone_texture_width", self.bone_texture_width)
-                glActiveTexture(GL_TEXTURE1)
-                glBindTexture(GL_TEXTURE_2D, self.bone_texture.texture_id)
-                self._set_uniform(rb_program, "bone_texture", 1)
-                glLineWidth(1.0)
-                self.rigidbody_vao.render(GL_LINES)
-                glDisable(GL_BLEND)
-                glEnable(GL_CULL_FACE)
-
-            if self.show_joint and self.joint_vao:
-                glEnable(GL_DEPTH_TEST)
-                glDepthFunc(GL_LEQUAL)
-                glDisable(GL_CULL_FACE)
-                glEnable(GL_BLEND)
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-                rb_program = self.shader_manager.get_program('rigidbody')
-                glUseProgram(rb_program)
-                self._set_uniform_matrix(rb_program, "projection", projection.T)
-                self._set_uniform_matrix(rb_program, "view", view.T)
-                self._set_uniform_matrix(rb_program, "model", model.T)
-                self._set_uniform(rb_program, "bone_texture_width", self.bone_texture_width)
-                glActiveTexture(GL_TEXTURE1)
-                glBindTexture(GL_TEXTURE_2D, self.bone_texture.texture_id)
-                self._set_uniform(rb_program, "bone_texture", 1)
-                glLineWidth(1.0)
-                self.joint_vao.render(GL_LINES)
-                glDisable(GL_BLEND)
-                glEnable(GL_CULL_FACE)
+            self._render_physics(projection, view, model)
 
             glfw.swap_buffers(self.window)
 
@@ -1290,101 +1052,30 @@ class Renderer:
         self._save_screenshot()
         self._save_view_history()
 
+    @staticmethod
+    def print_help():
+        print("FPS Camera Controls:")
+        print("  Left mouse drag: Rotate camera view")
+        print("  W/A/S/D: Move forward/left/backward/right")
+        print("  E/Q: Move up/down")
+        print("  Mouse scroll: Adjust movement speed")
+        print("  X key: Toggle world axis display")
+        print("  G key: Toggle ground grid display")
+        print("  B key: Toggle rigidbody & joint display")
+        print("  H key: Toggle model mesh display")
+        print("  O key: Toggle outline display")
+        print("  T key: Toggle toon shading")
+        print("  K key: Toggle GPU skinning")
+        print("  P key: Toggle VPD pose")
+        print("  R key: Reset camera to default position")
+        print("  I key: Toggle idle animation")
+        print("  M key: Toggle morph mode")
+        print("  < / > keys: Switch between morphs")
+        print("  Up/Down keys: Adjust morph weight")
+        print("VMD Animation Controls:")
+        print("  Space: Play/Pause VMD animation")
+        print("  L key: Toggle VMD loop")
+        print("  [ / ] keys: Step backward/forward 30 frames")
+
     def close(self):
         glfw.terminate()
-
-
-MODELS = {
-    "ikaros-origin": ("resources/models/ikaros-origin/Ikaros.pmx", "resources/models/ikaros-origin"),
-    "ikaros-uniform": ("resources/models/ikaros-uniform/Ikaros.pmx", "resources/models/ikaros-uniform"),
-    "安比": ("resources/models/安比/安比.pmx", "resources/models/安比"),
-    "刀": ("resources/models/安比/刀.pmx", "resources/models/安比"),
-    "chloe": ("resources/models/Chloe_Uniform1_0.9/Chloe_Uniform1_0.9.pmx", "resources/models/Chloe_Uniform1_0.9/textures"),
-    "aqua-swimwear": ("resources/models/Aqua_Swimwear_1.0/Aqua_Swimwear_1.0.pmx", "resources/models/Aqua_Swimwear_1.0/textures"),
-    "marine-swimwear": ("resources/models/Marine_Swmwear_1.01/Marine_Swmwear_1.01.pmx", "resources/models/Marine_Swmwear_1.01/textures"),
-    "aqua-basebody": ("resources/models/Aqua_BaseBody_R15_0.9/Aqua_BaseBody_R15_0.9.pmx", "resources/models/Aqua_BaseBody_R15_0.9/textures"),
-    "aqua-sailor": ("resources/models/Aqua_Sailor_0.8/Aqua_Sailor_0.8.pmx", "resources/models/Aqua_Sailor_0.8/textures"),
-    "brujas": ("resources/models/Brujas/Brujas.pmx", "resources/models/Brujas"),
-    "lamy-swimwear": ("resources/models/Lamy_Swimwear_1.0/Lamy_Swimwear_1.0.pmx", "resources/models/Lamy_Swimwear_1.0/textures"),
-    "lulum": ("resources/models/lulum/lulum_1.0.pmx", "resources/models/lulum/textures"),
-    "marine-jk1": ("resources/models/Marine_JK1_Set_1.01/Marine_JK1_1.0.pmx", "resources/models/Marine_JK1_Set_1.01/textures"),
-    "marine-jk1-hi": ("resources/models/Marine_JK1_Set_1.01/Marine_JK1_Hi_1.0.pmx", "resources/models/Marine_JK1_Set_1.01/textures"),
-    "rurudo-lion": ("resources/models/RurudoLion_1.0/RurudoLion_1.0.pmx", "resources/models/RurudoLion_1.0/textures"),
-    "rurudo-lion-hi": ("resources/models/RurudoLion_1.0/RurudoLion_Hi_1.0.pmx", "resources/models/RurudoLion_1.0/textures"),
-    "卢西娅": ("resources/models/卢西娅/卢西娅.pmx", "resources/models/卢西娅/textures"),
-    "卢西娅-摘帽": ("resources/models/卢西娅/卢西娅_摘帽.pmx", "resources/models/卢西娅/textures"),
-    "卢西娅-武器1": ("resources/models/卢西娅/武器1.pmx", "resources/models/卢西娅/textures"),
-    "卢西娅-武器2": ("resources/models/卢西娅/武器2.pmx", "resources/models/卢西娅/textures"),
-}
-
-
-def main():
-    import argparse
-
-    parser = argparse.ArgumentParser(description="PMX Model Viewer")
-    parser.add_argument("--model", "-m", default="ikaros-uniform", choices=MODELS.keys(), help="Model to load")
-    parser.add_argument("--vmd", "-v", nargs='*', default=None, help="VMD animation files to load (multiple files supported)")
-    args = parser.parse_args()
-
-    proj_root = Path(__file__).parent.parent
-    pmx_path, tex_dir = MODELS[args.model]
-    model_path = proj_root / pmx_path
-    texture_dir = proj_root / tex_dir
-
-    print(f"Loading model: {model_path}")
-    try:
-        model = PmxModel(model_path)
-    except Exception as e:
-        print(f"Failed to load model: {e}")
-        return
-    print(f"Model: {model.name}, Vertices: {model.vertex_count}, Faces: {model.face_count}")
-    print(f"Textures: {model.textures}")
-
-    print("Initializing renderer...")
-    renderer = Renderer(1280, 720, f"PMX Viewer - {model.name}")
-
-    print("Loading model to GPU...")
-    renderer.load_model(model, texture_dir)
-
-    if args.vmd:
-        print(f"Loading {len(args.vmd)} VMD file(s)...")
-        for vmd_file in args.vmd:
-            vmd_path = proj_root / vmd_file
-            if vmd_path.exists():
-                renderer.animation_controller.load_vmd(str(vmd_path))
-                print(f"  Loaded: {vmd_file}")
-            else:
-                print(f"  VMD file not found: {vmd_path}")
-        if renderer.animation_controller.vmd_mixer and renderer.animation_controller.vmd_mixer.players:
-            print(f"Total VMD layers: {len(renderer.animation_controller.vmd_mixer.players)}")
-            renderer.animation_controller.play_vmd()
-
-    print("FPS Camera Controls:")
-    print("  Left mouse drag: Rotate camera view")
-    print("  W/A/S/D: Move forward/left/backward/right")
-    print("  E/Q: Move up/down")
-    print("  Mouse scroll: Adjust movement speed")
-    print("  X key: Toggle world axis display")
-    print("  G key: Toggle ground grid display")
-    print("  B key: Toggle rigidbody & joint display")
-    print("  H key: Toggle model mesh display")
-    print("  O key: Toggle outline display")
-    print("  T key: Toggle toon shading")
-    print("  K key: Toggle GPU skinning")
-    print("  P key: Toggle VPD pose")
-    print("  R key: Reset camera to default position")
-    print("  I key: Toggle idle animation")
-    print("  M key: Toggle morph mode")
-    print("  < / > keys: Switch between morphs")
-    print("  Up/Down keys: Adjust morph weight")
-    print("VMD Animation Controls:")
-    print("  Space: Play/Pause VMD animation")
-    print("  L key: Toggle VMD loop")
-    print("  [ / ] keys: Step backward/forward 30 frames")
-    print("Starting render loop...")
-    renderer.render()
-    renderer.close()
-
-
-if __name__ == "__main__":
-    main()
