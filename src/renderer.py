@@ -106,6 +106,10 @@ class Renderer:
         
         self.dummy_texture = None
         self._uniform_cache = {}
+        self._fps_frame_count = 0
+        self._fps_last_time = 0.0
+        self._fps_display = 0.0
+        self._base_title = title
 
     def _create_world_axis(self):
         axis_length = 5.0
@@ -841,7 +845,7 @@ class Renderer:
             coord_convert = np.diag([1, 1, -1, 1]).astype('f4')
             model = coord_convert
 
-            if self.idle_animation_enabled:
+            if self.idle_animation_enabled and not self.animation_controller.vmd_playing:
                 self.idle_time += delta_time
                 breath = np.eye(4, dtype='f4')
                 breath[1, 3] = np.sin(self.idle_time * 1.5) * self.idle_breath_intensity
@@ -1040,6 +1044,14 @@ class Renderer:
             self._render_physics(projection, view, model)
 
             glfw.swap_buffers(self.window)
+
+            self._fps_frame_count += 1
+            now = glfw.get_time()
+            if now - self._fps_last_time >= 0.5:
+                self._fps_display = self._fps_frame_count / (now - self._fps_last_time)
+                self._fps_frame_count = 0
+                self._fps_last_time = now
+                glfw.set_window_title(self.window, f"{self._base_title}  [{self._fps_display:.0f} FPS]")
 
             self.view_history.append({
                 'x': self.camera.x,
