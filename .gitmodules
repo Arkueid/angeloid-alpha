@@ -1,0 +1,6 @@
+[submodule "mmd/thirdparty/glm"]
+	path = mmd/thirdparty/glm
+	url = https://github.com/g-truc/glm.git
+[submodule "mmd/thirdparty/glfw"]
+	path = mmd/thirdparty/glfw
+	url = git@github.com:glfw/glfw.git
