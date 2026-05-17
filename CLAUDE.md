@@ -1,33 +1,34 @@
 # Project: MMD PMX Viewer (angeloid-alpha)
 
-## Run
+## Build & Run
 ```bash
-python main.py -m <model-name>
+cd mmd && cmake -B ../build -S . && cmake --build ../build --config Release
+../build/Release/mmd.exe -m <model-name>
 ```
-Python environment: `.venv/`
 
 ## Project structure
-- `src/` — pure library code, no hardcoded resource paths
-- `main.py` — entry point, model paths dict, CLI args
-- `resources/` — models, textures, toon, vpd, motions
-- `src/gpu/` — GPU resource wrappers (VAO, Texture)
+- `mmd/` — C++ implementation (active)
+  - `src/core/` — Application, Camera, Encoding
+  - `src/gpu/` — VAO, VBO, Texture, ShaderProgram
+  - `src/pmx/` — PmxModel, PmxReader
+  - `src/anim/` — BoneSkinning, MorphController, VmdPlayer, VpdLoader
+  - `src/render/` — ModelRenderer, ShaderManager, WorldAxis, PhysicsDebug
+- `prototype/` — Python reference implementation
+- `resources/` — shared assets (models, textures, shaders, VMD, VPD)
 
 ## Code conventions
-- File naming: underscore for multi-word (`bone_math.py`, `vmd_player.py`)
-- Format loaders: `_loader` suffix for single-format files, descriptive name for multi-role files (`pmx_model.py`)
-- OpenGL matrices: always pass `.T` to `glUniformMatrix4fv`
-- GPU objects go in `src/gpu/`; geometry generation stays in `src/`
-- Prefer deduplication: extract helpers over repeated patterns
+- File naming: PascalCase (`PmxModel.h`, `BoneSkinning.cpp`)
+- Methods: `camelCase` (`readF32`, `hasFlag`, `vertexCount`)
+- Members: `mPascalCase` (`mWindow`, `mData`, `mDeltaTime`)
+- Constants: `UPPER_SNAKE_CASE` (`BONEFLAG_TAILPOS_IS_BONE`)
+- Statics: `sPascalCase`
+- Types: `PascalCase` (`PmxModel`, `BinaryReader`)
+- Free functions → class static methods preferred
+- No exceptions / try-catch in main flow (validate before use)
 - No comments for obvious code; only comment non-obvious WHY
 
 ## Git
 - Commit messages: concise summary line, bullet details
-- Use `Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>`
 - Keep commits focused, don't mix unrelated changes
-- Only commit when the user explicitly asks. Do not auto-commit.
-- When the user asks to commit, also update README.md / README_EN.md / CLAUDE.md if stale
-
-## Problem solving
-- Don't work around issues — fix root causes
-- Debug with data: add prints to verify assumptions before changing logic
-- Don't assume PMX data is wrong; verify the transform chain first
+- Only commit when the user explicitly asks
+- When committing, update README.md / README_EN.md / CLAUDE.md if stale

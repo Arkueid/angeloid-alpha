@@ -4,58 +4,45 @@
 
 > Master... this is a program for rendering PMX models. I will do my best to serve you.
 
-## Overview
+A PMX model renderer with GPU skeletal animation and VMD animation playback. Rewritten in C++20.
 
-A PMX model renderer with GPU skeletal animation and VMD animation playback support.
+## Build
 
-## Features
-
-- ✅ PMX model loading and rendering
-- ✅ GPU skeletal skinning animation
-- ✅ VPD pose loading
-- ✅ VMD animation playback (bone + morph)
-- ✅ Multiple VMD mixing
-- ✅ Morph expression system (Vertex/UV/Bone/Material/Group)
-- ✅ Toon shading
-- ✅ Edge outline
-- ✅ Rigidbody/Joint visualization
-- ✅ Multiple model switching
-- ✅ FPS display
-
-## Project Structure
-
+```bash
+cd mmd
+cmake -B ../build -S .
+cmake --build ../build --config Release
 ```
-mmd-demo/
-├── main.py
-├── src/
-│   ├── gpu/                  # GPU resource wrappers
-│   │   ├── mesh.py           # VAO, VBOWrapper
-│   │   └── texture.py        # Texture
-│   ├── pmx_model.py          # PMX data model + parser
-│   ├── vpd_loader.py         # VPD pose loader
-│   ├── vmd_player.py         # VMD loader + mixer
-│   ├── bone_math.py          # Bone matrices + physics mesh
-│   ├── renderer.py           # Main renderer
-│   ├── animation_controller.py
-│   ├── morph_controller.py
-│   ├── shader_manager.py
-│   └── camera.py
-└── resources/
-    ├── shaders/
-    ├── models/
-    ├── toon/
-    ├── vpd/
-    └── motions/
-```
+
+Requires CMake 3.20+, C++20 compiler (MSVC 2026+/GCC 13+/Clang 17+).
+
+Third-party dependencies bundled:
+- [GLFW](https://www.glfw.org/) — window and input
+- [glad](https://glad.dav1d.de/) — OpenGL 4.6 Core loader
+- [stb_image](https://github.com/nothings/stb) — texture loading
 
 ## Usage
 
-```bash
-python main.py -m <model-name>
-python main.py -m marine-swimwear -v resources/motions/xxx.vmd
+```powershell
+.\build\Release\mmd.exe                    # Default model: ikaros-uniform
+.\build\Release\mmd.exe -m marine-swimwear # Named model
+.\build\Release\mmd.exe -m 安比            # Chinese names work
+.\build\Release\mmd.exe -v motion.vmd      # Load animation
+.\build\Release\mmd.exe -v a.vmd b.vmd     # Mix multiple animations
 ```
 
-### Keyboard Shortcuts
+## CLI Args
+
+| Arg | Description |
+|-----|-------------|
+| `-m, --model` | Model name (see list below) |
+| `-v, --vmd` | VMD animation file(s) |
+
+## Model List
+
+`ikaros-origin` `ikaros-uniform` `安比` `刀` `chloe` `aqua-swimwear` `marine-swimwear` `aqua-basebody` `aqua-sailor` `brujas` `lamy-swimwear` `lulum` `marine-jk1` `marine-jk1-hi` `rurudo-lion` `rurudo-lion-hi` `卢西娅` `卢西娅-摘帽` `卢西娅-武器1` `卢西娅-武器2`
+
+## Keyboard Shortcuts
 
 | Key | Function |
 |-----|----------|
@@ -79,36 +66,34 @@ python main.py -m marine-swimwear -v resources/motions/xxx.vmd
 | Space | Play/Pause VMD |
 | L | Toggle VMD loop |
 | [ / ] | Step VMD ±30 frames |
+| Esc | Exit |
+
+## Project Structure
+
+```
+mmd-demo/
+├── mmd/
+│   ├── main.cpp
+│   ├── CMakeLists.txt
+│   ├── src/
+│   │   ├── core/          # Application, Camera, Encoding
+│   │   ├── gpu/           # VAO, VBO, Texture, Shader
+│   │   ├── pmx/           # PmxModel, PmxReader
+│   │   ├── anim/          # BoneSkinning, MorphController, VmdPlayer, VpdLoader
+│   │   └── render/        # ModelRenderer, ShaderManager, WorldAxis, PhysicsDebug
+│   └── thirdparty/        # GLFW, glad, stb_image
+├── prototype/             # Python reference
+├── resources/             # Models, textures, shaders, VMD, VPD
+└── build/                 # Build output
+```
 
 ## Technical Details
 
-### GPU Skinning
-
-Texture-driven: bone matrices packed into RGBA32F texture, shader samples via `texelFetch`.
-
-### Bone Hierarchy
-
-PMX stores absolute bone positions. Compute local = child - parent, accumulate hierarchically, final matrix = world × inv_bind.
-
-### Toon Shading
-
-Gradient texture mapping based on `N·L` dot product with rim lighting.
-
-### Edge Outline
-
-Two-pass: render front faces to depth, extrude back faces along normals.
-
-### Rigidbody/Joint Visualization
-
-Wireframe rendering of physics collision bodies, animated via the same bone texture as the mesh.
-
-## Dependencies
-
-- [PyOpenGL](https://pyopengl.sourceforge.net/)
-- [glfw](https://www.glfw.org/)
-- [numpy](https://numpy.org/)
-- [Pillow](https://python-pillow.org/)
-- [pymeshio](https://github.com/ousttrue/pymeshio)
+- GPU skinning via RGBA32F bone texture + texelFetch
+- VMD bezier interpolation + quaternion SLERP
+- Morph system: Group/Vertex/UV/Material/Bone types
+- Cross-platform encoding: UTF-16LE↔UTF-8 in pure C++, CP932 via system API
+- Toon shading + outline pass (back-face extrusion)
 
 ## License
 
