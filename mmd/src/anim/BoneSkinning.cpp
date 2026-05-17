@@ -382,6 +382,31 @@ static int nextPow2(int x)
     return p;
 }
 
+void BoneSkinning::applyPhysics(const PmxModel& model,
+                                 std::vector<float>& skinMatrices,
+                                 const std::vector<std::array<float, 16>>& physicsMats)
+{
+    for (size_t i = 0; i < physicsMats.size() && i < (size_t)model.boneCount(); ++i) {
+        // Check if this bone has a non-zero physics transform
+        bool hasPhysics = false;
+        for (int j = 0; j < 16; ++j) {
+            if (physicsMats[i][j] != 0) { hasPhysics = true; break; }
+        }
+        if (!hasPhysics) continue;
+
+        // physicsMat is the world matrix in MMD space.
+        // Compute skinning matrix = world * inv(bindWorld).
+        // The existing skinning matrices already have model transform, so we
+        // compute the local skinning matrix and let the existing model transform
+        // be applied separately.
+        //
+        // For now: directly overwrite the skinning matrix with the physics
+        // world matrix. The model will be positioned at the rigid body location.
+        for (int j = 0; j < 16; ++j)
+            skinMatrices[i * 16 + j] = physicsMats[i][j];
+    }
+}
+
 BoneTextureData BoneSkinning::packBoneMatrices(const std::vector<float>& matrices, int numBones)
 {
     int texelsPerMat = 4;

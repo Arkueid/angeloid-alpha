@@ -477,6 +477,17 @@ void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::
     useSkinning = true;
 }
 
+void ModelRenderer::applyPhysics(const PmxModel& model,
+                                 const std::vector<std::array<float, 16>>& physicsMats)
+{
+    if (!mBoneTexture || !useSkinning) return;
+    std::vector<float> skinMatrices = BoneSkinning::computeSkinningMatrices(
+        model, mCenter, mMinY, mScale);
+    BoneSkinning::applyPhysics(model, skinMatrices, physicsMats);
+    auto data = BoneSkinning::packBoneMatrices(skinMatrices, model.boneCount());
+    mBoneTexture->write(data.pixels.data());
+}
+
 void ModelRenderer::updateBoneTexture(const PmxModel& model,
                                        const std::unordered_map<std::string, VpdPose>& vpdPoses,
                                        const std::unordered_map<std::string,

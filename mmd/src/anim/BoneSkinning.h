@@ -49,6 +49,11 @@ struct BoneSkinning {
         const std::unordered_map<std::string, VpdPose>& vpdPoses,
         const std::unordered_map<std::string, VmdBoneTransform>& vmdTransforms);
 
+    // Overlay physics world matrices onto skinning matrices
+    static void applyPhysics(const PmxModel& model,
+                             std::vector<float>& skinMatrices,
+                             const std::vector<std::array<float, 16>>& physicsMats);
+
     static BoneTextureData packBoneMatrices(const std::vector<float>& matrices, int numBones);
     static std::unique_ptr<Gpu::Texture> createBoneTexture(const BoneTextureData& data);
 };

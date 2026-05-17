@@ -74,6 +74,9 @@ public:
                                   const std::array<float, 16>& view,
                                   const float* modelMat = nullptr);
 
+    void applyPhysics(const PmxModel& model,
+                      const std::vector<std::array<float, 16>>& physicsMats);
+
     void updateBoneTexture(const PmxModel& model,
                            const std::unordered_map<std::string, VpdPose>& vpdPoses,
                            const std::unordered_map<std::string,

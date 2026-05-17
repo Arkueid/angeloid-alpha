@@ -4,6 +4,8 @@
 #include "anim/MorphController.h"
 #include "pmx/PmxReader.h"
 #include "render/ShaderManager.h"
+#include "anim/BoneSkinning.h"
+#include "anim/PhysicsWorld.h"
 #include "anim/VmdPlayer.h"
 #include "render/PhysicsDebug.h"
 #include "render/WorldAxis.h"
@@ -148,11 +150,16 @@ int main(int argc, char* argv[])
     physicsDebug.showRigidBody = false;
     physicsDebug.showJoint = false;
 
+    PhysicsWorld physicsWorld;
+
     ModelRenderer renderer;
     if (texDir.is_relative()) texDir = projRoot / texDir;
     renderer.loadModel(model, texDir, projRoot / "resources/toon");
 
     physicsDebug.build(model, renderer.modelScale());
+
+    physicsWorld.build(model, renderer.modelScale());
+    physicsWorld.enabled = false;
 
     // VPD + skinning
     std::unordered_map<std::string, VpdPose> vpdPoses;
@@ -170,7 +177,7 @@ int main(int argc, char* argv[])
         renderer.setupSkinning(model);
     }
     renderer.useSkinning = true;
-    physicsDebug.useBoneMatrices = renderer.useSkinning;
+    physicsDebug.useBoneMatrices = false;
 
     MorphController morphCtl;
     morphCtl.setModel(model, renderer.morphVbo(), renderer.uvMorphVbo(), renderer.modelScale());
@@ -225,8 +232,13 @@ int main(int argc, char* argv[])
         }
         if (key == GLFW_KEY_B && act == GLFW_PRESS) {
             physicsDebug.showRigidBody = !physicsDebug.showRigidBody;
-            physicsDebug.showJoint = physicsDebug.showRigidBody;
-            std::cout << "Rigidbody & Joint: " << (physicsDebug.showRigidBody ? "ON" : "OFF") << std::endl;
+            std::cout << "Rigidbody: " << (physicsDebug.showRigidBody ? "ON" : "OFF") << std::endl;
+        }
+        if (key == GLFW_KEY_F && act == GLFW_PRESS) {
+            if (physicsWorld.enabled)
+                physicsWorld.debugDump();
+            else
+                std::cout << "Enable physics (Y) first" << std::endl;
         }
         if (key == GLFW_KEY_H && act == GLFW_PRESS) {
             renderer.showModel = !renderer.showModel;
@@ -242,7 +254,6 @@ int main(int argc, char* argv[])
         }
         if (key == GLFW_KEY_K && act == GLFW_PRESS) {
             renderer.useSkinning = !renderer.useSkinning;
-            physicsDebug.useBoneMatrices = renderer.useSkinning;
             if (renderer.useSkinning) {
                 if (vpdPoseApplied)
                     renderer.updateBoneTexture(model, vpdPoses, {});
@@ -250,6 +261,10 @@ int main(int argc, char* argv[])
                     renderer.updateBoneTexture(model, {}, {});
             }
             std::cout << "Skinned rendering: " << (renderer.useSkinning ? "ON" : "OFF") << std::endl;
+        }
+        if (key == GLFW_KEY_Y && act == GLFW_PRESS) {
+            physicsWorld.enabled = !physicsWorld.enabled;
+            std::cout << "Physics: " << (physicsWorld.enabled ? "ON" : "OFF") << std::endl;
         }
         if (key == GLFW_KEY_P && act == GLFW_PRESS) {
             if (!vpdPoses.empty()) {
@@ -413,6 +428,14 @@ int main(int argc, char* argv[])
             auto& boneMorphs = morphCtl.boneMorphs();
             renderer.updateBoneTexture(model, vpdPoses, {}, boneMorphs.empty() ? nullptr : &boneMorphs);
         }
+
+        // Update mode 0 rigid bodies from bone animation, then step physics
+        if (physicsWorld.enabled) {
+            auto poseWorld = BoneSkinning::computePoseWorldMatrices(model, vpdPoses);
+            physicsWorld.updateMode0Bodies(poseWorld);
+            physicsWorld.step(dt);
+        }
+        // (VMD bone→rigid body not yet implemented; VPD case works)
     };
 
     // Render
@@ -499,21 +522,13 @@ int main(int argc, char* argv[])
             }
         }
 
-        // Physics debug (after model, always on top)
+        // Physics debug
         if (auto* s = shaders.get("rigidbody")) {
-            glDisable(GL_DEPTH_TEST);
-            glDepthMask(GL_FALSE);
+            if (physicsWorld.enabled && physicsDebug.showRigidBody)
+                physicsDebug.updateFromPhysics(physicsWorld);
             glLineWidth(2.0f);
-            if (renderer.boneTexture()) {
-                s->use();
-                s->setInt("bone_texture", 1);
-                s->setInt("bone_texture_width", renderer.boneTextureWidth());
-                renderer.boneTexture()->bind(1);
-            }
             physicsDebug.render(*s, proj, view);
             glLineWidth(1.0f);
-            glDepthMask(GL_TRUE);
-            glEnable(GL_DEPTH_TEST);
         }
     };
 
