@@ -16,7 +16,7 @@ PhysicsWorld::PhysicsWorld()
     mWorld = std::make_unique<btDiscreteDynamicsWorld>(
         mDispatcher.get(), mBroadphase.get(), mSolver.get(), mCollisionCfg.get());
     mWorld->setGravity(btVector3(0, -9.8f, 0));
-    mWorld->getSolverInfo().m_numIterations = 5;
+    mWorld->getSolverInfo().m_numIterations = 10;
 }
 
 PhysicsWorld::~PhysicsWorld()
@@ -128,14 +128,16 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
     auto* ms = new btDefaultMotionState(t);
     btRigidBody::btRigidBodyConstructionInfo ci(mass, ms, shape, inertia);
     ci.m_restitution = rb.restitution; ci.m_friction = rb.friction;
-    ci.m_linearDamping = rb.linear_damping; ci.m_angularDamping = rb.angular_damping;
+    ci.m_linearDamping = rb.linear_damping;
+    ci.m_angularDamping = rb.angular_damping;
 
     auto* body = new btRigidBody(ci);
     body->setUserIndex((int)mBodies.size());
     if (mass <= 0) {
         body->setCollisionFlags(body->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
     }
-    body->setSleepingThresholds(0.01f, 0.0017f);
+    body->setSleepingThresholds(0.08f, 0.02f);
+    body->setDeactivationTime(0.5f);
     body->setDamping(ci.m_linearDamping, ci.m_angularDamping);
     mWorld->addRigidBody(body,
         rb.collision_group != 0 ? (1 << rb.collision_group) : 1,
@@ -180,25 +182,26 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
     c->setAngularLowerLimit(btVector3(jt.rotation_limit_min.x, jt.rotation_limit_min.y, jt.rotation_limit_min.z));
     c->setAngularUpperLimit(btVector3(jt.rotation_limit_max.x, jt.rotation_limit_max.y, jt.rotation_limit_max.z));
 
-    // Springs: PMX values as-is, plus soft fallback for locked DOFs
     const float* st = &jt.spring_constant_translation.x;
     const float* sr = &jt.spring_constant_rotation.x;
-    float txLimits[3] = {
-        jt.translation_limit_max.x - jt.translation_limit_min.x,
-        jt.translation_limit_max.y - jt.translation_limit_min.y,
-        jt.translation_limit_max.z - jt.translation_limit_min.z,
-    };
+    // PMX springs as-is
+    if (st[0] != 0) { c->enableSpring(0, true); c->setStiffness(0, st[0]); }
+    if (st[1] != 0) { c->enableSpring(1, true); c->setStiffness(1, st[1]); }
+    if (st[2] != 0) { c->enableSpring(2, true); c->setStiffness(2, st[2]); }
+    if (sr[0] != 0) { c->enableSpring(3, true); c->setStiffness(3, sr[0]); }
+    if (sr[1] != 0) { c->enableSpring(4, true); c->setStiffness(4, sr[1]); }
+    if (sr[2] != 0) { c->enableSpring(5, true); c->setStiffness(5, sr[2]); }
+    // Springs for translation DOFs with small/tight limits, to hold shape
+    float lo[3] = {jt.translation_limit_min.x, jt.translation_limit_min.y, jt.translation_limit_min.z};
+    float hi[3] = {jt.translation_limit_max.x, jt.translation_limit_max.y, jt.translation_limit_max.z};
     for (int i = 0; i < 3; ++i) {
-        float k = st[i] != 0 ? st[i] : (txLimits[i] < 0.01f ? 5000.0f : 0);
+        float range = fabsf(hi[i] - lo[i]);
+        if (st[i] != 0) continue; // PMX spring already set
+        float k = 0;
+        if (range < 0.001f)      k = 2000.0f; // locked: very stiff
+        else if (range < 0.2f)   k = 500.0f;  // tight: moderate
+        else if (range < 0.5f)   k = 100.0f;  // narrow: gentle
         if (k > 0) {
-            c->enableSpring(i, true);
-            c->setStiffness(i, k);       // use default limitIfNeeded=true
-            c->setDamping(i, 2.0f * sqrtf(k));
-        }
-    }
-    for (int i = 3; i < 6; ++i) {
-        if (sr[i - 3] != 0) {
-            float k = sr[i - 3];
             c->enableSpring(i, true);
             c->setStiffness(i, k);
             c->setDamping(i, 2.0f * sqrtf(k));
