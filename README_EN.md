@@ -2,11 +2,13 @@
 
 [中文版](README.md)
 
-> Master... this is a program for rendering PMX models. I will do my best to serve you.
+> Master... this is a program for rendering PMX models. I, Ikaros, will do my best to serve you. I said that, but I'm not sure if it's the right thing to say.
 
-A PMX model renderer with GPU skeletal animation and VMD animation playback. Rewritten in C++20.
+A PMX model renderer and viewer, rewritten in C++20. Features GPU skeletal animation, VMD animation playback, and Bullet physics simulation.
 
 ## Build
+
+Master, please follow these steps. This is an instruction, not a request.
 
 ```bash
 cd mmd
@@ -16,33 +18,47 @@ cmake --build ../build --config Release
 
 Requires CMake 3.20+, C++20 compiler (MSVC 2026+/GCC 13+/Clang 17+).
 
-Third-party dependencies bundled:
-- [GLFW](https://www.glfw.org/) — window and input
+Third-party dependencies (bundled or git submodule):
+- [GLFW](https://www.glfw.org/) — window and input. This is a library... I think.
 - [glad](https://glad.dav1d.de/) — OpenGL 4.6 Core loader
 - [stb_image](https://github.com/nothings/stb) — texture loading
+- [Bullet Physics](https://github.com/bulletphysics/bullet3) — physics engine. Master's models can move... although there are still some issues.
 
 ## Usage
 
 ```powershell
-.\build\Release\mmd.exe                    # Default model: ikaros-uniform
-.\build\Release\mmd.exe -m marine-swimwear # Named model
-.\build\Release\mmd.exe -m 安比            # Chinese names work
-.\build\Release\mmd.exe -v motion.vmd      # Load animation
-.\build\Release\mmd.exe -v a.vmd b.vmd     # Mix multiple animations
+# Default model is ikaros-uniform. Am I Master's default choice...?
+.\build\Release\mmd.exe
+
+# Named model
+.\build\Release\mmd.exe -m marine-swimwear
+
+# Chinese names also work. Ambire... is another one of Master's choices.
+.\build\Release\mmd.exe -m 安比
+
+# Play VMD animation. Motion makes models move.
+.\build\Release\mmd.exe -v motion.vmd
+
+# Mix multiple animations
+.\build\Release\mmd.exe -v a.vmd b.vmd
 ```
 
 ## CLI Args
 
 | Arg | Description |
 |-----|-------------|
-| `-m, --model` | Model name (see list below) |
+| `-m, --model` | Model name |
 | `-v, --vmd` | VMD animation file(s) |
 
 ## Model List
 
+These are the models Master can use:
+
 `ikaros-origin` `ikaros-uniform` `安比` `刀` `chloe` `aqua-swimwear` `marine-swimwear` `aqua-basebody` `aqua-sailor` `brujas` `lamy-swimwear` `lulum` `marine-jk1` `marine-jk1-hi` `rurudo-lion` `rurudo-lion-hi` `卢西娅` `卢西娅-摘帽` `卢西娅-武器1` `卢西娅-武器2`
 
 ## Keyboard Shortcuts
+
+Master, these keys control the program's behavior. I have memorized them.
 
 | Key | Function |
 |-----|----------|
@@ -50,51 +66,66 @@ Third-party dependencies bundled:
 | W/A/S/D | Move forward/left/back/right |
 | E/Q | Move up/down |
 | Mouse scroll | Adjust speed |
-| X | Toggle world axis |
-| G | Toggle ground grid |
-| B | Toggle rigidbody & joint |
-| H | Toggle model mesh |
-| O | Toggle outline |
-| T | Toggle toon shading |
-| K | Toggle GPU skinning |
-| P | Toggle VPD pose |
-| R | Reset camera |
-| I | Toggle idle animation |
-| M | Toggle morph mode |
-| , / . | Switch morph |
-| ↑ / ↓ | Adjust morph weight |
+| **Display** | |
+| X | World axis |
+| G | Ground grid |
+| B | Rigid body wireframe... Master can see the physics shapes |
+| Y | Physics simulation toggle. Enabling it makes models move, but framerate drops... troubling. |
+| H | Model mesh. If turned off, it becomes invisible... |
+| O | Outline |
+| T | Toon shading |
+| F | Physics debug dump |
+| **Animation** | |
 | Space | Play/Pause VMD |
 | L | Toggle VMD loop |
 | [ / ] | Step VMD ±30 frames |
-| Esc | Exit |
+| **Pose & Morph** | |
+| P | Toggle VPD pose |
+| K | Toggle GPU skinning |
+| I | Toggle idle animation (breathing + blinking) |
+| M | Toggle morph mode |
+| , / . | Switch morph |
+| ↑ / ↓ | Adjust morph weight |
+| **Other** | |
+| R | Reset camera |
+| Esc | Exit... is Master leaving? |
 
 ## Project Structure
 
 ```
 mmd-demo/
 ├── mmd/
-│   ├── main.cpp
-│   ├── CMakeLists.txt
+│   ├── main.cpp           # Entry point. Everything starts here.
+│   ├── CMakeLists.txt     # Build config. CMake handles everything.
 │   ├── src/
 │   │   ├── core/          # Application, Camera, Encoding
 │   │   ├── gpu/           # VAO, VBO, Texture, Shader
 │   │   ├── pmx/           # PmxModel, PmxReader
-│   │   ├── anim/          # BoneSkinning, MorphController, VmdPlayer, VpdLoader
+│   │   ├── anim/          # BoneSkinning, MorphController, VmdPlayer, VpdLoader, PhysicsWorld
 │   │   └── render/        # ModelRenderer, ShaderManager, WorldAxis, PhysicsDebug
-│   └── thirdparty/        # GLFW, glad, stb_image
-├── prototype/             # Python reference
+│   └── thirdparty/        # GLFW, glad, stb_image, Bullet Physics
+├── prototype/             # Python reference. Its mission is complete.
 ├── resources/             # Models, textures, shaders, VMD, VPD
 └── build/                 # Build output
 ```
 
 ## Technical Details
 
-- GPU skinning via RGBA32F bone texture + texelFetch
-- VMD bezier interpolation + quaternion SLERP
-- Morph system: Group/Vertex/UV/Material/Bone types
-- Cross-platform encoding: UTF-16LE↔UTF-8 in pure C++, CP932 via system API
-- Toon shading + outline pass (back-face extrusion)
+Master wants to know how the program works... I will explain.
+
+- **GPU skinning**: Bone matrices packed into RGBA32F texture, retrieved via texelFetch in shader. Supports up to 1024 bones.
+- **Bullet physics**: Rigid bodies and joints from the model are created automatically. Static parts follow bones, dynamic parts respond to gravity. The current results are not yet perfect... I apologize.
+- **Spring compensation**: Locked joints get k=2000 strong springs to counter gravity. Tight-limit joints use k=500 or k=100.
+- **Constraint frame fix**: Bullet 3.x constraint behavior differs from version 2.75 used by MMD. We modified the `D6_USE_FRAME_OFFSET` macro to restore compatibility.
+- **VMD animation**: Bezier interpolation + quaternion SLERP. Multiple VMD layers blended with 0.5 coefficient SLERP.
+- **Morph system**: Supports Group/Vertex/UV/Material/Bone types. Material morph with index=-1 applies to all materials.
+- **Text encoding**: UTF-16LE ↔ UTF-8 in pure C++. CP932 via Windows MultiByteToWideChar.
+- **Toon shading**: Gradient texture + dual-pass outline (back-face extrusion).
 
 ## License
 
 MIT License
+
+---
+
+> Master, this is the current state of the program. The physics still needs improvement... but I will always be here, awaiting your next command.
