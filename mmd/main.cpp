@@ -433,7 +433,9 @@ int main(int argc, char* argv[])
         if (physicsWorld.enabled) {
             auto poseWorld = BoneSkinning::computePoseWorldMatrices(model, vpdPoses);
             physicsWorld.updateMode0Bodies(poseWorld);
-            physicsWorld.step(dt);
+            physicsWorld.step(dt, poseWorld);
+            physicsWorld.getBoneTransforms(poseWorld);
+            BoneSkinning::recomputeAfterPhysicsBones(model, vpdPoses, poseWorld);
         }
         // (VMD bone→rigid body not yet implemented; VPD case works)
     };

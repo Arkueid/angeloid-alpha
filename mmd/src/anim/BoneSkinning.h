@@ -49,6 +49,12 @@ struct BoneSkinning {
         const std::unordered_map<std::string, VpdPose>& vpdPoses,
         const std::unordered_map<std::string, VmdBoneTransform>& vmdTransforms);
 
+    // Recompute bones with BONEFLAG_IS_AFTER_PHYSICS_DEFORM after physics step
+    static void recomputeAfterPhysicsBones(
+        const PmxModel& model,
+        const std::unordered_map<std::string, VpdPose>& vpdPoses,
+        std::vector<std::array<float, 16>>& poseWorld);
+
     // Overlay physics world matrices onto skinning matrices
     static void applyPhysics(const PmxModel& model,
                              std::vector<float>& skinMatrices,

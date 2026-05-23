@@ -243,6 +243,38 @@ std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(
     return result;
 }
 
+void BoneSkinning::recomputeAfterPhysicsBones(
+    const PmxModel& model,
+    const std::unordered_map<std::string, VpdPose>& vpdPoses,
+    std::vector<std::array<float, 16>>& poseWorld)
+{
+    for (int i = 0; i < model.boneCount(); ++i) {
+        const auto& bone = model.bones[i];
+        if (!bone.hasFlag(BONEFLAG_IS_AFTER_PHYSICS_DEFORM)) continue;
+        if (bone.parent_index < 0) continue;
+
+        auto local = identityMat();
+        const auto& parent = model.bones[bone.parent_index];
+        local[12] = bone.position.x - parent.position.x;
+        local[13] = bone.position.y - parent.position.y;
+        local[14] = bone.position.z - parent.position.z;
+
+        auto it = vpdPoses.find(bone.name);
+        if (it != vpdPoses.end()) {
+            float rot[9];
+            it->second.toMatrix(rot);
+            local[0] = rot[0]; local[4] = rot[1]; local[8]  = rot[2];
+            local[1] = rot[3]; local[5] = rot[4]; local[9]  = rot[5];
+            local[2] = rot[6]; local[6] = rot[7]; local[10] = rot[8];
+            local[12] += it->second.tx;
+            local[13] += it->second.ty;
+            local[14] += it->second.tz;
+        }
+
+        poseWorld[i] = mulMat4(poseWorld[bone.parent_index], local);
+    }
+}
+
 std::vector<float> BoneSkinning::computeSkinningMatrices(
     const PmxModel& model,
     const Vec3& center, float minY, float scale,

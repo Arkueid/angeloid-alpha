@@ -14,6 +14,8 @@ class btDefaultCollisionConfiguration;
 class btCollisionDispatcher;
 class btBroadphaseInterface;
 class btSequentialImpulseConstraintSolver;
+class btVector3;
+class btQuaternion;
 
 struct BulletBody {
     btRigidBody* body = nullptr;
@@ -31,7 +33,7 @@ public:
     ~PhysicsWorld();
 
     void build(const PmxModel& model, float modelScale);
-    void step(float deltaTime);
+    void step(float deltaTime, const std::vector<std::array<float, 16>>& poseWorld);
     void getBoneTransforms(std::vector<std::array<float, 16>>& out) const;
 
     // For debug visualization
@@ -48,6 +50,8 @@ public:
 private:
     void addRigidBody(const PmxRigidBody& rb);
     void addJoint(const PmxJoint& jt);
+    void computeBoneTarget(const BulletBody& bb, const std::vector<std::array<float, 16>>& poseWorld,
+                           btVector3& outPos, btQuaternion& outRot) const;
 
     std::unique_ptr<btDefaultCollisionConfiguration> mCollisionCfg;
     std::unique_ptr<btCollisionDispatcher> mDispatcher;
