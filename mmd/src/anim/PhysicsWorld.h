@@ -28,6 +28,7 @@ struct BulletBody {
     // Bone bind world transform (Bullet space) — for delta-based bone feedback
     float bonePosX = 0, bonePosY = 0, bonePosZ = 0;
     float boneRotX = 0, boneRotY = 0, boneRotZ = 0, boneRotW = 1;
+    bool clothLike = false; // rotation-spring joints: use physics rotation, bone position
     std::string name;
 };
 
@@ -45,6 +46,7 @@ public:
     const std::vector<BulletBody>& bodies() const { return mBodies; }
     float modelScale() const { return mModelScale; }
     void debugDump() const;
+    void debugTrackCloth() const;
 
     // Update mode 0 bodies to follow their linked bones
     // poseWorld: bone world matrices (model space, column-major 4x4)

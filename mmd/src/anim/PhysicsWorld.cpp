@@ -10,7 +10,7 @@
 
 namespace {
     constexpr float kGravityY = -9.8f;
-    constexpr int   kSolverIterations = 10;
+    constexpr int   kSolverIterations = 15;
     constexpr int   kSubsteps = 10;
     constexpr float kFixedTimestep = 1.0f / 240.0f;
     constexpr float kMaxTimestep = 1.0f / 30.0f;
@@ -29,6 +29,7 @@ PhysicsWorld::PhysicsWorld()
         mDispatcher.get(), mBroadphase.get(), mSolver.get(), mCollisionCfg.get());
     mWorld->setGravity(btVector3(0, kGravityY, 0));
     mWorld->getSolverInfo().m_numIterations = kSolverIterations;
+    mWorld->getSolverInfo().m_erp2 = 0.8f; // match Bullet 2.75 default for non-contact constraints
 }
 
 PhysicsWorld::~PhysicsWorld()
@@ -77,6 +78,28 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
     }
     std::cout << "  Dynamic mass bodies: " << dynMassCount << std::endl;
 
+    // --- Box bodies ---
+    std::cout << "\nBox bodies (shape_type=1):" << std::endl;
+    for (const auto& rb : model.rigidbodies) {
+        if (rb.shape_type != RIGID_SHAPE_BOX) continue;
+        const char* bn = (rb.bone_index >= 0 && rb.bone_index < model.boneCount())
+            ? model.bones[rb.bone_index].name.c_str() : "-";
+        printf("  [%d] %-28s bone=%-20s mode=%d mass=%.3f size=(%.4f,%.4f,%.4f)\n",
+            rb.index, rb.name.c_str(), bn, rb.mode, rb.mass,
+            rb.shape_size.x, rb.shape_size.y, rb.shape_size.z);
+    }
+
+    // --- Sphere bodies ---
+    std::cout << "\nSphere bodies (shape_type=0):" << std::endl;
+    for (const auto& rb : model.rigidbodies) {
+        if (rb.shape_type != RIGID_SHAPE_SPHERE) continue;
+        const char* bn = (rb.bone_index >= 0 && rb.bone_index < model.boneCount())
+            ? model.bones[rb.bone_index].name.c_str() : "-";
+        printf("  [%d] %-28s bone=%-20s mode=%d mass=%.3f size=(%.4f,%.4f,%.4f)\n",
+            rb.index, rb.name.c_str(), bn, rb.mode, rb.mass,
+            rb.shape_size.x, rb.shape_size.y, rb.shape_size.z);
+    }
+
     // --- Capsule-shaped bodies ---
     std::cout << "\nCapsule bodies (shape_type=2):" << std::endl;
     for (const auto& rb : model.rigidbodies) {
@@ -122,6 +145,32 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
     }
 
     for (const auto& jt : model.joints) addJoint(jt);
+
+    // Mark cloth-like bodies: connected to joints with rotation springs + freedom
+    for (const auto& jt : model.joints) {
+        bool hasRotSpring = jt.spring_constant_rotation.x != 0
+                         || jt.spring_constant_rotation.y != 0
+                         || jt.spring_constant_rotation.z != 0;
+        float rlRange = fabsf(jt.rotation_limit_max.x - jt.rotation_limit_min.x)
+                      + fabsf(jt.rotation_limit_max.y - jt.rotation_limit_min.y)
+                      + fabsf(jt.rotation_limit_max.z - jt.rotation_limit_min.z);
+        if (!hasRotSpring || rlRange < 0.01f) continue;
+        auto mark = [&](int idx) {
+            if (idx >= 0 && idx < (int)mBodies.size() && mBodies[idx].mode == 1)
+                mBodies[idx].clothLike = true;
+        };
+        mark(jt.rigidbody_index_a);
+        mark(jt.rigidbody_index_b);
+    }
+    int clothCount = 0;
+    std::cout << "  Cloth-like bodies:";
+    for (const auto& b : mBodies) {
+        if (b.clothLike) {
+            clothCount++;
+            std::cout << " [" << b.rigidBodyIndex << "]" << b.name;
+        }
+    }
+    std::cout << " (" << clothCount << " total)" << std::endl;
 
     // Dump joints for hair-chain bodies (bones with 后发, 马尾, 侧发, 前发, chain in name)
     std::cout << "\n=== Hair-chain joint analysis ===" << std::endl;
@@ -292,7 +341,7 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
     else if (rb.shape_type == RIGID_SHAPE_CAPSULE) {
         float capR = rb.shape_size.x * 0.5f * s;
         float capH = rb.shape_size.y * 0.5f * s;
-        float minR = 0.01f; // clamp degenerate capsule radius (翘毛1 has r=0.00002 in Bullet space)
+        float minR = 0.01f; // clamp degenerate capsule radius
         if (capR < minR) { capR = minR; }
         shape = new btCapsuleShape(capR, capH);
     }
@@ -352,7 +401,7 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
         initPos.x(), initPos.y(), initPos.z(),
         initRot.x(), initRot.y(), initRot.z(), initRot.w(),
         bpx, bpy, bpz, brx, bry, brz, brw,
-        rb.name});
+        false, rb.name});
 }
 
 void PhysicsWorld::addJoint(const PmxJoint& jt)
@@ -503,7 +552,7 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
             if (k > 0) {
                 sc->enableSpring(i, true);
                 sc->setStiffness(i, k);
-                sc->setDamping(i, 0.1f);
+                sc->setDamping(i, 0.02f);
             }
         }
 
@@ -602,6 +651,8 @@ void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>
     }
 
     mWorld->stepSimulation(std::min(deltaTime, kMaxTimestep), kSubsteps, kFixedTimestep);
+
+    debugTrackCloth();
 }
 
 void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) const
@@ -636,4 +687,22 @@ void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) co
         m[2]=2*(r.x()*r.z()-r.y()*r.w());  m[6]=2*(r.y()*r.z()+r.x()*r.w());  m[10]=1-2*(r.x()*r.x()+r.y()*r.y()); m[14]=tz;
         m[3]=0; m[7]=0; m[11]=0; m[15]=1;
     }
+}
+
+void PhysicsWorld::debugTrackCloth() const
+{
+    static int fc = 0;
+    if (fc % 60 == 0) {
+        for (const auto& bb : mBodies) {
+            if (!bb.clothLike || !bb.body) continue;
+            btTransform t = bb.body->getCenterOfMassTransform();
+            btVector3 p = t.getOrigin(); btQuaternion r = t.getRotation();
+            float Y = p.y() / mModelScale + mMinY;
+            float initY = bb.initPosY / mModelScale + mMinY;
+            float pitch = atan2f(2*(r.w()*r.x()+r.y()*r.z()), 1-2*(r.x()*r.x()+r.y()*r.y()));
+            printf("F%4d [%d]%s Y=%.4f(init=%.4f dY=%+.4f) pitch=%.2f\n",
+                fc, bb.rigidBodyIndex, bb.name.c_str(), Y, initY, Y-initY, pitch);
+        }
+    }
+    fc++;
 }
