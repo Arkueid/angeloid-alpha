@@ -114,9 +114,9 @@ mmd-demo/
 Master wants to know how the program works... I will explain.
 
 - **GPU skinning**: Bone matrices packed into RGBA32F texture, retrieved via texelFetch in shader. Supports up to 1024 bones.
-- **Bullet physics**: Rigid bodies and joints from the model are created automatically. Static parts follow bones, dynamic parts respond to gravity. The current results are not yet perfect... I apologize.
-- **Spring compensation**: Locked joints get k=2000 strong springs to counter gravity. Tight-limit joints use k=500 or k=100.
-- **Constraint frame fix**: Bullet 3.x constraint behavior differs from version 2.75 used by MMD. We modified the `D6_USE_FRAME_OFFSET` macro to restore compatibility.
+- **Bullet physics**: Uses `btGeneric6DofSpringConstraint` (matching MMD's Bullet 2.75). Capsule shape min-radius clamp prevents degenerate shapes. Static bodies follow bones, dynamic bodies respond to gravity and constraints.
+- **Spring compensation**: Locked joints get k=10000 strong springs to counter gravity. Tight-limit joints use k=2000 or k=500.
+- **Bone feedback**: Mode 0 bodies follow bones (kinematic), Mode 1 fully dynamic, Mode 2 with delta-time-scaled corrective forces.
 - **VMD animation**: Bezier interpolation + quaternion SLERP. Multiple VMD layers blended with 0.5 coefficient SLERP.
 - **Morph system**: Supports Group/Vertex/UV/Material/Bone types. Material morph with index=-1 applies to all materials.
 - **Text encoding**: UTF-16LE ↔ UTF-8 in pure C++. CP932 via Windows MultiByteToWideChar.

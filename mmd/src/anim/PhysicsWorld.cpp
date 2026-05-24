@@ -2,6 +2,7 @@
 #include "anim/BoneSkinning.h"
 
 #include <btBulletDynamicsCommon.h>
+#include <BulletDynamics/ConstraintSolver/btGeneric6DofSpringConstraint.h>
 
 #include <algorithm>
 #include <cmath>
@@ -465,9 +466,9 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
     }
     }
 
-    // Types 0, 1, and default use btGeneric6DofSpring2Constraint
+    // Types 0, 1, and default use btGeneric6DofSpringConstraint
     if (!c && (jt.joint_type == 0 || jt.joint_type == 1 || jt.joint_type < 0 || jt.joint_type > 5)) {
-        auto* sc = new btGeneric6DofSpring2Constraint(*a, *b, invA, invB);
+        auto* sc = new btGeneric6DofSpringConstraint(*a, *b, invA, invB, true);
 
         sc->setLinearLowerLimit(btVector3(
             jt.translation_limit_min.x * s, jt.translation_limit_min.y * s, jt.translation_limit_min.z * s));
@@ -496,17 +497,17 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
             float range = fabsf(hi[i] - lo[i]);
             if (jt.joint_type == 0 && st[i] != 0) continue;
             float k = 0;
-            if (range < 0.001f)      k = 2000.0f;
-            else if (range < 0.2f)   k = 500.0f;
-            else if (range < 0.5f)   k = 100.0f;
+            if (range < 0.001f)      k = 10000.0f;
+            else if (range < 0.2f)   k = 2000.0f;
+            else if (range < 0.5f)   k = 500.0f;
             if (k > 0) {
                 sc->enableSpring(i, true);
                 sc->setStiffness(i, k);
-                sc->setDamping(i, 2.0f * sqrtf(k));
             }
         }
 
-            c = sc;
+        sc->setEquilibriumPoint();
+        c = sc;
     }
 
     if (!c) return;
@@ -607,7 +608,6 @@ void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) co
     for (const auto& bb : mBodies) {
         if (bb.boneIndex < 0 || bb.boneIndex >= (int)out.size()) continue;
         if (!bb.body->isActive()) continue;
-
         btTransform t = bb.body->getCenterOfMassTransform();
         btVector3 bodyPos = t.getOrigin();
         btQuaternion bodyRot = t.getRotation();

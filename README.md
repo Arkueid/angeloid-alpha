@@ -114,9 +114,9 @@ mmd-demo/
 主人想知道程序是怎么运作的……我来说明。
 
 - **GPU 骨骼蒙皮**：Bone 矩阵打包为 RGBA32F 纹理，shader 中用 texelFetch 还原。最多支持 1024 根骨骼。
-- **Bullet 物理**：主人模型里的刚体和关节会自动创建。静态部位跟随骨骼，动态部位受重力影响。目前的效果还不够完美……我很抱歉。
-- **弹簧补偿**：锁死的关节会加 k=2000 的强力弹簧，防止重力下垂。限位紧密的关节用 k=500 或 k=100。
-- **约束帧修正**：Bullet 3.x 的约束行为与 MMD 使用的 2.75 版本不同。我们修改了 `D6_USE_FRAME_OFFSET` 宏来修复。
+- **Bullet 物理**：使用 `btGeneric6DofSpringConstraint`（匹配 MMD 的 Bullet 2.75）。胶囊体小半径 clamp 防止退化。静态刚体跟随骨骼，动态刚体受重力和约束影响。
+- **弹簧补偿**：锁死的关节加 k=10000 强力弹簧，限位紧密用 k=2000 或 k=500。
+- **骨骼反馈**：Mode 0 刚体跟随骨骼（kinematic），Mode 1 全动态，Mode 2 带 delta-time 缩放修正力。
 - **VMD 动画**：贝塞尔插值 + 四元数 SLERP。多层 VMD 用 0.5 混合系数 SLERP。
 - **Morph 系统**：支持 Group/Vertex/UV/Material/Bone 五种类型。Material morph 的 index=-1 会应用到所有材质。
 - **纹理编码**：UTF-16LE ↔ UTF-8 纯 C++ 实现。CP932 调 Windows MultiByteToWideChar。
