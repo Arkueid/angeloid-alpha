@@ -243,6 +243,75 @@ std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(
     return result;
 }
 
+std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(
+    const PmxModel& model,
+    const std::unordered_map<std::string, VpdPose>& vpdPoses,
+    const std::unordered_map<std::string,
+        std::pair<std::array<float,3>, std::array<float,4>>>& vmdTransforms)
+{
+    int n = model.boneCount();
+    std::vector<Mat4> result(n, identityMat());
+
+    for (int i = 0; i < n; ++i) {
+        const auto& bone = model.bones[i];
+        Mat4 local = identityMat();
+
+        if (bone.parent_index >= 0) {
+            const auto& parent = model.bones[bone.parent_index];
+            local[12] = bone.position.x - parent.position.x;
+            local[13] = bone.position.y - parent.position.y;
+            local[14] = bone.position.z - parent.position.z;
+        } else {
+            local[12] = bone.position.x;
+            local[13] = bone.position.y;
+            local[14] = bone.position.z;
+        }
+
+        // Apply VPD pose
+        auto vpdIt = vpdPoses.find(bone.name);
+        if (vpdIt != vpdPoses.end()) {
+            float rot[9];
+            vpdIt->second.toMatrix(rot);
+            local[0] = rot[0]; local[4] = rot[1]; local[8]  = rot[2];
+            local[1] = rot[3]; local[5] = rot[4]; local[9]  = rot[5];
+            local[2] = rot[6]; local[6] = rot[7]; local[10] = rot[8];
+            local[12] += vpdIt->second.tx;
+            local[13] += vpdIt->second.ty;
+            local[14] += vpdIt->second.tz;
+        }
+
+        // Apply VMD — replaces local rotation, adds position offset
+        auto vmdIt = vmdTransforms.find(bone.name);
+        if (vmdIt != vmdTransforms.end()) {
+            const auto& pos = vmdIt->second.first;
+            const auto& rot = vmdIt->second.second;
+            float qx=rot[0], qy=rot[1], qz=rot[2], qw=rot[3];
+            float x2=qx+qx, y2=qy+qy, z2=qz+qz;
+            float xx=qx*x2, xy=qx*y2, xz=qx*z2;
+            float yy=qy*y2, yz=qy*z2, zz=qz*z2;
+            float wx=qw*x2, wy=qw*y2, wz=qw*z2;
+            float r[9] = {
+                1.0f-(yy+zz), xy+wz,       xz-wy,
+                xy-wz,       1.0f-(xx+zz), yz+wx,
+                xz+wy,       yz-wx,       1.0f-(xx+yy)
+            };
+            // VMD rotation REPLACES local rotation
+            local[0] = r[0]; local[4] = r[3]; local[8]  = r[6];
+            local[1] = r[1]; local[5] = r[4]; local[9]  = r[7];
+            local[2] = r[2]; local[6] = r[5]; local[10] = r[8];
+            local[12] += pos[0];
+            local[13] += pos[1];
+            local[14] += pos[2];
+        }
+
+        if (bone.parent_index >= 0)
+            result[i] = mulMat4(result[bone.parent_index], local);
+        else
+            result[i] = local;
+    }
+    return result;
+}
+
 void BoneSkinning::recomputeAfterPhysicsBones(
     const PmxModel& model,
     const std::unordered_map<std::string, VpdPose>& vpdPoses,

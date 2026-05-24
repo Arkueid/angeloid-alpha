@@ -420,25 +420,24 @@ int main(int argc, char* argv[])
                     vmdTransforms[bone.name] = {pos, rot};
             }
             if (!vmdTransforms.empty())
-                renderer.updateBoneTexture(model, vpdPoses, vmdTransforms);
-            // Apply VMD morph weights (batch)
+                poseWorld = BoneSkinning::computePoseWorldMatrices(model, vpdPoses, vmdTransforms);
+            // Apply VMD morph weights
             std::unordered_map<std::string, float> vmdMorphs;
             for (const auto& m : model.morphs) {
                 float w = vmdMixer->getMorphWeight(m.name);
                 if (w != 0) vmdMorphs[m.name] = w;
             }
-            if (!vmdMorphs.empty())
-                morphCtl.setMorphWeights(vmdMorphs);
-        } else {
-            if (physicsWorld.enabled) {
-                physicsWorld.updateMode0Bodies(poseWorld);
-                physicsWorld.step(dt, poseWorld);
-                physicsWorld.getBoneTransforms(poseWorld);
-                BoneSkinning::recomputeAfterPhysicsBones(model, vpdPoses, poseWorld);
-            }
-            auto& boneMorphs = morphCtl.boneMorphs();
-            renderer.updateBoneTexture(model, poseWorld, boneMorphs.empty() ? nullptr : &boneMorphs);
+            if (!vmdMorphs.empty()) morphCtl.setMorphWeights(vmdMorphs);
         }
+
+        if (physicsWorld.enabled) {
+            physicsWorld.updateMode0Bodies(poseWorld);
+            physicsWorld.step(dt, poseWorld);
+            physicsWorld.getBoneTransforms(poseWorld);
+            BoneSkinning::recomputeAfterPhysicsBones(model, vpdPoses, poseWorld);
+        }
+        auto& boneMorphs = morphCtl.boneMorphs();
+        renderer.updateBoneTexture(model, poseWorld, boneMorphs.empty() ? nullptr : &boneMorphs);
     };
 
     // Render

@@ -11,7 +11,7 @@
 namespace {
     constexpr float kGravityY = -9.8f;
     constexpr int   kSolverIterations = 10;
-    constexpr int   kSubsteps = 6;
+    constexpr int   kSubsteps = 10;
     constexpr float kFixedTimestep = 1.0f / 240.0f;
     constexpr float kMaxTimestep = 1.0f / 30.0f;
     constexpr float kSleepLinearThreshold = 0.08f;
@@ -503,6 +503,7 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
             if (k > 0) {
                 sc->enableSpring(i, true);
                 sc->setStiffness(i, k);
+                sc->setDamping(i, 0.1f);
             }
         }
 

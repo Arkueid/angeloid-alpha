@@ -38,6 +38,11 @@ struct BoneSkinning {
     static std::vector<std::array<float, 16>> computePoseWorldMatrices(
         const PmxModel& model,
         const std::unordered_map<std::string, VpdPose>& vpdPoses);
+    static std::vector<std::array<float, 16>> computePoseWorldMatrices(
+        const PmxModel& model,
+        const std::unordered_map<std::string, VpdPose>& vpdPoses,
+        const std::unordered_map<std::string,
+            std::pair<std::array<float,3>, std::array<float,4>>>& vmdTransforms);
 
     static std::vector<float> computeSkinningMatrices(
         const PmxModel& model, const Vec3& center, float minY, float scale);
