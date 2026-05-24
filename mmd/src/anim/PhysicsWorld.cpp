@@ -76,6 +76,50 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
     }
     std::cout << "  Dynamic mass bodies: " << dynMassCount << std::endl;
 
+    // --- Capsule-shaped bodies ---
+    std::cout << "\nCapsule bodies (shape_type=2):" << std::endl;
+    for (const auto& rb : model.rigidbodies) {
+        if (rb.shape_type != RIGID_SHAPE_CAPSULE) continue;
+        const char* bn = (rb.bone_index >= 0 && rb.bone_index < model.boneCount())
+            ? model.bones[rb.bone_index].name.c_str() : "-";
+        printf("  [%d] %-28s bone=%-20s mode=%d mass=%.3f size=(%.4f,%.4f,%.4f)\n",
+            rb.index, rb.name.c_str(), bn, rb.mode, rb.mass,
+            rb.shape_size.x, rb.shape_size.y, rb.shape_size.z);
+    }
+
+    // --- Debug: bodies with exactly 1 joint (single-body chains) ---
+    {
+        std::vector<int> jointCount(model.rigidbodies.size(), 0);
+        for (const auto& jt : model.joints) {
+            if (jt.rigidbody_index_a >= 0 && jt.rigidbody_index_a < (int)model.rigidbodies.size())
+                jointCount[jt.rigidbody_index_a]++;
+            if (jt.rigidbody_index_b >= 0 && jt.rigidbody_index_b < (int)model.rigidbodies.size())
+                jointCount[jt.rigidbody_index_b]++;
+        }
+        std::cout << "\n=== Single-joint bodies (degree=1) ===" << std::endl;
+        std::cout << "idx name                         mode mass  bone                      joint limits(TL/TH) springs(kT/kR)" << std::endl;
+        for (size_t i = 0; i < model.rigidbodies.size(); ++i) {
+            if (jointCount[i] != 1) continue;
+            const auto& rb = model.rigidbodies[i];
+            if (rb.mode != 1) continue; // only dynamic bodies
+            // Find the joint
+            const PmxJoint* jt = nullptr;
+            for (const auto& j : model.joints) {
+                if (j.rigidbody_index_a == (int)i || j.rigidbody_index_b == (int)i) { jt = &j; break; }
+            }
+            if (!jt) continue;
+            const char* boneName = (rb.bone_index >= 0 && rb.bone_index < model.boneCount())
+                ? model.bones[rb.bone_index].name.c_str() : "-";
+            printf("%3zu %-28s %4d %5.3f %-25s T=(%+.3f,%+.3f,%+.3f)/(%+.3f,%+.3f,%+.3f) kT=(%.0f,%.0f,%.0f) kR=(%.0f,%.0f,%.0f)\n",
+                i, rb.name.c_str(), rb.mode, rb.mass, boneName,
+                jt->translation_limit_min.x, jt->translation_limit_min.y, jt->translation_limit_min.z,
+                jt->translation_limit_max.x, jt->translation_limit_max.y, jt->translation_limit_max.z,
+                jt->spring_constant_translation.x, jt->spring_constant_translation.y, jt->spring_constant_translation.z,
+                jt->spring_constant_rotation.x, jt->spring_constant_rotation.y, jt->spring_constant_rotation.z);
+        }
+        std::cout << "=== Single-joint bodies end ===" << std::endl;
+    }
+
     for (const auto& jt : model.joints) addJoint(jt);
 
     // Dump joints for hair-chain bodies (bones with 后发, 马尾, 侧发, 前发, chain in name)
@@ -244,8 +288,13 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
         shape = new btSphereShape(rb.shape_size.x * 0.5f * s);
     else if (rb.shape_type == RIGID_SHAPE_BOX)
         shape = new btBoxShape(btVector3(rb.shape_size.x*0.5f*s, rb.shape_size.y*0.5f*s, rb.shape_size.z*0.5f*s));
-    else if (rb.shape_type == RIGID_SHAPE_CAPSULE)
-        shape = new btCapsuleShape(rb.shape_size.x * 0.5f * s, rb.shape_size.y * 0.5f * s);
+    else if (rb.shape_type == RIGID_SHAPE_CAPSULE) {
+        float capR = rb.shape_size.x * 0.5f * s;
+        float capH = rb.shape_size.y * 0.5f * s;
+        float minR = 0.01f; // clamp degenerate capsule radius (翘毛1 has r=0.00002 in Bullet space)
+        if (capR < minR) { capR = minR; }
+        shape = new btCapsuleShape(capR, capH);
+    }
     else
         shape = new btSphereShape(rb.shape_size.x * 0.5f * s);
     mShapes.emplace_back(shape);
@@ -456,7 +505,8 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
                 sc->setDamping(i, 2.0f * sqrtf(k));
             }
         }
-        c = sc;
+
+            c = sc;
     }
 
     if (!c) return;
@@ -520,6 +570,8 @@ void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>
     if (!enabled) return;
 
     // Mode 2: pull toward bone-animated transform
+    // Scale forces by deltaTime so behavior is frame-rate independent
+    float dtScale = deltaTime * 60.0f; // = 1.0 at 60fps
     for (auto& bb : mBodies) {
         if (bb.mode != 2 || bb.boneIndex < 0 || bb.boneIndex >= (int)poseWorld.size()) continue;
         if (bb.boneIndex >= (int)mBoneBindWorld.size()) continue;
@@ -533,7 +585,7 @@ void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>
         float errLen = posErr.length();
         if (errLen > 0.005f) {
             bb.body->activate(true);
-            bb.body->applyCentralForce(posErr * 50.0f - bb.body->getLinearVelocity() * 15.0f);
+            bb.body->applyCentralForce((posErr * 50.0f - bb.body->getLinearVelocity() * 15.0f) * dtScale);
         }
         btQuaternion curRot = cur.getRotation();
         btQuaternion diff = curRot.inverse() * tgtRot;
@@ -543,7 +595,7 @@ void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>
             bb.body->activate(true);
             float angle = 2.0f * atan2f(axLen, diff.w());
             btVector3 axis(diff.x()/axLen, diff.y()/axLen, diff.z()/axLen);
-            bb.body->setAngularVelocity(bb.body->getAngularVelocity() * 0.85f + axis * angle * 10.0f);
+            bb.body->setAngularVelocity(bb.body->getAngularVelocity() * powf(0.85f, dtScale) + axis * angle * 10.0f * dtScale);
         }
     }
 

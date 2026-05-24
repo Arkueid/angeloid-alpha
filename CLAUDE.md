@@ -17,14 +17,16 @@ cd mmd && cmake -B ../build -S . && cmake --build ../build --config Release
 - `resources/` — shared assets (models, textures, shaders, VMD, VPD)
 
 ## Physics (Bullet)
-- Bullet Physics as git submodule at `mmd/thirdparty/bullet`
-- `btGeneric6DofSpring2Constraint` with `D6_USE_FRAME_OFFSET=false` in our Bullet fork (Bullet 2.75 compat — see babylon-mmd `disableOffsetForConstraintFrame`)
+- Bullet Physics as git submodule at `mmd/thirdparty/bullet` (version 3.27)
+- `btGeneric6DofSpring2Constraint` for PMX joint types 0, 1, and default
+  - PMX springs applied as-is (auto-limiting keeps them numerically stable)
+  - Tiered spring fallback for tight translation DOFs (locked→k=2000, tight→k=500, narrow→k=100) with critical damping
 - Mode 0 bodies: kinematic (`CF_KINEMATIC_OBJECT`), follow bones via `updateMode0Bodies()`
-- Mode 1/2 bodies: dynamic, PMX damping as-is
-- Tiered spring fallback for tight translation DOFs (locked→k=2000, tight→k=500, narrow→k=100) with critical damping
+- Mode 1 bodies: fully dynamic, PMX damping as-is
+- Mode 2 bodies: dynamic with delta-time-scaled corrective forces pulling toward bone target
+- Solver: 20 iterations, ERP=0.6, CFM=0.0 (tighter constraint enforcement for light-body chains)
 - Collision groups wired via `addRigidBody(group, mask)`
 - `PhysicsWorld::debugDump()` (F key) prints MMD-space body positions and displacements
-- Known issues: constraint enforcement imperfect, skirt/chest sagging partially mitigated by springs
 
 ## Code conventions
 - File naming: PascalCase (`PmxModel.h`, `BoneSkinning.cpp`)
