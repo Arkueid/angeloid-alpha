@@ -179,6 +179,11 @@ int main(int argc, char* argv[])
     renderer.useSkinning = true;
     physicsDebug.useBoneMatrices = false;
 
+    // Persistent poseWorld — physics writes to it and it persists between frames
+    auto poseWorld = BoneSkinning::computePoseWorldMatrices(model, vpdPoses);
+    physicsWorld.resetPhysics(poseWorld);
+    physicsWorld.getBoneTransforms(poseWorld);
+
     MorphController morphCtl;
     morphCtl.setModel(model, renderer.morphVbo(), renderer.uvMorphVbo(), renderer.modelScale());
     bool showMorph = true;
@@ -425,19 +430,15 @@ int main(int argc, char* argv[])
             if (!vmdMorphs.empty())
                 morphCtl.setMorphWeights(vmdMorphs);
         } else {
+            if (physicsWorld.enabled) {
+                physicsWorld.updateMode0Bodies(poseWorld);
+                physicsWorld.step(dt, poseWorld);
+                physicsWorld.getBoneTransforms(poseWorld);
+                BoneSkinning::recomputeAfterPhysicsBones(model, vpdPoses, poseWorld);
+            }
             auto& boneMorphs = morphCtl.boneMorphs();
-            renderer.updateBoneTexture(model, vpdPoses, {}, boneMorphs.empty() ? nullptr : &boneMorphs);
+            renderer.updateBoneTexture(model, poseWorld, boneMorphs.empty() ? nullptr : &boneMorphs);
         }
-
-        // Update mode 0 rigid bodies from bone animation, then step physics
-        if (physicsWorld.enabled) {
-            auto poseWorld = BoneSkinning::computePoseWorldMatrices(model, vpdPoses);
-            physicsWorld.updateMode0Bodies(poseWorld);
-            physicsWorld.step(dt, poseWorld);
-            physicsWorld.getBoneTransforms(poseWorld);
-            BoneSkinning::recomputeAfterPhysicsBones(model, vpdPoses, poseWorld);
-        }
-        // (VMD bone→rigid body not yet implemented; VPD case works)
     };
 
     // Render

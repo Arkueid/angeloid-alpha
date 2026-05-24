@@ -22,8 +22,12 @@ struct BulletBody {
     int boneIndex = -1;
     int rigidBodyIndex = -1;
     int mode = 0;
+    // Body initial COM (Bullet space)
     float initPosX = 0, initPosY = 0, initPosZ = 0;
     float initRotX = 0, initRotY = 0, initRotZ = 0, initRotW = 1;
+    // Bone bind world transform (Bullet space) — for delta-based bone feedback
+    float bonePosX = 0, bonePosY = 0, bonePosZ = 0;
+    float boneRotX = 0, boneRotY = 0, boneRotZ = 0, boneRotW = 1;
     std::string name;
 };
 
@@ -33,6 +37,7 @@ public:
     ~PhysicsWorld();
 
     void build(const PmxModel& model, float modelScale);
+    void resetPhysics(const std::vector<std::array<float, 16>>& poseWorld);
     void step(float deltaTime, const std::vector<std::array<float, 16>>& poseWorld);
     void getBoneTransforms(std::vector<std::array<float, 16>>& out) const;
 

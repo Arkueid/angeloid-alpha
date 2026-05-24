@@ -309,6 +309,34 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
 std::vector<float> BoneSkinning::computeSkinningMatrices(
     const PmxModel& model,
     const Vec3& center, float minY, float scale,
+    const std::vector<std::array<float, 16>>& poseWorld)
+{
+    int n = model.boneCount();
+    auto bindWorld = BoneSkinning::computeBindWorldMatrices(model);
+
+    std::vector<float> result(n * 16);
+    float offScaledX = scale * center.x;
+    float offScaledY = scale * minY;
+    float offScaledZ = scale * center.z;
+
+    for (int i = 0; i < n; ++i) {
+        auto invBind = inverseMat4(bindWorld[i]);
+        auto M = mulMat4(poseWorld[i], invBind);
+
+        for (int row = 0; row < 3; ++row) {
+            float t = M[12 + row];
+            float rotOff = M[row] * offScaledX + M[4 + row] * offScaledY + M[8 + row] * offScaledZ;
+            float offsetI = (row == 0) ? offScaledX : (row == 1) ? offScaledY : offScaledZ;
+            M[12 + row] = t * scale + rotOff - offsetI;
+        }
+        std::memcpy(&result[i * 16], M.data(), 16 * sizeof(float));
+    }
+    return result;
+}
+
+std::vector<float> BoneSkinning::computeSkinningMatrices(
+    const PmxModel& model,
+    const Vec3& center, float minY, float scale,
     const std::unordered_map<std::string, VpdPose>& vpdPoses,
     const std::unordered_map<std::string, VmdBoneTransform>& vmdTransforms)
 {

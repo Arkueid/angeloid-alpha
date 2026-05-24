@@ -78,6 +78,10 @@ public:
                       const std::vector<std::array<float, 16>>& physicsMats);
 
     void updateBoneTexture(const PmxModel& model,
+                           const std::vector<std::array<float, 16>>& poseWorld,
+                           const std::unordered_map<int, BoneMorphTransform>* boneMorphs = nullptr);
+
+    void updateBoneTexture(const PmxModel& model,
                            const std::unordered_map<std::string, VpdPose>& vpdPoses,
                            const std::unordered_map<std::string,
                                std::pair<std::array<float,3>, std::array<float,4>>>& vmdTransforms,

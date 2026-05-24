@@ -77,6 +77,127 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
     std::cout << "  Dynamic mass bodies: " << dynMassCount << std::endl;
 
     for (const auto& jt : model.joints) addJoint(jt);
+
+    // Dump joints for hair-chain bodies (bones with 后发, 马尾, 侧发, 前发, chain in name)
+    std::cout << "\n=== Hair-chain joint analysis ===" << std::endl;
+    for (const auto& jt : model.joints) {
+        if (jt.rigidbody_index_a < 0 || jt.rigidbody_index_b < 0) continue;
+        if (jt.rigidbody_index_a >= (int)model.rigidbodies.size()) continue;
+        if (jt.rigidbody_index_b >= (int)model.rigidbodies.size()) continue;
+        const auto& ra = model.rigidbodies[jt.rigidbody_index_a];
+        const auto& rb = model.rigidbodies[jt.rigidbody_index_b];
+        // Check if either body's bone name contains hair-related keywords
+        auto checkBone = [&](int rbIdx) -> bool {
+            if (rbIdx < 0 || rbIdx >= (int)model.rigidbodies.size()) return false;
+            int bi = model.rigidbodies[rbIdx].bone_index;
+            if (bi < 0 || bi >= model.boneCount()) return false;
+            const auto& nm = model.bones[bi].name;
+            return nm.find("后发") != std::string::npos
+                || nm.find("马尾") != std::string::npos
+                || nm.find("侧发") != std::string::npos
+                || nm.find("前发") != std::string::npos
+                || nm.find("chain") != std::string::npos;
+        };
+        if (!checkBone(jt.rigidbody_index_a) && !checkBone(jt.rigidbody_index_b)) continue;
+        const auto& ba = model.bones[ra.bone_index >= 0 ? ra.bone_index : 0];
+        const auto& bb = model.bones[rb.bone_index >= 0 ? rb.bone_index : 0];
+        printf("  JT[%d]: %s(%d)<->%s(%d) type=%d TL=(%.3f,%.3f) TH=(%.3f,%.3f) RL=(%.3f,%.3f) RH=(%.3f,%.3f) "
+               "kLin=(%.0f,%.0f,%.0f) kRot=(%.0f,%.0f,%.0f)\n",
+               jt.index,
+               ba.name.c_str(), jt.rigidbody_index_a,
+               bb.name.c_str(), jt.rigidbody_index_b,
+               jt.joint_type,
+               jt.translation_limit_min.x, jt.translation_limit_max.x,
+               jt.translation_limit_min.y, jt.translation_limit_max.y,
+               jt.rotation_limit_min.x, jt.rotation_limit_max.x,
+               jt.rotation_limit_min.y, jt.rotation_limit_max.y,
+               jt.spring_constant_translation.x, jt.spring_constant_translation.y, jt.spring_constant_translation.z,
+               jt.spring_constant_rotation.x, jt.spring_constant_rotation.y, jt.spring_constant_rotation.z);
+    }
+    std::cout << "=== Hair joint analysis end ===" << std::endl;
+
+    // Dump hair bone flags and rigid body links
+    std::cout << "\n=== Hair bone analysis ===" << std::endl;
+    std::cout << "bodyIdx bodyName                  boneIdx boneName                      mode mass afterPhys parentIdx" << std::endl;
+    for (const auto& rb : model.rigidbodies) {
+        if (rb.bone_index < 0 || rb.bone_index >= model.boneCount()) continue;
+        const auto& bn = model.bones[rb.bone_index];
+        // Filter: hair-related bones
+        bool isHair = bn.name.find("后发") != std::string::npos
+                   || bn.name.find("侧发") != std::string::npos
+                   || bn.name.find("前发") != std::string::npos
+                   || bn.name == "chain"
+                   || bn.name == "chain root"
+                   || bn.name == "halo"
+                   || bn.name.find("small wing") != std::string::npos;
+        if (!isHair) continue;
+        printf("%7d %-25s %7d %-28s %4d %5.2f %9s %9d\n",
+            rb.index, rb.name.c_str(),
+            rb.bone_index, bn.name.c_str(),
+            rb.mode, rb.mass,
+            bn.hasFlag(BONEFLAG_IS_AFTER_PHYSICS_DEFORM) ? "AFTER" : "-",
+            bn.parent_index);
+    }
+    std::cout << "=== Hair bone analysis end ===" << std::endl;
+
+    // Check which small hair bodies have joints
+    auto bodyHasJoint = [&](int rbIdx) {
+        for (const auto& jt : model.joints) {
+            if (jt.rigidbody_index_a == rbIdx || jt.rigidbody_index_b == rbIdx) return true;
+        }
+        return false;
+    };
+    std::cout << "\n=== Floating body check (no joints) ===" << std::endl;
+    for (const auto& rb : model.rigidbodies) {
+        if (rb.bone_index < 0 || rb.bone_index >= model.boneCount()) continue;
+        const auto& bn = model.bones[rb.bone_index];
+        bool isSmall = bn.name.find("后发") != std::string::npos
+                    || bn.name.find("侧发") != std::string::npos
+                    || bn.name.find("前发") != std::string::npos
+                    || bn.name == "chain"
+                    || bn.name == "halo"
+                    || bn.name.find("small wing") != std::string::npos;
+        if (!isSmall) continue;
+        if (!bodyHasJoint(rb.index)) {
+            printf("  NO JOINT: body[%d] %s mode=%d mass=%.2f bone=%s\n",
+                rb.index, rb.name.c_str(), rb.mode, rb.mass, bn.name.c_str());
+        }
+    }
+    std::cout << "=== Floating check end ===" << std::endl;
+}
+
+void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWorld)
+{
+    // Set all dynamic bodies to kinematic, align them to bone targets,
+    // run one step, then switch back to dynamic. Prevents initial overlap explosion.
+    for (auto& bb : mBodies) {
+        if (bb.mode == 0 || bb.boneIndex < 0 || bb.boneIndex >= (int)poseWorld.size()) continue;
+        if (bb.boneIndex >= (int)mBoneBindWorld.size()) continue;
+
+        // Make kinematic and align to bone
+        bb.body->setCollisionFlags(bb.body->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
+        btVector3 tgtPos; btQuaternion tgtRot;
+        computeBoneTarget(bb, poseWorld, tgtPos, tgtRot);
+        btTransform cur; cur.setIdentity();
+        cur.setOrigin(tgtPos); cur.setRotation(tgtRot);
+        bb.body->getMotionState()->setWorldTransform(cur);
+        bb.body->setCenterOfMassTransform(cur);
+    }
+
+    mWorld->stepSimulation(1.0f / 60.0f, 2, 1.0f / 120.0f);
+
+    // Clear forces and switch back to dynamic
+    for (auto& bb : mBodies) {
+        if (bb.mode == 0) continue;
+        bb.body->setCollisionFlags(bb.body->getCollisionFlags() & ~btCollisionObject::CF_KINEMATIC_OBJECT);
+        bb.body->clearForces();
+        bb.body->setLinearVelocity(btVector3(0, 0, 0));
+        bb.body->setAngularVelocity(btVector3(0, 0, 0));
+        // Sync motion state to current body transform
+        bb.body->getMotionState()->setWorldTransform(bb.body->getCenterOfMassTransform());
+    }
+
+    std::cout << "Physics: reset complete, bodies aligned" << std::endl;
 }
 
 void PhysicsWorld::debugDump() const
@@ -164,9 +285,23 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
         ~rb.no_collision_group & 0xFFFF);
     btQuaternion initRot = t.getRotation();
     btVector3 initPos = t.getOrigin();
+
+    // Extract bone bind world pos/rot from mBoneBindWorld (Bullet space)
+    float bpx = 0, bpy = 0, bpz = 0, brx = 0, bry = 0, brz = 0, brw = 1;
+    if (rb.bone_index >= 0 && rb.bone_index < (int)mBoneBindWorld.size()) {
+        const auto& bw = mBoneBindWorld[rb.bone_index];
+        bpx = (bw[12] - mCenter.x) * s;
+        bpy = (bw[13] - mMinY) * s;
+        bpz = (bw[14] - mCenter.z) * s;
+        btMatrix3x3 bwBasis(bw[0], bw[4], bw[8], bw[1], bw[5], bw[9], bw[2], bw[6], bw[10]);
+        btQuaternion bwRot; bwBasis.getRotation(bwRot);
+        brx = bwRot.x(); bry = bwRot.y(); brz = bwRot.z(); brw = bwRot.w();
+    }
+
     mBodies.push_back({body, rb.bone_index, rb.index, rb.mode,
         initPos.x(), initPos.y(), initPos.z(),
         initRot.x(), initRot.y(), initRot.z(), initRot.w(),
+        bpx, bpy, bpz, brx, bry, brz, brw,
         rb.name});
 }
 
@@ -420,10 +555,29 @@ void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) co
     for (const auto& bb : mBodies) {
         if (bb.boneIndex < 0 || bb.boneIndex >= (int)out.size()) continue;
         if (!bb.body->isActive()) continue;
+
         btTransform t = bb.body->getCenterOfMassTransform();
-        btVector3 p = t.getOrigin(); btQuaternion r = t.getRotation();
-        float tx = p.x()/mModelScale + mCenter.x, ty = p.y()/mModelScale + mMinY, tz = p.z()/mModelScale + mCenter.z;
+        btVector3 bodyPos = t.getOrigin();
+        btQuaternion bodyRot = t.getRotation();
+
+        // Body displacement from its initial pose
+        btQuaternion bodyInitRot(bb.initRotX, bb.initRotY, bb.initRotZ, bb.initRotW);
+        btQuaternion bodyDeltaRot = bodyRot * bodyInitRot.inverse();
+        btVector3 bodyInitPos(bb.initPosX, bb.initPosY, bb.initPosZ);
+        btVector3 disp = bodyPos - bodyInitPos;
+
+        // Apply displacement to bone's bind-world position
+        btVector3 boneInitPos(bb.bonePosX, bb.bonePosY, bb.bonePosZ);
+        btQuaternion boneInitRot(bb.boneRotX, bb.boneRotY, bb.boneRotZ, bb.boneRotW);
+        btVector3 boneNewPos = boneInitPos + disp;
+        btQuaternion boneNewRot = bodyDeltaRot * boneInitRot;
+
+        float s = mModelScale;
+        float tx = boneNewPos.x()/s + mCenter.x;
+        float ty = boneNewPos.y()/s + mMinY;
+        float tz = boneNewPos.z()/s + mCenter.z;
         auto& m = out[bb.boneIndex];
+        const btQuaternion& r = boneNewRot;
         m[0]=1-2*(r.y()*r.y()+r.z()*r.z()); m[4]=2*(r.x()*r.y()-r.z()*r.w()); m[8]=2*(r.x()*r.z()+r.y()*r.w()); m[12]=tx;
         m[1]=2*(r.x()*r.y()+r.z()*r.w());  m[5]=1-2*(r.x()*r.x()+r.z()*r.z()); m[9]=2*(r.y()*r.z()-r.x()*r.w()); m[13]=ty;
         m[2]=2*(r.x()*r.z()-r.y()*r.w());  m[6]=2*(r.y()*r.z()+r.x()*r.w());  m[10]=1-2*(r.x()*r.x()+r.y()*r.y()); m[14]=tz;
