@@ -185,7 +185,7 @@ int main(int argc, char* argv[])
     physicsWorld.getBoneTransforms(poseWorld);
 
     MorphController morphCtl;
-    morphCtl.setModel(model, renderer.morphVbo(), renderer.uvMorphVbo(), renderer.modelScale());
+    morphCtl.setModel(model, renderer.morphVbo(), renderer.uvMorphVbo());
     bool showMorph = true;
     bool idleEnabled = true;
 

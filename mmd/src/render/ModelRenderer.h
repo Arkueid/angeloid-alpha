@@ -108,6 +108,7 @@ public:
     Gpu::VboWrapper* morphVbo() const { return mMorphVboW.get(); }
     Gpu::VboWrapper* uvMorphVbo() const { return mUvMorphVboW.get(); }
     float modelScale() const { return mScale; }
+    const float* modelMatrix() const { return mModelMat.data(); }
     void setMaterialOverride(int idx, const MatMorphOverride& o) { mMatOverride[idx] = o; }
     void clearMaterialOverrides() { mMatOverride.clear(); }
     const MatMorphOverride* getMaterialOverride(int idx) const {
@@ -149,10 +150,11 @@ private:
     std::vector<MaterialSphere> mMaterialSphere;
     std::vector<MaterialToon> mMaterialToon;
 
-    // Model bounds
+    // Model bounds & display transform
     Vec3 mCenter;
     float mMinY = 0;
     float mScale = 1;
+    std::array<float, 16> mModelMat = {1,0,0,0, 0,1,0,0, 0,0,-1,0, 0,0,0,1};
 
     // Bone skinning
     std::unique_ptr<Gpu::Texture> mBoneTexture;

@@ -44,18 +44,16 @@ struct BoneSkinning {
         const std::unordered_map<std::string,
             std::pair<std::array<float,3>, std::array<float,4>>>& vmdTransforms);
 
+    static std::vector<float> computeSkinningMatrices(const PmxModel& model);
     static std::vector<float> computeSkinningMatrices(
-        const PmxModel& model, const Vec3& center, float minY, float scale);
-    static std::vector<float> computeSkinningMatrices(
-        const PmxModel& model, const Vec3& center, float minY, float scale,
+        const PmxModel& model,
         const std::unordered_map<std::string, VpdPose>& vpdPoses);
     static std::vector<float> computeSkinningMatrices(
-        const PmxModel& model, const Vec3& center, float minY, float scale,
+        const PmxModel& model,
         const std::unordered_map<std::string, VpdPose>& vpdPoses,
         const std::unordered_map<std::string, VmdBoneTransform>& vmdTransforms);
-
     static std::vector<float> computeSkinningMatrices(
-        const PmxModel& model, const Vec3& center, float minY, float scale,
+        const PmxModel& model,
         const std::vector<std::array<float, 16>>& poseWorld);
 
     // Recompute bones with BONEFLAG_IS_AFTER_PHYSICS_DEFORM after physics step

@@ -151,38 +151,16 @@ std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(const PmxModel& model)
 }
 
 std::vector<float> BoneSkinning::computeSkinningMatrices(
-    const PmxModel& model,
-    const Vec3& center, float minY, float scale)
+    const PmxModel& model)
 {
     int n = model.boneCount();
     auto bindWorld = BoneSkinning::computeBindWorldMatrices(model);
     auto poseWorld = BoneSkinning::computePoseWorldMatrices(model);
 
     std::vector<float> result(n * 16);
-
-    float offsetX = center.x;
-    float offsetY = minY;
-    float offsetZ = center.z;
-    float offScaledX = scale * offsetX;
-    float offScaledY = scale * offsetY;
-    float offScaledZ = scale * offsetZ;
-
     for (int i = 0; i < n; ++i) {
         auto invBind = inverseMat4(bindWorld[i]);
         auto M = mulMat4(poseWorld[i], invBind);
-
-        // Apply model-space transform: t_new = t * scale + (R - I) * offset_scaled
-        // R[i][j] = M[j*4 + i] in column-major
-        for (int row = 0; row < 3; ++row) {
-            float t = M[12 + row];
-            // sum_j(R[i][j] * offset_scaled[j])
-            float rotOff = M[row] * offScaledX       // R[row][0] = M[0*4+row] = M[row]
-                         + M[4 + row] * offScaledY   // R[row][1] = M[4+row]
-                         + M[8 + row] * offScaledZ;  // R[row][2] = M[8+row]
-            float offsetI = (row == 0) ? offScaledX : (row == 1) ? offScaledY : offScaledZ;
-            M[12 + row] = t * scale + rotOff - offsetI;
-        }
-
         std::memcpy(&result[i * 16], M.data(), 16 * sizeof(float));
     }
     return result;
@@ -346,7 +324,6 @@ void BoneSkinning::recomputeAfterPhysicsBones(
 
 std::vector<float> BoneSkinning::computeSkinningMatrices(
     const PmxModel& model,
-    const Vec3& center, float minY, float scale,
     const std::unordered_map<std::string, VpdPose>& vpdPoses)
 {
     int n = model.boneCount();
@@ -354,22 +331,9 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
     auto poseWorld = BoneSkinning::computePoseWorldMatrices(model, vpdPoses);
 
     std::vector<float> result(n * 16);
-
-    float offScaledX = scale * center.x;
-    float offScaledY = scale * minY;
-    float offScaledZ = scale * center.z;
-
     for (int i = 0; i < n; ++i) {
         auto invBind = inverseMat4(bindWorld[i]);
         auto M = mulMat4(poseWorld[i], invBind);
-
-        for (int row = 0; row < 3; ++row) {
-            float t = M[12 + row];
-            float rotOff = M[row] * offScaledX + M[4 + row] * offScaledY + M[8 + row] * offScaledZ;
-            float offsetI = (row == 0) ? offScaledX : (row == 1) ? offScaledY : offScaledZ;
-            M[12 + row] = t * scale + rotOff - offsetI;
-        }
-
         std::memcpy(&result[i * 16], M.data(), 16 * sizeof(float));
     }
     return result;
@@ -377,27 +341,15 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
 
 std::vector<float> BoneSkinning::computeSkinningMatrices(
     const PmxModel& model,
-    const Vec3& center, float minY, float scale,
     const std::vector<std::array<float, 16>>& poseWorld)
 {
     int n = model.boneCount();
     auto bindWorld = BoneSkinning::computeBindWorldMatrices(model);
 
     std::vector<float> result(n * 16);
-    float offScaledX = scale * center.x;
-    float offScaledY = scale * minY;
-    float offScaledZ = scale * center.z;
-
     for (int i = 0; i < n; ++i) {
         auto invBind = inverseMat4(bindWorld[i]);
         auto M = mulMat4(poseWorld[i], invBind);
-
-        for (int row = 0; row < 3; ++row) {
-            float t = M[12 + row];
-            float rotOff = M[row] * offScaledX + M[4 + row] * offScaledY + M[8 + row] * offScaledZ;
-            float offsetI = (row == 0) ? offScaledX : (row == 1) ? offScaledY : offScaledZ;
-            M[12 + row] = t * scale + rotOff - offsetI;
-        }
         std::memcpy(&result[i * 16], M.data(), 16 * sizeof(float));
     }
     return result;
@@ -405,7 +357,6 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
 
 std::vector<float> BoneSkinning::computeSkinningMatrices(
     const PmxModel& model,
-    const Vec3& center, float minY, float scale,
     const std::unordered_map<std::string, VpdPose>& vpdPoses,
     const std::unordered_map<std::string, VmdBoneTransform>& vmdTransforms)
 {
@@ -479,23 +430,11 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
         }
     }
 
-    // Compute skinning matrices
+    // Compute skinning matrices (pure world * inv(bind), modelMat handles display transform on GPU)
     std::vector<float> result(n * 16);
-    float offScaledX = scale * center.x;
-    float offScaledY = scale * minY;
-    float offScaledZ = scale * center.z;
-
     for (int i = 0; i < n; ++i) {
         auto invBind = inverseMat4(bindWorld[i]);
         auto M = mulMat4(poseWorld[i], invBind);
-
-        for (int row = 0; row < 3; ++row) {
-            float t = M[12 + row];
-            float rotOff = M[row] * offScaledX + M[4 + row] * offScaledY + M[8 + row] * offScaledZ;
-            float offsetI = (row == 0) ? offScaledX : (row == 1) ? offScaledY : offScaledZ;
-            M[12 + row] = t * scale + rotOff - offsetI;
-        }
-
         std::memcpy(&result[i * 16], M.data(), 16 * sizeof(float));
     }
     return result;
@@ -515,24 +454,19 @@ void BoneSkinning::applyPhysics(const PmxModel& model,
                                  std::vector<float>& skinMatrices,
                                  const std::vector<std::array<float, 16>>& physicsMats)
 {
+    auto bindWorld = BoneSkinning::computeBindWorldMatrices(model);
+
     for (size_t i = 0; i < physicsMats.size() && i < (size_t)model.boneCount(); ++i) {
-        // Check if this bone has a non-zero physics transform
         bool hasPhysics = false;
         for (int j = 0; j < 16; ++j) {
             if (physicsMats[i][j] != 0) { hasPhysics = true; break; }
         }
         if (!hasPhysics) continue;
 
-        // physicsMat is the world matrix in MMD space.
-        // Compute skinning matrix = world * inv(bindWorld).
-        // The existing skinning matrices already have model transform, so we
-        // compute the local skinning matrix and let the existing model transform
-        // be applied separately.
-        //
-        // For now: directly overwrite the skinning matrix with the physics
-        // world matrix. The model will be positioned at the rigid body location.
+        auto invBind = inverseMat4(bindWorld[i]);
+        auto M = mulMat4(physicsMats[i], invBind);
         for (int j = 0; j < 16; ++j)
-            skinMatrices[i * 16 + j] = physicsMats[i][j];
+            skinMatrices[i * 16 + j] = M[j];
     }
 }
 

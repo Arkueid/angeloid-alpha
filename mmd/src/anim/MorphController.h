@@ -30,8 +30,7 @@ public:
 
     void setModel(const PmxModel& model,
                   Gpu::VboWrapper* morphVbo,
-                  Gpu::VboWrapper* uvMorphVbo,
-                  float modelScale);
+                  Gpu::VboWrapper* uvMorphVbo);
 
     void setMorphWeight(const std::string& name, float weight);
     void setMorphWeights(const std::unordered_map<std::string, float>& weights);
@@ -54,8 +53,6 @@ private:
     const PmxModel* mModel = nullptr;
     Gpu::VboWrapper* mMorphVbo = nullptr;
     Gpu::VboWrapper* mUvMorphVbo = nullptr;
-    float mModelScale = 1.0f;
-
     std::unordered_map<std::string, float> mMorphWeights;
     std::unordered_map<int, MatMorphOverride> mMaterialOverrides;
     std::unordered_map<int, BoneMorphTransform> mBoneMorphs;

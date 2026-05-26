@@ -9,13 +9,11 @@ MorphController::MorphController() = default;
 
 void MorphController::setModel(const PmxModel& model,
                                 Gpu::VboWrapper* morphVbo,
-                                Gpu::VboWrapper* uvMorphVbo,
-                                float modelScale)
+                                Gpu::VboWrapper* uvMorphVbo)
 {
     mModel = &model;
     mMorphVbo = morphVbo;
     mUvMorphVbo = uvMorphVbo;
-    mModelScale = modelScale;
     mPosOffsets.assign(model.vertexCount() * 3, 0);
     mUvOffsets.assign(model.vertexCount() * 2, 0);
 }
@@ -62,7 +60,7 @@ std::array<float, 4> MorphController::slerpQuat(const std::array<float, 4>& qa,
 }
 
 static void applyMorphRecursive(const PmxModel& model, int morphIndex,
-                                 float weight, float modelScale,
+                                 float weight,
                                  std::vector<float>& posOffsets,
                                  std::vector<float>& uvOffsets,
                                  int vertexCount,
@@ -76,7 +74,7 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex,
         for (const auto& offset : morph.offsets) {
             if (auto* g = std::get_if<GroupMorphOffset>(&offset)) {
                 applyMorphRecursive(model, g->morph_index,
-                    g->value * weight, modelScale,
+                    g->value * weight,
                     posOffsets, uvOffsets, vertexCount, matOverrides, boneMorphs);
             }
         }
@@ -85,10 +83,9 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex,
             if (auto* v = std::get_if<VertexMorphOffset>(&offset)) {
                 int i = v->vertex_index;
                 if (i >= 0 && i < vertexCount) {
-                    float s = weight * modelScale;
-                    posOffsets[i*3+0] += v->position_offset.x * s;
-                    posOffsets[i*3+1] += v->position_offset.y * s;
-                    posOffsets[i*3+2] += v->position_offset.z * s;
+                    posOffsets[i*3+0] += v->position_offset.x * weight;
+                    posOffsets[i*3+1] += v->position_offset.y * weight;
+                    posOffsets[i*3+2] += v->position_offset.z * weight;
                 }
             }
         }
@@ -170,7 +167,7 @@ void MorphController::updateMorphOffsets()
             if (m.name == name || m.english_name == name) { morphIdx = m.index; break; }
         }
         if (morphIdx < 0) continue;
-        applyMorphRecursive(*mModel, morphIdx, weight, mModelScale,
+        applyMorphRecursive(*mModel, morphIdx, weight,
                            mPosOffsets, mUvOffsets, vc, mMaterialOverrides, mBoneMorphs);
     }
 

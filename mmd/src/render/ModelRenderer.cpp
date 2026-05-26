@@ -78,20 +78,22 @@ void ModelRenderer::loadModel(const PmxModel& model,
     float maxSize = std::max({size.x, size.y, size.z});
     mScale = maxSize > 0 ? 2.0f / maxSize : 1.0f;
 
+    // Build model matrix: PMX space -> display space
+    // = Z-flip * scale(mScale) * translate(0, -mMinY, 0) * translate(-mCenter.x, 0, -mCenter.z)
+    float s = mScale;
+    mModelMat = {s,0,0,0, 0,s,0,0, 0,0,-s,0, -mCenter.x*s, -mMinY*s, mCenter.z*s, 1};
+
     std::cout << "Model bounds: min=(" << minPos.x << "," << minPos.y << "," << minPos.z
               << ") max=(" << maxPos.x << "," << maxPos.y << "," << maxPos.z << ")\n";
     std::cout << "Center: (" << mCenter.x << "," << mCenter.y << "," << mCenter.z
               << ") scale: " << mScale << std::endl;
 
-    // Build interleaved vertex data (normalized)
+    // Build interleaved vertex data (PMX raw coordinates)
     mVertices.clear();
     mVertices.reserve(model.vertexCount() * 8);
     for (const auto& v : model.vertices) {
-        float px = (v.position.x - mCenter.x) * mScale;
-        float py = (v.position.y - mMinY) * mScale;
-        float pz = (v.position.z - mCenter.z) * mScale;
         mVertices.insert(mVertices.end(), {
-            px, py, pz,
+            v.position.x, v.position.y, v.position.z,
             v.normal.x, v.normal.y, v.normal.z,
             v.uv.x, v.uv.y
         });
@@ -245,8 +247,8 @@ void ModelRenderer::renderMainPass(Gpu::ShaderProgram& shader,
 {
     if (!showModel || mMaterialBatches.empty()) return;
 
-    float defMat[] = {1,0,0,0, 0,1,0,0, 0,0,-1,0, 0,0,0,1};
-    const float* modelMat = modelMatParam ? modelMatParam : defMat;
+    const float* modelMatDefault = mModelMat.data();
+    const float* modelMat = modelMatParam ? modelMatParam : modelMatDefault;
 
     shader.use();
     shader.setMat4("projection", projection.data());
@@ -331,8 +333,8 @@ void ModelRenderer::renderOutlinePass(Gpu::ShaderProgram& shader,
 {
     if (!showModel || !showOutline || mMaterialBatches.empty()) return;
 
-    float defMat[] = {1,0,0,0, 0,1,0,0, 0,0,-1,0, 0,0,0,1};
-    const float* modelMat = modelMatParam ? modelMatParam : defMat;
+    const float* modelMatDefault = mModelMat.data();
+    const float* modelMat = modelMatParam ? modelMatParam : modelMatDefault;
 
     shader.use();
     shader.setMat4("projection", projection.data());
@@ -387,9 +389,9 @@ void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::
             std::cout << "  VPD sample: " << vpdPoses.begin()->first << std::endl;
             std::cout << "  PMX bone[0]: " << model.bones[0].name << std::endl;
         }
-        skinMatrices = BoneSkinning::computeSkinningMatrices(model, mCenter, mMinY, mScale, vpdPoses);
+        skinMatrices = BoneSkinning::computeSkinningMatrices(model, vpdPoses);
     } else {
-        skinMatrices = BoneSkinning::computeSkinningMatrices(model, mCenter, mMinY, mScale);
+        skinMatrices = BoneSkinning::computeSkinningMatrices(model);
     }
     auto boneData = BoneSkinning::packBoneMatrices(skinMatrices, model.boneCount());
     mBoneTexture = BoneSkinning::createBoneTexture(boneData);
@@ -398,15 +400,8 @@ void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::
     std::cout << "Bone texture: " << boneData.width << "x" << boneData.height
               << " (" << model.boneCount() << " bones)" << std::endl;
 
-    // Extract skinning vertex data
+    // Extract skinning vertex data (PMX raw coordinates — modelMat handles display transform on GPU)
     auto skinData = BoneSkinning::extractSkinningData(model);
-
-    // Normalize positions
-    for (size_t i = 0; i < skinData.positions.size() / 3; ++i) {
-        skinData.positions[i * 3 + 0] = (skinData.positions[i * 3 + 0] - mCenter.x) * mScale;
-        skinData.positions[i * 3 + 1] = (skinData.positions[i * 3 + 1] - mMinY) * mScale;
-        skinData.positions[i * 3 + 2] = (skinData.positions[i * 3 + 2] - mCenter.z) * mScale;
-    }
 
     // Vertex buffer descriptors
     std::vector<Gpu::VertexBufferDesc> descs = {
@@ -481,8 +476,7 @@ void ModelRenderer::applyPhysics(const PmxModel& model,
                                  const std::vector<std::array<float, 16>>& physicsMats)
 {
     if (!mBoneTexture || !useSkinning) return;
-    std::vector<float> skinMatrices = BoneSkinning::computeSkinningMatrices(
-        model, mCenter, mMinY, mScale);
+    std::vector<float> skinMatrices = BoneSkinning::computeSkinningMatrices(model);
     BoneSkinning::applyPhysics(model, skinMatrices, physicsMats);
     auto data = BoneSkinning::packBoneMatrices(skinMatrices, model.boneCount());
     mBoneTexture->write(data.pixels.data());
@@ -494,7 +488,7 @@ void ModelRenderer::updateBoneTexture(const PmxModel& model,
 {
     if (!mBoneTexture || !useSkinning) return;
 
-    auto skinMatrices = BoneSkinning::computeSkinningMatrices(model, mCenter, mMinY, mScale, poseWorld);
+    auto skinMatrices = BoneSkinning::computeSkinningMatrices(model, poseWorld);
 
     if (boneMorphs && !boneMorphs->empty()) {
         for (const auto& [boneIdx, bm] : *boneMorphs) {
@@ -546,9 +540,9 @@ void ModelRenderer::updateBoneTexture(const PmxModel& model,
 
     std::vector<float> skinMatrices;
     if (!vmdTransforms.empty()) {
-        skinMatrices = BoneSkinning::computeSkinningMatrices(model, mCenter, mMinY, mScale, vpdPoses, vmdTransforms);
+        skinMatrices = BoneSkinning::computeSkinningMatrices(model, vpdPoses, vmdTransforms);
     } else {
-        skinMatrices = BoneSkinning::computeSkinningMatrices(model, mCenter, mMinY, mScale, vpdPoses);
+        skinMatrices = BoneSkinning::computeSkinningMatrices(model, vpdPoses);
     }
 
     // Apply bone morph transforms on top
@@ -604,8 +598,8 @@ void ModelRenderer::renderSkinnedMainPass(Gpu::ShaderProgram& shader,
 {
     if (!showModel || !useSkinning || mMaterialBatches.empty()) return;
 
-    float defMat[] = {1,0,0,0, 0,1,0,0, 0,0,-1,0, 0,0,0,1};
-    const float* modelMat = modelMatParam ? modelMatParam : defMat;
+    const float* modelMatDefault = mModelMat.data();
+    const float* modelMat = modelMatParam ? modelMatParam : modelMatDefault;
 
     shader.use();
     shader.setMat4("projection", projection.data());
@@ -685,8 +679,8 @@ void ModelRenderer::renderSkinnedOutlinePass(Gpu::ShaderProgram& shader,
 {
     if (!showModel || !showOutline || !useSkinning || mMaterialBatches.empty()) return;
 
-    float defMat[] = {1,0,0,0, 0,1,0,0, 0,0,-1,0, 0,0,0,1};
-    const float* modelMat = modelMatParam ? modelMatParam : defMat;
+    const float* modelMatDefault = mModelMat.data();
+    const float* modelMat = modelMatParam ? modelMatParam : modelMatDefault;
 
     shader.use();
     shader.setMat4("projection", projection.data());
@@ -733,8 +727,8 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
 {
     if (!showModel || !useSkinning || mMaterialBatches.empty()) return;
 
-    float defMat[] = {1,0,0,0, 0,1,0,0, 0,0,-1,0, 0,0,0,1};
-    const float* mm = modelMatParam ? modelMatParam : defMat;
+    const float* modelMatDefault = mModelMat.data();
+    const float* mm = modelMatParam ? modelMatParam : modelMatDefault;
     shader.use();
     shader.setMat4("projection", projection.data());
     shader.setMat4("view", view.data());
@@ -788,8 +782,8 @@ void ModelRenderer::renderMorphOutlinePass(Gpu::ShaderProgram& shader,
                                             const float* modelMatParam)
 {
     if (!showModel || !showOutline || !useSkinning || mMaterialBatches.empty()) return;
-    float defMat[] = {1,0,0,0, 0,1,0,0, 0,0,-1,0, 0,0,0,1};
-    const float* mm = modelMatParam ? modelMatParam : defMat;
+    const float* modelMatDefault = mModelMat.data();
+    const float* mm = modelMatParam ? modelMatParam : modelMatDefault;
     shader.use();
     shader.setMat4("projection", projection.data());
     shader.setMat4("view", view.data());
