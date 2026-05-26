@@ -176,20 +176,21 @@ static void buildPass(const PmxModel& model, float cx, float my, float cz, float
     for (size_t i = 0; i < model.rigidbodies.size(); ++i) {
         const auto& rb = model.rigidbodies[i];
         Vec3 c = colors[i % 4];
-        Vec3 sz = {rb.shape_size.x * 0.5f, rb.shape_size.y * 0.5f, rb.shape_size.z * 0.5f};
+        float kx = rb.shape_size.x, ky = rb.shape_size.y, kz = rb.shape_size.z;
 
         std::vector<float> v;
-        if (rb.shape_type == RIGID_SHAPE_SPHERE)       { addSphere(v, sz.x, c); }
-        else if (rb.shape_type == RIGID_SHAPE_BOX)     { addBox(v, sz, c); }
-        else if (rb.shape_type == RIGID_SHAPE_CAPSULE) { addCapsule(v, sz.x, sz.y * 2, c); }
-        else { addSphere(v, sz.x, c); }
+        if (rb.shape_type == RIGID_SHAPE_SPHERE)       { addSphere(v, kx, c); }
+        else if (rb.shape_type == RIGID_SHAPE_BOX)     { addBox(v, {kx*0.5f, ky*0.5f, kz*0.5f}, c); }
+        else if (rb.shape_type == RIGID_SHAPE_CAPSULE) { addCapsule(v, kx, ky, c); }
+        else { addSphere(v, kx, c); }
 
         float rx = rb.shape_rotation.x, ry = rb.shape_rotation.y, rz = rb.shape_rotation.z;
         float crx = cosf(rx), srx = sinf(rx), cry = cosf(ry), sry = sinf(ry), crz = cosf(rz), srz = sinf(rz);
+        // YXZ rotation order: Ry(ry) * Rx(rx) * Rz(rz) — matches MMD/saba
         float R[9] = {
-            cry*crz, crz*srx*sry - crx*srz, crx*crz*sry + srx*srz,
-            cry*srz, crx*crz + srx*sry*srz, -crz*srx + crx*sry*srz,
-            -sry,    cry*srx,              crx*cry
+            cry*crz + sry*srx*srz, -cry*srz + sry*srx*crz, sry*crx,
+            crx*srz,                crx*crz,               -srx,
+           -sry*crz + cry*srx*srz,  sry*srz + cry*srx*crz, cry*crx
         };
 
         for (size_t j = 0; j < v.size(); j += 9) {

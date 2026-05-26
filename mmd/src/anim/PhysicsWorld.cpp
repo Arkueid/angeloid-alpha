@@ -332,23 +332,30 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
     float pz = rb.shape_position.z - mCenter.z;
 
     // Shapes at PMX-native scale (no modelScale — physics runs in PMX space)
+    // PMX spec: sphere size.x=radius, capsule size.x=radius size.y=height — pass directly
+    // Box size=(w,h,d) — Bullet btBoxShape expects half-extents, so *0.5f
     btCollisionShape* shape = nullptr;
     if (rb.shape_type == RIGID_SHAPE_SPHERE)
-        shape = new btSphereShape(rb.shape_size.x * 0.5f);
+        shape = new btSphereShape(rb.shape_size.x);
     else if (rb.shape_type == RIGID_SHAPE_BOX)
         shape = new btBoxShape(btVector3(rb.shape_size.x*0.5f, rb.shape_size.y*0.5f, rb.shape_size.z*0.5f));
     else if (rb.shape_type == RIGID_SHAPE_CAPSULE) {
-        float capR = rb.shape_size.x * 0.5f;
-        float capH = rb.shape_size.y * 0.5f;
+        float capR = rb.shape_size.x;
+        float capH = rb.shape_size.y;
         float minR = 0.01f;
         if (capR < minR) { capR = minR; }
         shape = new btCapsuleShape(capR, capH);
     }
     else
-        shape = new btSphereShape(rb.shape_size.x * 0.5f);
+        shape = new btSphereShape(rb.shape_size.x);
     mShapes.emplace_back(shape);
 
-    btQuaternion rot; rot.setEulerZYX(rb.shape_rotation.z, rb.shape_rotation.y, rb.shape_rotation.x);
+    // MMD rotation order: Y * X * Z (matches saba: ry * rx * rz)
+    btQuaternion qx, qy, qz;
+    qx.setRotation(btVector3(1,0,0), rb.shape_rotation.x);
+    qy.setRotation(btVector3(0,1,0), rb.shape_rotation.y);
+    qz.setRotation(btVector3(0,0,1), rb.shape_rotation.z);
+    btQuaternion rot = qy * qx * qz;
     btTransform t; t.setIdentity(); t.setOrigin(btVector3(px, py, pz)); t.setRotation(rot);
 
     btScalar mass = (rb.mode == 0) ? 0 : rb.mass;
@@ -371,7 +378,7 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
 
     // CCD for dynamic bodies to prevent tunneling
     if (mass > 0) {
-        float ccdRadius = rb.shape_size.x * 0.5f;
+        float ccdRadius = rb.shape_size.x; // sphere/capsule: PMX size.x is radius
         if (rb.shape_type == RIGID_SHAPE_BOX)
             ccdRadius = std::min({rb.shape_size.x, rb.shape_size.y, rb.shape_size.z}) * 0.25f;
         body->setCcdMotionThreshold(ccdRadius * 0.5f);
@@ -412,7 +419,11 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
 
     btVector3 pos(jt.position.x - mCenter.x, jt.position.y - mMinY, jt.position.z - mCenter.z);
 
-    btQuaternion jtRot; jtRot.setEulerZYX(jt.rotation.z, jt.rotation.y, jt.rotation.x);
+    btQuaternion jqx, jqy, jqz;
+    jqx.setRotation(btVector3(1,0,0), jt.rotation.x);
+    jqy.setRotation(btVector3(0,1,0), jt.rotation.y);
+    jqz.setRotation(btVector3(0,0,1), jt.rotation.z);
+    btQuaternion jtRot = jqy * jqx * jqz;
     btMatrix3x3 jtBasis; jtBasis.setRotation(jtRot);
 
     btTransform jointTransform;
