@@ -32,4 +32,6 @@ private:
     std::unique_ptr<Gpu::Texture> mBodyTex;
     int mBodyTexWidth = 64;
     int mBodyCount = 0;
+    float mModelScale = 1.0f;
+    float mCx = 0, mMy = 0, mCz = 0;
 };

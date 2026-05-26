@@ -52,6 +52,7 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
     mCenter = {(minX + maxX) * 0.5f, (minY + maxY) * 0.5f, (minZ + maxZ) * 0.5f};
     mMinY = minY;
     mModelScale = modelScale;
+    mWorld->setGravity(btVector3(0, kGravityY / modelScale, 0));
 
     mBoneBindWorld = BoneSkinning::computeBindWorldMatrices(model);
 
@@ -296,8 +297,7 @@ void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWo
 
 void PhysicsWorld::debugDump() const
 {
-    float s = mModelScale;
-    std::cout << "=== Physics dump (scale=" << s << " center=" << mCenter.x << "," << mCenter.y << "," << mCenter.z << ")" << std::endl;
+    std::cout << "=== Physics dump (scale=" << mModelScale << " center=" << mCenter.x << "," << mCenter.y << "," << mCenter.z << ")" << std::endl;
     int moved = 0, active = 0;
     for (size_t i = 0; i < mBodies.size(); ++i) {
         const auto& bb = mBodies[i];
@@ -306,17 +306,15 @@ void PhysicsWorld::debugDump() const
         btVector3 p = t.getOrigin();
         btVector3 init(bb.initPosX, bb.initPosY, bb.initPosZ);
         float disp = (p - init).length();
-        float dispMMD = disp / s;
         if (bb.body->isActive()) active++;
-        if (dispMMD > 0.02f) {
+        if (disp > 0.02f) {
             moved++;
-            // Convert from Bullet space back to MMD space
-            float mx = p.x()/s + mCenter.x, my = p.y()/s + mMinY, mz = p.z()/s + mCenter.z;
-            float ix = init.x()/s + mCenter.x, iy = init.y()/s + mMinY, iz = init.z()/s + mCenter.z;
+            float mx = p.x() + mCenter.x, my = p.y() + mMinY, mz = p.z() + mCenter.z;
+            float ix = init.x() + mCenter.x, iy = init.y() + mMinY, iz = init.z() + mCenter.z;
             const char* modeStr = bb.mode == 0 ? "STATIC" : (bb.mode == 1 ? "dyn" : "ALIGN");
             std::cout << "  [" << i << "] " << modeStr << " " << bb.name
                       << " bone=" << bb.boneIndex
-                      << " dMMD=" << dispMMD << " active=" << bb.body->isActive()
+                      << " dMMD=" << disp << " active=" << bb.body->isActive()
                       << " mass=" << (bb.body->getInvMass() > 0 ? 1.0f/bb.body->getInvMass() : 0)
                       << " now=(" << mx << "," << my << "," << mz << ")"
                       << " init=(" << ix << "," << iy << "," << iz << ")" << std::endl;
@@ -328,31 +326,32 @@ void PhysicsWorld::debugDump() const
 
 void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
 {
-    float s = mModelScale;
-    float px = (rb.shape_position.x - mCenter.x) * s;
-    float py = (rb.shape_position.y - mMinY) * s;
-    float pz = (rb.shape_position.z - mCenter.z) * s;
+    // PMX-native positions (offset from model center)
+    float px = rb.shape_position.x - mCenter.x;
+    float py = rb.shape_position.y - mMinY;
+    float pz = rb.shape_position.z - mCenter.z;
 
+    // Shapes at PMX-native scale (no modelScale — physics runs in PMX space)
     btCollisionShape* shape = nullptr;
     if (rb.shape_type == RIGID_SHAPE_SPHERE)
-        shape = new btSphereShape(rb.shape_size.x * 0.5f * s);
+        shape = new btSphereShape(rb.shape_size.x * 0.5f);
     else if (rb.shape_type == RIGID_SHAPE_BOX)
-        shape = new btBoxShape(btVector3(rb.shape_size.x*0.5f*s, rb.shape_size.y*0.5f*s, rb.shape_size.z*0.5f*s));
+        shape = new btBoxShape(btVector3(rb.shape_size.x*0.5f, rb.shape_size.y*0.5f, rb.shape_size.z*0.5f));
     else if (rb.shape_type == RIGID_SHAPE_CAPSULE) {
-        float capR = rb.shape_size.x * 0.5f * s;
-        float capH = rb.shape_size.y * 0.5f * s;
-        float minR = 0.01f; // clamp degenerate capsule radius
+        float capR = rb.shape_size.x * 0.5f;
+        float capH = rb.shape_size.y * 0.5f;
+        float minR = 0.01f;
         if (capR < minR) { capR = minR; }
         shape = new btCapsuleShape(capR, capH);
     }
     else
-        shape = new btSphereShape(rb.shape_size.x * 0.5f * s);
+        shape = new btSphereShape(rb.shape_size.x * 0.5f);
     mShapes.emplace_back(shape);
 
     btQuaternion rot; rot.setEulerZYX(rb.shape_rotation.z, rb.shape_rotation.y, rb.shape_rotation.x);
     btTransform t; t.setIdentity(); t.setOrigin(btVector3(px, py, pz)); t.setRotation(rot);
 
-    btScalar mass = (rb.mode == 0) ? 0 : rb.mass; // mode0=static(bone-follow), mode1/2=dynamic
+    btScalar mass = (rb.mode == 0) ? 0 : rb.mass;
     btVector3 inertia(0,0,0);
     if (mass > 0) shape->calculateLocalInertia(mass, inertia);
 
@@ -372,9 +371,9 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
 
     // CCD for dynamic bodies to prevent tunneling
     if (mass > 0) {
-        float ccdRadius = rb.shape_size.x * 0.5f * s; // sphere/capsule radius
+        float ccdRadius = rb.shape_size.x * 0.5f;
         if (rb.shape_type == RIGID_SHAPE_BOX)
-            ccdRadius = std::min({rb.shape_size.x, rb.shape_size.y, rb.shape_size.z}) * 0.25f * s;
+            ccdRadius = std::min({rb.shape_size.x, rb.shape_size.y, rb.shape_size.z}) * 0.25f;
         body->setCcdMotionThreshold(ccdRadius * 0.5f);
         body->setCcdSweptSphereRadius(ccdRadius);
     }
@@ -385,13 +384,13 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
     btQuaternion initRot = t.getRotation();
     btVector3 initPos = t.getOrigin();
 
-    // Extract bone bind world pos/rot from mBoneBindWorld (Bullet space)
+    // Bone bind world position in PMX-native space (offset from center)
     float bpx = 0, bpy = 0, bpz = 0, brx = 0, bry = 0, brz = 0, brw = 1;
     if (rb.bone_index >= 0 && rb.bone_index < (int)mBoneBindWorld.size()) {
         const auto& bw = mBoneBindWorld[rb.bone_index];
-        bpx = (bw[12] - mCenter.x) * s;
-        bpy = (bw[13] - mMinY) * s;
-        bpz = (bw[14] - mCenter.z) * s;
+        bpx = bw[12] - mCenter.x;
+        bpy = bw[13] - mMinY;
+        bpz = bw[14] - mCenter.z;
         btMatrix3x3 bwBasis(bw[0], bw[4], bw[8], bw[1], bw[5], bw[9], bw[2], bw[6], bw[10]);
         btQuaternion bwRot; bwBasis.getRotation(bwRot);
         brx = bwRot.x(); bry = bwRot.y(); brz = bwRot.z(); brw = bwRot.w();
@@ -411,8 +410,7 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
     auto *a = mBodies[jt.rigidbody_index_a].body, *b = mBodies[jt.rigidbody_index_b].body;
     if (!a || !b) return;
 
-    float s = mModelScale;
-    btVector3 pos((jt.position.x - mCenter.x)*s, (jt.position.y - mMinY)*s, (jt.position.z - mCenter.z)*s);
+    btVector3 pos(jt.position.x - mCenter.x, jt.position.y - mMinY, jt.position.z - mCenter.z);
 
     btQuaternion jtRot; jtRot.setEulerZYX(jt.rotation.z, jt.rotation.y, jt.rotation.x);
     btMatrix3x3 jtBasis; jtBasis.setRotation(jtRot);
@@ -474,8 +472,8 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
     }
     case 4: { // Slider — btSliderConstraint (X-axis linear, X-axis angular)
         auto* sl = new btSliderConstraint(*a, *b, invA, invB, true);
-        sl->setLowerLinLimit(jt.translation_limit_min.x * s);
-        sl->setUpperLinLimit(jt.translation_limit_max.x * s);
+        sl->setLowerLinLimit(jt.translation_limit_min.x);
+        sl->setUpperLinLimit(jt.translation_limit_max.x);
         sl->setLowerAngLimit(jt.rotation_limit_min.x);
         sl->setUpperAngLimit(jt.rotation_limit_max.x);
 
@@ -520,9 +518,9 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
         auto* sc = new btGeneric6DofSpringConstraint(*a, *b, invA, invB, true);
 
         sc->setLinearLowerLimit(btVector3(
-            jt.translation_limit_min.x * s, jt.translation_limit_min.y * s, jt.translation_limit_min.z * s));
+            jt.translation_limit_min.x, jt.translation_limit_min.y, jt.translation_limit_min.z));
         sc->setLinearUpperLimit(btVector3(
-            jt.translation_limit_max.x * s, jt.translation_limit_max.y * s, jt.translation_limit_max.z * s));
+            jt.translation_limit_max.x, jt.translation_limit_max.y, jt.translation_limit_max.z));
         sc->setAngularLowerLimit(btVector3(jt.rotation_limit_min.x, jt.rotation_limit_min.y, jt.rotation_limit_min.z));
         sc->setAngularUpperLimit(btVector3(jt.rotation_limit_max.x, jt.rotation_limit_max.y, jt.rotation_limit_max.z));
 
@@ -569,13 +567,13 @@ void PhysicsWorld::computeBoneTarget(const BulletBody& bb,
     const std::vector<std::array<float, 16>>& poseWorld,
     btVector3& outPos, btQuaternion& outRot) const
 {
-    float s = mModelScale;
     const auto& pw = poseWorld[bb.boneIndex];
     const auto& bw = mBoneBindWorld[bb.boneIndex];
 
-    float bodyModelX = bb.initPosX / s + mCenter.x;
-    float bodyModelY = bb.initPosY / s + mMinY;
-    float bodyModelZ = bb.initPosZ / s + mCenter.z;
+    // Body init position in MMD world space
+    float bodyModelX = bb.initPosX + mCenter.x;
+    float bodyModelY = bb.initPosY + mMinY;
+    float bodyModelZ = bb.initPosZ + mCenter.z;
 
     float bbx = bw[12], bby = bw[13], bbz = bw[14];
     btMatrix3x3 bwBasis(bw[0], bw[4], bw[8],  bw[1], bw[5], bw[9],  bw[2], bw[6], bw[10]);
@@ -594,7 +592,8 @@ void PhysicsWorld::computeBoneTarget(const BulletBody& bb,
     float tgtZ = baz + rotatedOffset.z();
     btQuaternion bodyInitRot(bb.initRotX, bb.initRotY, bb.initRotZ, bb.initRotW);
 
-    outPos = btVector3((tgtX - mCenter.x) * s, (tgtY - mMinY) * s, (tgtZ - mCenter.z) * s);
+    // Output in PMX-native space (offset from center)
+    outPos = btVector3(tgtX - mCenter.x, tgtY - mMinY, tgtZ - mCenter.z);
     outRot = deltaRot * bodyInitRot;
 }
 
@@ -676,10 +675,9 @@ void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) co
         btVector3 boneNewPos = boneInitPos + disp;
         btQuaternion boneNewRot = bodyDeltaRot * boneInitRot;
 
-        float s = mModelScale;
-        float tx = boneNewPos.x()/s + mCenter.x;
-        float ty = boneNewPos.y()/s + mMinY;
-        float tz = boneNewPos.z()/s + mCenter.z;
+        float tx = boneNewPos.x() + mCenter.x;
+        float ty = boneNewPos.y() + mMinY;
+        float tz = boneNewPos.z() + mCenter.z;
         auto& m = out[bb.boneIndex];
         const btQuaternion& r = boneNewRot;
         m[0]=1-2*(r.y()*r.y()+r.z()*r.z()); m[4]=2*(r.x()*r.y()-r.z()*r.w()); m[8]=2*(r.x()*r.z()+r.y()*r.w()); m[12]=tx;
@@ -697,8 +695,8 @@ void PhysicsWorld::debugTrackCloth() const
             if (!bb.clothLike || !bb.body) continue;
             btTransform t = bb.body->getCenterOfMassTransform();
             btVector3 p = t.getOrigin(); btQuaternion r = t.getRotation();
-            float Y = p.y() / mModelScale + mMinY;
-            float initY = bb.initPosY / mModelScale + mMinY;
+            float Y = p.y() + mMinY;
+            float initY = bb.initPosY + mMinY;
             float pitch = atan2f(2*(r.w()*r.x()+r.y()*r.z()), 1-2*(r.x()*r.x()+r.y()*r.y()));
             printf("F%4d [%d]%s Y=%.4f(init=%.4f dY=%+.4f) pitch=%.2f\n",
                 fc, bb.rigidBodyIndex, bb.name.c_str(), Y, initY, Y-initY, pitch);

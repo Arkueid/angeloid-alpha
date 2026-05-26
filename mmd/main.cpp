@@ -529,7 +529,7 @@ int main(int argc, char* argv[])
             if (physicsWorld.enabled && physicsDebug.showRigidBody)
                 physicsDebug.updateFromPhysics(physicsWorld);
             glLineWidth(2.0f);
-            physicsDebug.render(*s, proj, view);
+            physicsDebug.render(*s, proj, view, renderer.modelMatrix());
             glLineWidth(1.0f);
         }
     };

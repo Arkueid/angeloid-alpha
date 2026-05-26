@@ -198,10 +198,7 @@ static void buildPass(const PmxModel& model, float cx, float my, float cz, float
             v[j]   = R[0]*lx + R[1]*ly + R[2]*lz + rb.shape_position.x;
             v[j+1] = R[3]*lx + R[4]*ly + R[5]*lz + rb.shape_position.y;
             v[j+2] = R[6]*lx + R[7]*ly + R[8]*lz + rb.shape_position.z;
-            // Normalize position
-            v[j]   = (v[j]   - cx) * ms;
-            v[j+1] = (v[j+1] - my) * ms;
-            v[j+2] = (v[j+2] - cz) * ms;
+            // PMX world-space vertex — modelMat on GPU handles display transform
             // Transform normal (rotation only)
             float nx = v[j+6], ny = v[j+7], nz = v[j+8];
             v[j+6] = R[0]*nx + R[1]*ny + R[2]*nz;
@@ -224,7 +221,7 @@ static void buildPass(const PmxModel& model, float cx, float my, float cz, float
         int boneIdx = jt.rigidbody_index_a >= 0 && jt.rigidbody_index_a < (int)model.rigidbodies.size()
             ? model.rigidbodies[jt.rigidbody_index_a].bone_index : -1;
         float x = jt.position.x, y = jt.position.y, z = jt.position.z;
-        x = (x - cx) * ms; y = (y - my) * ms; z = (z - cz) * ms;
+        // PMX world space — modelMat handles display transform
         Vec3 col = {0,1,0};
         float s = 0.05f;
         size_t base = jtVerts.size() / 6;
@@ -267,13 +264,13 @@ void PhysicsDebug::build(const PmxModel& model, float modelScale)
         maxPos.y = std::max(maxPos.y, v.position.y);
         maxPos.z = std::max(maxPos.z, v.position.z);
     }
-    float cx = (minPos.x + maxPos.x) * 0.5f;
-    float my = minPos.y;
-    float cz = (minPos.z + maxPos.z) * 0.5f;
-    float ms = modelScale;
+    mCx = (minPos.x + maxPos.x) * 0.5f;
+    mMy = minPos.y;
+    mCz = (minPos.z + maxPos.z) * 0.5f;
+    mModelScale = modelScale;
 
-    buildPass(model, cx, my, cz, ms, false, mRbStatic, mJtStatic);
-    buildPass(model, cx, my, cz, ms, true,  mRbAnimated, mJtAnimated);
+    buildPass(model, mCx, mMy, mCz, modelScale, false, mRbStatic, mJtStatic);
+    buildPass(model, mCx, mMy, mCz, modelScale, true,  mRbAnimated, mJtAnimated);
 }
 
 void PhysicsDebug::updateFromPhysics(const PhysicsWorld& world)
@@ -290,10 +287,10 @@ void PhysicsDebug::updateFromPhysics(const PhysicsWorld& world)
         btQuaternion r = t.getRotation();
         btVector3 p = t.getOrigin();
         float* m = bodyMats.data() + i * 16;
-        // Column-major 4x4 from quaternion + translation
-        m[0]  = 1-2*(r.y()*r.y()+r.z()*r.z()); m[4]  = 2*(r.x()*r.y()-r.z()*r.w()); m[8]  = 2*(r.x()*r.z()+r.y()*r.w()); m[12] = p.x();
-        m[1]  = 2*(r.x()*r.y()+r.z()*r.w());  m[5]  = 1-2*(r.x()*r.x()+r.z()*r.z()); m[9]  = 2*(r.y()*r.z()-r.x()*r.w()); m[13] = p.y();
-        m[2]  = 2*(r.x()*r.z()-r.y()*r.w());  m[6]  = 2*(r.y()*r.z()+r.x()*r.w());  m[10] = 1-2*(r.x()*r.x()+r.y()*r.y()); m[14] = p.z();
+        // Column-major 4x4: body rotation + PMX-world translation (body pos is center-relative, add center back)
+        m[0]  = 1-2*(r.y()*r.y()+r.z()*r.z()); m[4]  = 2*(r.x()*r.y()-r.z()*r.w()); m[8]  = 2*(r.x()*r.z()+r.y()*r.w()); m[12] = p.x() + mCx;
+        m[1]  = 2*(r.x()*r.y()+r.z()*r.w());  m[5]  = 1-2*(r.x()*r.x()+r.z()*r.z()); m[9]  = 2*(r.y()*r.z()-r.x()*r.w()); m[13] = p.y() + mMy;
+        m[2]  = 2*(r.x()*r.z()-r.y()*r.w());  m[6]  = 2*(r.y()*r.z()+r.x()*r.w());  m[10] = 1-2*(r.x()*r.x()+r.y()*r.y()); m[14] = p.z() + mCz;
         m[3]  = 0; m[7] = 0; m[11] = 0; m[15] = 1;
     }
 
