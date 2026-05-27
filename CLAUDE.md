@@ -2,22 +2,25 @@
 
 ## Build & Run
 ```bash
-cd mmd && cmake -B ../build -S . && cmake --build ../build --config Release
-../build/Release/mmd.exe -m <model-name>
+cmake -B build -S . && cmake --build build --config Release
+./build/viewer/Release/viewer.exe -m <model-name>
 ```
 
 ## Project structure
-- `mmd/` — C++20 implementation (active)
-  - `src/core/` — Application, Camera, Encoding
-  - `src/gpu/` — VAO, VBO, Texture, ShaderProgram
-  - `src/pmx/` — PmxModel, PmxReader
-  - `src/anim/` — BoneSkinning, MorphController, VmdPlayer, VpdLoader, PhysicsWorld (Bullet)
-  - `src/render/` — ModelRenderer, ShaderManager, WorldAxis, PhysicsDebug
+- `mmd/` — pure computation library (no GPU/window deps)
+  - `pmx/` — PmxModel, PmxReader
+  - `anim/` — BoneSkinning, MorphController, VmdPlayer, VpdLoader, PhysicsWorld (Bullet)
+  - `encoding/` — text encoding
+  - `math/` — Vec2/3/4, Quat
+- `viewer/` — application (GLFW + OpenGL)
+  - `window/` — IWindow, GlfwWindow, Camera
+  - `opengl/` — Mesh, Texture, ShaderProgram (OpenGL backend)
+  - `render/` — ModelRenderer, ShaderManager, WorldAxis, PhysicsDebug
 - `prototype/` — Python reference implementation
 - `resources/` — shared assets (models, textures, shaders, VMD, VPD)
 
 ## Physics (Bullet)
-- Bullet Physics as git submodule at `mmd/thirdparty/bullet` (version 3.27)
+- Bullet Physics as git submodule at `thirdparty/bullet` (version 3.27)
 - Runs in PMX-native space (no modelScale); gravity auto-scaled: `-9.8 / modelScale`
 - Rotation order: YXZ (`Ry*Rx*Rz`), matching saba and MMD convention
 - Shape size multipliers in `PhysicsWorld.h`: `kSphereShapeScale`, `kBoxShapeScale`, `kCapsuleShapeScale` (all 0.9)

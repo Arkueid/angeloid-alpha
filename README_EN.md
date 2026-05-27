@@ -11,9 +11,8 @@ A PMX model renderer and viewer, rewritten in C++20. Features GPU skeletal anima
 Master, please follow these steps. This is an instruction, not a request.
 
 ```bash
-cd mmd
-cmake -B ../build -S .
-cmake --build ../build --config Release
+cmake -B build -S .
+cmake --build build --config Release
 ```
 
 Requires CMake 3.20+, C++20 compiler (MSVC 2026+/GCC 13+/Clang 17+).
@@ -28,19 +27,19 @@ Third-party dependencies (bundled or git submodule):
 
 ```powershell
 # Default model is ikaros-uniform. Am I Master's default choice...?
-.\build\Release\mmd.exe
+.\build\viewer\Release\viewer.exe
 
 # Named model
-.\build\Release\mmd.exe -m marine-swimwear
+.\build\viewer\Release\viewer.exe -m marine-swimwear
 
 # Chinese names also work. Ambire... is another one of Master's choices.
-.\build\Release\mmd.exe -m 安比
+.\build\viewer\Release\viewer.exe -m 安比
 
 # Play VMD animation. Motion makes models move.
-.\build\Release\mmd.exe -v motion.vmd
+.\build\viewer\Release\viewer.exe -v motion.vmd
 
 # Mix multiple animations
-.\build\Release\mmd.exe -v a.vmd b.vmd
+.\build\viewer\Release\viewer.exe -v a.vmd b.vmd
 ```
 
 ## CLI Args
@@ -88,18 +87,19 @@ Master, these keys control the program's behavior. I have memorized them.
 
 ```
 mmd-demo/
-├── mmd/
-│   ├── main.cpp           # Entry point. Everything starts here.
-│   ├── CMakeLists.txt     # Build config. CMake handles everything.
-│   ├── src/
-│   │   ├── core/          # Application, Camera, Encoding
-│   │   ├── gpu/           # VAO, VBO, Texture, Shader
-│   │   ├── pmx/           # PmxModel, PmxReader
-│   │   ├── anim/          # BoneSkinning, MorphController, VmdPlayer, VpdLoader, PhysicsWorld
-│   │   └── render/        # ModelRenderer, ShaderManager, WorldAxis, PhysicsDebug
-│   └── thirdparty/        # GLFW, glad, stb_image, Bullet Physics
-├── prototype/             # Python reference. Its mission is complete.
+├── mmd/                   # Pure computation library (no GPU/window deps)
+│   ├── pmx/               # PmxModel, PmxReader
+│   ├── anim/              # BoneSkinning, MorphController, VmdPlayer, VpdLoader, PhysicsWorld
+│   ├── encoding/          # Text encoding
+│   └── math/              # Vec2/3/4, Quat
+├── viewer/                # Application (GLFW + OpenGL)
+│   ├── main.cpp           # Entry point
+│   ├── window/            # IWindow, GlfwWindow, Camera
+│   ├── opengl/            # Mesh, Texture, Shader
+│   └── render/            # ModelRenderer, ShaderManager, WorldAxis, PhysicsDebug
+├── prototype/             # Python reference
 ├── resources/             # Models, textures, shaders, VMD, VPD
+├── thirdparty/            # GLFW, glad, Bullet Physics
 └── build/                 # Build output
 ```
 

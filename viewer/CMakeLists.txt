@@ -1,0 +1,64 @@
+cmake_minimum_required(VERSION 3.20)
+
+project(viewer LANGUAGES C CXX)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+
+# GLFW
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/glfw glfw)
+
+# glad
+add_library(glad ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/glad/src/glad.c)
+target_include_directories(glad PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/glad/include)
+
+# Bullet
+if(POLICY CMP0177)
+    cmake_policy(SET CMP0177 NEW)
+endif()
+set(BUILD_BULLET2_DEMOS OFF CACHE BOOL "" FORCE)
+set(BUILD_BULLET3 OFF CACHE BOOL "" FORCE)
+set(BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
+set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(BUILD_CPU_DEMOS OFF CACHE BOOL "" FORCE)
+set(BUILD_OPENGL3_DEMOS OFF CACHE BOOL "" FORCE)
+set(BUILD_BULLET2_DEMOS OFF CACHE BOOL "" FORCE)
+set(USE_MSVC_RUNTIME_LIBRARY_DLL OFF CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/bullet bullet)
+
+# --- Viewer executable ---
+add_executable(viewer
+    main.cpp
+    opengl/Mesh.cpp
+    opengl/Texture.cpp
+    opengl/Shader.cpp
+    window/GlfwWindow.cpp
+    window/Camera.cpp
+    render/ModelRenderer.cpp
+    render/PhysicsDebug.cpp
+    render/ShaderManager.cpp
+    render/WorldAxis.cpp
+    StbImage.cpp
+)
+
+target_include_directories(viewer PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/stb
+    ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/bullet/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../mmd
+)
+
+target_link_libraries(viewer PRIVATE
+    glfw glad
+    BulletDynamics BulletCollision LinearMath
+    mmd
+)
+
+target_compile_definitions(viewer PRIVATE
+    MMD_PROJECT_ROOT="${CMAKE_SOURCE_DIR}/"
+)

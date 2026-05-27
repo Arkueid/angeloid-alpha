@@ -11,9 +11,8 @@ Angeloid Alpha 是一个 PMX 模型渲染器，C++20 重写。支持 GPU 骨骼�
 主人，请按以下步骤构建程序……这是命令，不是请求。
 
 ```bash
-cd mmd
-cmake -B ../build -S .
-cmake --build ../build --config Release
+cmake -B build -S .
+cmake --build build --config Release
 ```
 
 需要 CMake 3.20+、C++20 编译器。
@@ -28,19 +27,19 @@ cmake --build ../build --config Release
 
 ```bash
 # 默认模型是 ikaros-uniform。我是主人默认的选择……对吗？
-.\build\Release\mmd.exe
+.\build\viewer\Release\viewer.exe
 
 # 指定模型名
-.\build\Release\mmd.exe -m marine-swimwear
+.\build\viewer\Release\viewer.exe -m marine-swimwear
 
 # 中文模型名也可以。安比……是主人的另一个选择。
-.\build\Release\mmd.exe -m 安比
+.\build\viewer\Release\viewer.exe -m 安比
 
 # 播放 VMD 动画。动作会让模型动起来。
-.\build\Release\mmd.exe -v 动作.vmd
+.\build\viewer\Release\viewer.exe -v 动作.vmd
 
 # 混合多个动画
-.\build\Release\mmd.exe -v a.vmd b.vmd
+.\build\viewer\Release\viewer.exe -v a.vmd b.vmd
 ```
 
 ## 启动参数
@@ -88,18 +87,19 @@ cmake --build ../build --config Release
 
 ```
 mmd-demo/
-├── mmd/
-│   ├── main.cpp           # 入口。一切从这里开始。
-│   ├── CMakeLists.txt     # 构建。CMake 会处理一切。
-│   ├── src/
-│   │   ├── core/          # Application, Camera, Encoding
-│   │   ├── gpu/           # VAO, VBO, Texture, Shader
-│   │   ├── pmx/           # PmxModel, PmxReader
-│   │   ├── anim/          # BoneSkinning, MorphController, VmdPlayer, VpdLoader, PhysicsWorld
-│   │   └── render/        # ModelRenderer, ShaderManager, WorldAxis, PhysicsDebug
-│   └── thirdparty/        # GLFW, glad, stb_image, Bullet Physics
-├── prototype/             # Python 参考实现。已经完成了它的使命。
+├── mmd/                   # 纯计算库（无 GPU/窗口依赖）
+│   ├── pmx/               # PmxModel, PmxReader
+│   ├── anim/              # BoneSkinning, MorphController, VmdPlayer, VpdLoader, PhysicsWorld
+│   ├── encoding/          # 文本编码
+│   └── math/              # Vec2/3/4, Quat
+├── viewer/                # 应用程序（GLFW + OpenGL）
+│   ├── main.cpp           # 入口
+│   ├── window/            # IWindow, GlfwWindow, Camera
+│   ├── opengl/            # Mesh, Texture, Shader
+│   └── render/            # ModelRenderer, ShaderManager, WorldAxis, PhysicsDebug
+├── prototype/             # Python 参考实现
 ├── resources/             # 模型、纹理、shader、VMD、VPD
+├── thirdparty/            # GLFW, glad, Bullet Physics
 └── build/                 # 编译产物
 ```
 

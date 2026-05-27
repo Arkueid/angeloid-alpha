@@ -1,6 +1,6 @@
-[submodule "mmd/thirdparty/glfw"]
-	path = mmd/thirdparty/glfw
+[submodule "thirdparty/glfw"]
+	path = thirdparty/glfw
 	url = https://github.com/glfw/glfw.git
-[submodule "mmd/thirdparty/bullet"]
-	path = mmd/thirdparty/bullet
+[submodule "thirdparty/bullet"]
+	path = thirdparty/bullet
 	url = https://github.com/bulletphysics/bullet3.git
