@@ -79,72 +79,6 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
     }
     std::cout << "  Dynamic mass bodies: " << dynMassCount << std::endl;
 
-    // --- Box bodies ---
-    std::cout << "\nBox bodies (shape_type=1):" << std::endl;
-    for (const auto& rb : model.rigidbodies) {
-        if (rb.shape_type != RIGID_SHAPE_BOX) continue;
-        const char* bn = (rb.bone_index >= 0 && rb.bone_index < model.boneCount())
-            ? model.bones[rb.bone_index].name.c_str() : "-";
-        printf("  [%d] %-28s bone=%-20s mode=%d mass=%.3f size=(%.4f,%.4f,%.4f)\n",
-            rb.index, rb.name.c_str(), bn, rb.mode, rb.mass,
-            rb.shape_size.x, rb.shape_size.y, rb.shape_size.z);
-    }
-
-    // --- Sphere bodies ---
-    std::cout << "\nSphere bodies (shape_type=0):" << std::endl;
-    for (const auto& rb : model.rigidbodies) {
-        if (rb.shape_type != RIGID_SHAPE_SPHERE) continue;
-        const char* bn = (rb.bone_index >= 0 && rb.bone_index < model.boneCount())
-            ? model.bones[rb.bone_index].name.c_str() : "-";
-        printf("  [%d] %-28s bone=%-20s mode=%d mass=%.3f size=(%.4f,%.4f,%.4f)\n",
-            rb.index, rb.name.c_str(), bn, rb.mode, rb.mass,
-            rb.shape_size.x, rb.shape_size.y, rb.shape_size.z);
-    }
-
-    // --- Capsule-shaped bodies ---
-    std::cout << "\nCapsule bodies (shape_type=2):" << std::endl;
-    for (const auto& rb : model.rigidbodies) {
-        if (rb.shape_type != RIGID_SHAPE_CAPSULE) continue;
-        const char* bn = (rb.bone_index >= 0 && rb.bone_index < model.boneCount())
-            ? model.bones[rb.bone_index].name.c_str() : "-";
-        printf("  [%d] %-28s bone=%-20s mode=%d mass=%.3f size=(%.4f,%.4f,%.4f)\n",
-            rb.index, rb.name.c_str(), bn, rb.mode, rb.mass,
-            rb.shape_size.x, rb.shape_size.y, rb.shape_size.z);
-    }
-
-    // --- Debug: bodies with exactly 1 joint (single-body chains) ---
-    {
-        std::vector<int> jointCount(model.rigidbodies.size(), 0);
-        for (const auto& jt : model.joints) {
-            if (jt.rigidbody_index_a >= 0 && jt.rigidbody_index_a < (int)model.rigidbodies.size())
-                jointCount[jt.rigidbody_index_a]++;
-            if (jt.rigidbody_index_b >= 0 && jt.rigidbody_index_b < (int)model.rigidbodies.size())
-                jointCount[jt.rigidbody_index_b]++;
-        }
-        std::cout << "\n=== Single-joint bodies (degree=1) ===" << std::endl;
-        std::cout << "idx name                         mode mass  bone                      joint limits(TL/TH) springs(kT/kR)" << std::endl;
-        for (size_t i = 0; i < model.rigidbodies.size(); ++i) {
-            if (jointCount[i] != 1) continue;
-            const auto& rb = model.rigidbodies[i];
-            if (rb.mode != 1) continue; // only dynamic bodies
-            // Find the joint
-            const PmxJoint* jt = nullptr;
-            for (const auto& j : model.joints) {
-                if (j.rigidbody_index_a == (int)i || j.rigidbody_index_b == (int)i) { jt = &j; break; }
-            }
-            if (!jt) continue;
-            const char* boneName = (rb.bone_index >= 0 && rb.bone_index < model.boneCount())
-                ? model.bones[rb.bone_index].name.c_str() : "-";
-            printf("%3zu %-28s %4d %5.3f %-25s T=(%+.3f,%+.3f,%+.3f)/(%+.3f,%+.3f,%+.3f) kT=(%.0f,%.0f,%.0f) kR=(%.0f,%.0f,%.0f)\n",
-                i, rb.name.c_str(), rb.mode, rb.mass, boneName,
-                jt->translation_limit_min.x, jt->translation_limit_min.y, jt->translation_limit_min.z,
-                jt->translation_limit_max.x, jt->translation_limit_max.y, jt->translation_limit_max.z,
-                jt->spring_constant_translation.x, jt->spring_constant_translation.y, jt->spring_constant_translation.z,
-                jt->spring_constant_rotation.x, jt->spring_constant_rotation.y, jt->spring_constant_rotation.z);
-        }
-        std::cout << "=== Single-joint bodies end ===" << std::endl;
-    }
-
     for (const auto& jt : model.joints) addJoint(jt);
 
     // Mark cloth-like bodies: connected to joints with rotation springs + freedom
@@ -172,93 +106,6 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
         }
     }
     std::cout << " (" << clothCount << " total)" << std::endl;
-
-    // Dump joints for hair-chain bodies (bones with 后发, 马尾, 侧发, 前发, chain in name)
-    std::cout << "\n=== Hair-chain joint analysis ===" << std::endl;
-    for (const auto& jt : model.joints) {
-        if (jt.rigidbody_index_a < 0 || jt.rigidbody_index_b < 0) continue;
-        if (jt.rigidbody_index_a >= (int)model.rigidbodies.size()) continue;
-        if (jt.rigidbody_index_b >= (int)model.rigidbodies.size()) continue;
-        const auto& ra = model.rigidbodies[jt.rigidbody_index_a];
-        const auto& rb = model.rigidbodies[jt.rigidbody_index_b];
-        // Check if either body's bone name contains hair-related keywords
-        auto checkBone = [&](int rbIdx) -> bool {
-            if (rbIdx < 0 || rbIdx >= (int)model.rigidbodies.size()) return false;
-            int bi = model.rigidbodies[rbIdx].bone_index;
-            if (bi < 0 || bi >= model.boneCount()) return false;
-            const auto& nm = model.bones[bi].name;
-            return nm.find("后发") != std::string::npos
-                || nm.find("马尾") != std::string::npos
-                || nm.find("侧发") != std::string::npos
-                || nm.find("前发") != std::string::npos
-                || nm.find("chain") != std::string::npos;
-        };
-        if (!checkBone(jt.rigidbody_index_a) && !checkBone(jt.rigidbody_index_b)) continue;
-        const auto& ba = model.bones[ra.bone_index >= 0 ? ra.bone_index : 0];
-        const auto& bb = model.bones[rb.bone_index >= 0 ? rb.bone_index : 0];
-        printf("  JT[%d]: %s(%d)<->%s(%d) type=%d TL=(%.3f,%.3f) TH=(%.3f,%.3f) RL=(%.3f,%.3f) RH=(%.3f,%.3f) "
-               "kLin=(%.0f,%.0f,%.0f) kRot=(%.0f,%.0f,%.0f)\n",
-               jt.index,
-               ba.name.c_str(), jt.rigidbody_index_a,
-               bb.name.c_str(), jt.rigidbody_index_b,
-               jt.joint_type,
-               jt.translation_limit_min.x, jt.translation_limit_max.x,
-               jt.translation_limit_min.y, jt.translation_limit_max.y,
-               jt.rotation_limit_min.x, jt.rotation_limit_max.x,
-               jt.rotation_limit_min.y, jt.rotation_limit_max.y,
-               jt.spring_constant_translation.x, jt.spring_constant_translation.y, jt.spring_constant_translation.z,
-               jt.spring_constant_rotation.x, jt.spring_constant_rotation.y, jt.spring_constant_rotation.z);
-    }
-    std::cout << "=== Hair joint analysis end ===" << std::endl;
-
-    // Dump hair bone flags and rigid body links
-    std::cout << "\n=== Hair bone analysis ===" << std::endl;
-    std::cout << "bodyIdx bodyName                  boneIdx boneName                      mode mass afterPhys parentIdx" << std::endl;
-    for (const auto& rb : model.rigidbodies) {
-        if (rb.bone_index < 0 || rb.bone_index >= model.boneCount()) continue;
-        const auto& bn = model.bones[rb.bone_index];
-        // Filter: hair-related bones
-        bool isHair = bn.name.find("后发") != std::string::npos
-                   || bn.name.find("侧发") != std::string::npos
-                   || bn.name.find("前发") != std::string::npos
-                   || bn.name == "chain"
-                   || bn.name == "chain root"
-                   || bn.name == "halo"
-                   || bn.name.find("small wing") != std::string::npos;
-        if (!isHair) continue;
-        printf("%7d %-25s %7d %-28s %4d %5.2f %9s %9d\n",
-            rb.index, rb.name.c_str(),
-            rb.bone_index, bn.name.c_str(),
-            rb.mode, rb.mass,
-            bn.hasFlag(BONEFLAG_IS_AFTER_PHYSICS_DEFORM) ? "AFTER" : "-",
-            bn.parent_index);
-    }
-    std::cout << "=== Hair bone analysis end ===" << std::endl;
-
-    // Check which small hair bodies have joints
-    auto bodyHasJoint = [&](int rbIdx) {
-        for (const auto& jt : model.joints) {
-            if (jt.rigidbody_index_a == rbIdx || jt.rigidbody_index_b == rbIdx) return true;
-        }
-        return false;
-    };
-    std::cout << "\n=== Floating body check (no joints) ===" << std::endl;
-    for (const auto& rb : model.rigidbodies) {
-        if (rb.bone_index < 0 || rb.bone_index >= model.boneCount()) continue;
-        const auto& bn = model.bones[rb.bone_index];
-        bool isSmall = bn.name.find("后发") != std::string::npos
-                    || bn.name.find("侧发") != std::string::npos
-                    || bn.name.find("前发") != std::string::npos
-                    || bn.name == "chain"
-                    || bn.name == "halo"
-                    || bn.name.find("small wing") != std::string::npos;
-        if (!isSmall) continue;
-        if (!bodyHasJoint(rb.index)) {
-            printf("  NO JOINT: body[%d] %s mode=%d mass=%.2f bone=%s\n",
-                rb.index, rb.name.c_str(), rb.mode, rb.mass, bn.name.c_str());
-        }
-    }
-    std::cout << "=== Floating check end ===" << std::endl;
 }
 
 void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWorld)
@@ -332,22 +179,20 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
     float pz = rb.shape_position.z - mCenter.z;
 
     // Shapes at PMX-native scale (no modelScale — physics runs in PMX space)
-    // PMX spec: sphere size.x=radius, capsule size.x=radius size.y=height — pass directly
-    // Box size=(w,h,d) — Bullet btBoxShape expects half-extents, so *0.5f
     btCollisionShape* shape = nullptr;
     if (rb.shape_type == RIGID_SHAPE_SPHERE)
-        shape = new btSphereShape(rb.shape_size.x);
+        shape = new btSphereShape(rb.shape_size.x * kSphereShapeScale);
     else if (rb.shape_type == RIGID_SHAPE_BOX)
-        shape = new btBoxShape(btVector3(rb.shape_size.x*0.5f, rb.shape_size.y*0.5f, rb.shape_size.z*0.5f));
+        shape = new btBoxShape(btVector3(rb.shape_size.x*kBoxShapeScale, rb.shape_size.y*kBoxShapeScale, rb.shape_size.z*kBoxShapeScale));
     else if (rb.shape_type == RIGID_SHAPE_CAPSULE) {
-        float capR = rb.shape_size.x;
-        float capH = rb.shape_size.y;
+        float capR = rb.shape_size.x * kCapsuleShapeScale;
+        float capH = rb.shape_size.y * kCapsuleShapeScale;
         float minR = 0.01f;
         if (capR < minR) { capR = minR; }
         shape = new btCapsuleShape(capR, capH);
     }
     else
-        shape = new btSphereShape(rb.shape_size.x);
+        shape = new btSphereShape(rb.shape_size.x * kSphereShapeScale);
     mShapes.emplace_back(shape);
 
     // MMD rotation order: Y * X * Z (matches saba: ry * rx * rz)
@@ -378,16 +223,18 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
 
     // CCD for dynamic bodies to prevent tunneling
     if (mass > 0) {
-        float ccdRadius = rb.shape_size.x; // sphere/capsule: PMX size.x is radius
+        float ccdRadius = rb.shape_size.x * kSphereShapeScale;
+        if (rb.shape_type == RIGID_SHAPE_CAPSULE)
+            ccdRadius = rb.shape_size.x * kCapsuleShapeScale;
         if (rb.shape_type == RIGID_SHAPE_BOX)
-            ccdRadius = std::min({rb.shape_size.x, rb.shape_size.y, rb.shape_size.z}) * 0.25f;
+            ccdRadius = std::min({rb.shape_size.x, rb.shape_size.y, rb.shape_size.z}) * kBoxShapeScale * 0.5f;
         body->setCcdMotionThreshold(ccdRadius * 0.5f);
         body->setCcdSweptSphereRadius(ccdRadius);
     }
 
     mWorld->addRigidBody(body,
         1 << rb.collision_group,
-        ~rb.no_collision_group & 0xFFFF);
+        rb.no_collision_group);
     btQuaternion initRot = t.getRotation();
     btVector3 initPos = t.getOrigin();
 
@@ -565,7 +412,7 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
             }
         }
 
-        sc->setEquilibriumPoint();
+        // sc->setEquilibriumPoint();  // saba does not call this
         c = sc;
     }
 

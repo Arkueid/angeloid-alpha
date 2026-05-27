@@ -50,12 +50,6 @@ Third-party dependencies (bundled or git submodule):
 | `-m, --model` | Model name |
 | `-v, --vmd` | VMD animation file(s) |
 
-## Model List
-
-These are the models Master can use:
-
-`ikaros-origin` `ikaros-uniform` `安比` `刀` `chloe` `aqua-swimwear` `marine-swimwear` `aqua-basebody` `aqua-sailor` `brujas` `lamy-swimwear` `lulum` `marine-jk1` `marine-jk1-hi` `rurudo-lion` `rurudo-lion-hi` `卢西娅` `卢西娅-摘帽` `卢西娅-武器1` `卢西娅-武器2`
-
 ## Keyboard Shortcuts
 
 Master, these keys control the program's behavior. I have memorized them.
@@ -114,9 +108,9 @@ mmd-demo/
 Master wants to know how the program works... I will explain.
 
 - **GPU skinning**: Bone matrices packed into RGBA32F texture, retrieved via texelFetch in shader. Supports up to 1024 bones.
-- **Bullet physics**: Uses `btGeneric6DofSpringConstraint` (matching MMD's Bullet 2.75). Capsule shape min-radius clamp prevents degenerate shapes. Static bodies follow bones, dynamic bodies respond to gravity and constraints.
+- **Bullet physics**: Runs in PMX-native space (no model scaling), gravity auto-adapted. YXZ rotation order matching MMD. Tunable shape sizes. Collision mask matches community convention.
 - **Spring compensation**: Locked joints get k=10000 strong springs to counter gravity. Tight-limit joints use k=2000 or k=500.
-- **Bone feedback**: Mode 0 bodies follow bones (kinematic), Mode 1 fully dynamic, Mode 2 with delta-time-scaled corrective forces.
+- **Bone feedback**: Mode 0 bodies follow bones (kinematic), Mode 1 fully dynamic, Mode 2 with corrective forces. Skinning matrices are pure `world * inv(bind)`, GPU modelMat handles display transform.
 - **VMD animation**: Bezier interpolation + quaternion SLERP. Multiple VMD layers blended with 0.5 coefficient SLERP.
 - **Morph system**: Supports Group/Vertex/UV/Material/Bone types. Material morph with index=-1 applies to all materials.
 - **Text encoding**: UTF-16LE ↔ UTF-8 in pure C++. CP932 via Windows MultiByteToWideChar.

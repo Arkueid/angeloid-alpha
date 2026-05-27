@@ -179,10 +179,15 @@ static void buildPass(const PmxModel& model, float cx, float my, float cz, float
         float kx = rb.shape_size.x, ky = rb.shape_size.y, kz = rb.shape_size.z;
 
         std::vector<float> v;
-        if (rb.shape_type == RIGID_SHAPE_SPHERE)       { addSphere(v, kx, c); }
-        else if (rb.shape_type == RIGID_SHAPE_BOX)     { addBox(v, {kx*0.5f, ky*0.5f, kz*0.5f}, c); }
-        else if (rb.shape_type == RIGID_SHAPE_CAPSULE) { addCapsule(v, kx, ky, c); }
-        else { addSphere(v, kx, c); }
+        if (rb.shape_type == RIGID_SHAPE_SPHERE) {
+            addSphere(v, kx * kSphereShapeScale, c);
+        } else if (rb.shape_type == RIGID_SHAPE_BOX) {
+            addBox(v, {kx * kBoxShapeScale, ky * kBoxShapeScale, kz * kBoxShapeScale}, c);
+        } else if (rb.shape_type == RIGID_SHAPE_CAPSULE) {
+            addCapsule(v, kx * kCapsuleShapeScale, ky * kCapsuleShapeScale, c);
+        } else {
+            addSphere(v, kx * kSphereShapeScale, c);
+        }
 
         float rx = rb.shape_rotation.x, ry = rb.shape_rotation.y, rz = rb.shape_rotation.z;
         float crx = cosf(rx), srx = sinf(rx), cry = cosf(ry), sry = sinf(ry), crz = cosf(rz), srz = sinf(rz);

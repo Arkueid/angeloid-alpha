@@ -50,12 +50,6 @@ cmake --build ../build --config Release
 | `-m, --model` | 模型名 |
 | `-v, --vmd` | VMD 动画文件，可以接多个 |
 
-## 模型列表
-
-这些是主人可以使用的模型：
-
-`ikaros-origin` `ikaros-uniform` `安比` `刀` `chloe` `aqua-swimwear` `marine-swimwear` `aqua-basebody` `aqua-sailor` `brujas` `lamy-swimwear` `lulum` `marine-jk1` `marine-jk1-hi` `rurudo-lion` `rurudo-lion-hi` `卢西娅` `卢西娅-摘帽` `卢西娅-武器1` `卢西娅-武器2`
-
 ## 操作按键
 
 主人，这些按键控制着程序的行为。我已经记住了。
@@ -114,9 +108,9 @@ mmd-demo/
 主人想知道程序是怎么运作的……我来说明。
 
 - **GPU 骨骼蒙皮**：Bone 矩阵打包为 RGBA32F 纹理，shader 中用 texelFetch 还原。最多支持 1024 根骨骼。
-- **Bullet 物理**：使用 `btGeneric6DofSpringConstraint`（匹配 MMD 的 Bullet 2.75）。胶囊体小半径 clamp 防止退化。静态刚体跟随骨骼，动态刚体受重力和约束影响。
+- **Bullet 物理**：PMX 原生空间运行（无模型缩放），重力自动适配。YXZ 旋转顺序匹配 MMD。形状尺寸可调。碰撞 mask 匹配社区惯例。
 - **弹簧补偿**：锁死的关节加 k=10000 强力弹簧，限位紧密用 k=2000 或 k=500。
-- **骨骼反馈**：Mode 0 刚体跟随骨骼（kinematic），Mode 1 全动态，Mode 2 带 delta-time 缩放修正力。
+- **骨骼反馈**：Mode 0 刚体跟随骨骼（kinematic），Mode 1 全动态，Mode 2 带延时修正力。蒙皮矩阵纯 `world * inv(bind)`，GPU modelMat 处理显示变换。
 - **VMD 动画**：贝塞尔插值 + 四元数 SLERP。多层 VMD 用 0.5 混合系数 SLERP。
 - **Morph 系统**：支持 Group/Vertex/UV/Material/Bone 五种类型。Material morph 的 index=-1 会应用到所有材质。
 - **纹理编码**：UTF-16LE ↔ UTF-8 纯 C++ 实现。CP932 调 Windows MultiByteToWideChar。

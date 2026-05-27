@@ -6,6 +6,11 @@
 #include <memory>
 #include <vector>
 
+// Shape size multipliers from PMX value to Bullet parameter
+inline constexpr float kSphereShapeScale  = 0.9f;  // btSphereShape radius
+inline constexpr float kBoxShapeScale     = 0.9f;  // btBoxShape half-extent
+inline constexpr float kCapsuleShapeScale = 0.9f;  // btCapsuleShape radius & height
+
 class btDiscreteDynamicsWorld;
 class btRigidBody;
 class btCollisionShape;
