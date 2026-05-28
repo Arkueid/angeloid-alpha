@@ -324,7 +324,6 @@ void ModelRenderer::renderMainPass(Gpu::ShaderProgram& shader,
     }
 
     glDisable(GL_BLEND);
-    glDisable(GL_DEPTH_TEST);
 }
 
 void ModelRenderer::renderOutlinePass(Gpu::ShaderProgram& shader,

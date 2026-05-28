@@ -509,7 +509,7 @@ void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>
 
     mWorld->stepSimulation(std::min(deltaTime, kMaxTimestep), kSubsteps, kFixedTimestep);
 
-    debugTrackCloth();
+    // debugTrackCloth();
 }
 
 void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) const

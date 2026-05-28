@@ -20,6 +20,7 @@ set(MMD_SOURCES
     render/opengl/ShaderManager.cpp
     render/opengl/debug/WorldAxis.cpp
     render/opengl/StbImage.cpp
+    Model.cpp
 )
 
 add_library(mmd STATIC ${MMD_SOURCES})

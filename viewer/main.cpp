@@ -1,14 +1,10 @@
 #include "window/GlfwWindow.h"
 #include "window/Camera.h"
-#include "render/opengl/ModelRenderer.h"
-#include "anim/MorphController.h"
-#include "pmx/PmxReader.h"
+#include "Model.h"
 #include "render/opengl/ShaderManager.h"
-#include "anim/BoneSkinning.h"
-#include "anim/PhysicsWorld.h"
-#include "anim/VmdPlayer.h"
-#include "render/opengl/debug/RigidBodyRenderer.h"
 #include "render/opengl/debug/WorldAxis.h"
+#include "render/opengl/debug/RigidBodyRenderer.h"
+#include "anim/VmdPlayer.h"
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -43,7 +39,6 @@ static void printHelp()
         "  P key: Toggle VPD pose\n"
         "  R key: Reset camera to default position\n"
         "  I key: Toggle idle animation\n"
-        "  M key: Toggle morph mode\n"
         "  < / > keys: Switch between morphs\n"
         "  Up/Down keys: Adjust morph weight\n"
         "VMD Animation Controls:\n"
@@ -81,7 +76,6 @@ int main(int argc, char* argv[])
 {
 #ifdef _WIN32
     std::system("chcp 65001 > nul");
-    // Convert argv from system locale encoding (ACP) to UTF-8
     std::vector<std::string> u8args(argc);
     for (int i = 0; i < argc; ++i) {
         int wlen = MultiByteToWideChar(CP_ACP, 0, argv[i], -1, nullptr, 0);
@@ -102,460 +96,179 @@ int main(int argc, char* argv[])
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if ((arg == "--model" || arg == "-m") && i + 1 < argc) {
+        if ((arg == "--model" || arg == "-m") && i + 1 < argc)
             modelName = argv[++i];
-        } else if (arg == "--vmd" || arg == "-v") {
-            while (i + 1 < argc && argv[i + 1][0] != '-')
-                vmdPaths.push_back(fs::u8path(argv[++i]));
-        } else if (arg[0] != '-') {
+        else if (arg == "--vmd" || arg == "-v")
+            while (i + 1 < argc && argv[i + 1][0] != '-') vmdPaths.push_back(fs::u8path(argv[++i]));
+        else if (arg[0] != '-')
             modelName = arg;
-        }
     }
 
-    // Resolve model name -> path
-    fs::path pmxPath;
-    fs::path texDir;
+    fs::path pmxPath, texDir;
     auto it = MODELS.find(modelName);
-    if (it != MODELS.end()) {
-        pmxPath = fs::u8path(it->second.pmx);
-        texDir = fs::u8path(it->second.texDir);
-    } else {
-        pmxPath = fs::u8path(modelName);
-        texDir = fs::u8path(modelName).parent_path();
-    }
-
-    // VPD: auto-load like Python
+    if (it != MODELS.end()) { pmxPath = fs::u8path(it->second.pmx); texDir = fs::u8path(it->second.texDir); }
+    else { pmxPath = fs::u8path(modelName); texDir = pmxPath.parent_path(); }
     fs::path vpdPath = fs::u8path("resources/vpd/自然站姿.vpd");
-
-    std::cout << "Loading: " << pmxPath.string() << std::endl;
-    if (!fs::exists(pmxPath)) {
-        std::cerr << "Model not found: " << pmxPath.string() << std::endl;
-        return 1;
-    }
-    PmxModel model = PmxReader::load(pmxPath);
-
-    std::cout << "Model: " << model.name << " (" << model.english_name << ")" << std::endl;
-    std::cout << "Vertices: " << model.vertexCount() << ", Faces: " << model.faceCount()
-              << ", Bones: " << model.boneCount() << std::endl;
-
     fs::path projRoot = fs::weakly_canonical(fs::path(MMD_PROJECT_ROOT));
+    if (texDir.is_relative()) texDir = projRoot / texDir;
+    if (vpdPath.is_relative()) vpdPath = projRoot / vpdPath;
 
-    GlfwWindow app(1280, 720, "MMD PMX Viewer - " + model.name);
+    // --- Window (must be first — creates GL context needed by model loading) ---
+    GlfwWindow app(1280, 720, "MMD PMX Viewer");
 
+    // --- Load model ---
+    mmd::Model model;
+    model.load(pmxPath, texDir, projRoot / "resources/toon");
+    app.setTitle("MMD PMX Viewer - " + model.data().name);
+    if (!vpdPath.empty()) model.loadVpd(vpdPath);
+
+    // --- VMD ---
+    for (auto& vp : vmdPaths) {
+        if (vp.is_relative()) vp = projRoot / vp;
+        auto vmdAnim = VmdAnimation::load(vp);
+        if (!model.vmdMixer()) model.setVmd(std::make_unique<VmdMixer>());
+        std::cout << "VMD: " << vmdAnim.modelName << " (max frame: " << vmdAnim.maxFrame << ")" << std::endl;
+        model.vmdMixer()->addVmd(std::move(vmdAnim));
+    }
     ShaderManager shaders(projRoot / "resources/shaders");
     WorldAxis worldAxis;
     Camera camera;
 
-    RigidBodyRenderer physicsDebug;
-    physicsDebug.showRigidBody = false;
-    physicsDebug.showJoint = false;
+    printHelp();
 
-    PhysicsWorld physicsWorld;
-
-    ModelRenderer renderer;
-    if (texDir.is_relative()) texDir = projRoot / texDir;
-    renderer.loadModel(model, texDir, projRoot / "resources/toon");
-
-    physicsDebug.build(model, renderer.modelScale());
-
-    physicsWorld.build(model, renderer.modelScale());
-    physicsWorld.enabled = false;
-
-    // VPD + skinning
-    std::unordered_map<std::string, VpdPose> vpdPoses;
-    bool vpdPoseApplied = false;
-    if (!vpdPath.empty() && vpdPath.is_relative()) vpdPath = projRoot / vpdPath;
-    if (!vpdPath.empty() && fs::exists(vpdPath)) {
-        vpdPoses = VpdLoader::load(vpdPath);
-        vpdPoseApplied = true;
-        std::cout << "VPD: " << vpdPoses.size() << " poses" << std::endl;
-        renderer.setupSkinning(model, vpdPath);
-    } else if (!vpdPath.empty()) {
-        std::cout << "VPD not found: " << vpdPath.string() << std::endl;
-        renderer.setupSkinning(model);
-    } else {
-        renderer.setupSkinning(model);
-    }
-    renderer.useSkinning = true;
-    physicsDebug.useBoneMatrices = false;
-
-    // Persistent poseWorld — physics writes to it and it persists between frames
-    auto poseWorld = BoneSkinning::computePoseWorldMatrices(model, vpdPoses);
-    physicsWorld.resetPhysics(poseWorld);
-    physicsWorld.getBoneTransforms(poseWorld);
-
-    MorphController morphCtl;
-    morphCtl.setModel(model);
-
-    auto applyMorphOffsets = [&]() {
-        renderer.morphVbo()->write(morphCtl.positionOffsets().data(),
-            morphCtl.positionOffsets().size() * sizeof(float));
-        if (auto* uv = renderer.uvMorphVbo())
-            uv->write(morphCtl.uvOffsets().data(),
-                morphCtl.uvOffsets().size() * sizeof(float));
-    };
-    bool showMorph = true;
-    bool idleEnabled = true;
-
-    // Morph cycling state
-    int activeMorphIndex = -1;
-    float morphWeightValue = 0.0f;
-    std::vector<int> availableMorphs;
-    for (const auto& m : model.morphs) {
+    // Morph state
+    int morphIndex = -1;
+    float morphWeight = 0.0f;
+    std::unordered_map<std::string, float> savedWeights;
+    std::vector<int> morphList;
+    for (const auto& m : model.data().morphs)
         if (m.morph_type == MORPH_TYPE_VERTEX || m.morph_type == MORPH_TYPE_GROUP ||
             m.morph_type == MORPH_TYPE_MATERIAL || m.morph_type == MORPH_TYPE_UV ||
             m.morph_type == MORPH_TYPE_BONE)
-            availableMorphs.push_back(m.index);
-    }
-
-    // VMD animation (multi-layer mixer)
-    std::unique_ptr<VmdMixer> vmdMixer;
-    for (auto& vp : vmdPaths) {
-        if (vp.is_relative()) vp = projRoot / vp;
-        if (!fs::exists(vp)) {
-            std::cerr << "VMD not found: " << vp.string() << std::endl;
-            return 1;
-        }
-        auto vmdAnim = VmdAnimation::load(vp);
-        if (!vmdMixer) vmdMixer = std::make_unique<VmdMixer>();
-        std::cout << "VMD: " << vmdAnim.modelName << " (max frame: "
-                  << vmdAnim.maxFrame << ")" << std::endl;
-        vmdMixer->addVmd(std::move(vmdAnim));
-    }
-    if (vmdMixer) vmdMixer->play();
-
-    printHelp();
+            morphList.push_back(m.index);
 
     // Input
     app.onMouseButton = [&camera](int b, int a, int) { camera.onMouseButton(b, a); };
     app.onCursorPos  = [&camera](double x, double y) { camera.onCursorPos(x, y); };
     app.onScroll     = [&camera](double, double yo) { camera.onScroll(yo); };
-    app.onKey = [&](int key, int sc, int act, int mods) {
-        (void)sc; (void)mods;
-        if (key == GLFW_KEY_ESCAPE && act == GLFW_PRESS) {
-            app.close();
-        }
-        if (key == GLFW_KEY_X && act == GLFW_PRESS) {
-            worldAxis.showAxis = !worldAxis.showAxis;
-            std::cout << "World axis: " << (worldAxis.showAxis ? "ON" : "OFF") << std::endl;
-        }
-        if (key == GLFW_KEY_G && act == GLFW_PRESS) {
-            worldAxis.showGrid = !worldAxis.showGrid;
-            std::cout << "Ground grid: " << (worldAxis.showGrid ? "ON" : "OFF") << std::endl;
-        }
+    app.onKey = [&](int key, int, int act, int) {
+        if (key == GLFW_KEY_ESCAPE && act == GLFW_PRESS) app.close();
+        if (key == GLFW_KEY_X && act == GLFW_PRESS) worldAxis.showAxis = !worldAxis.showAxis;
+        if (key == GLFW_KEY_G && act == GLFW_PRESS) worldAxis.showGrid = !worldAxis.showGrid;
         if (key == GLFW_KEY_B && act == GLFW_PRESS) {
-            physicsDebug.showRigidBody = !physicsDebug.showRigidBody;
-            std::cout << "Rigidbody: " << (physicsDebug.showRigidBody ? "ON" : "OFF") << std::endl;
+            static bool showDbg = false;
+            showDbg = !showDbg;
+            model.showPhysicsDebug(showDbg);
         }
         if (key == GLFW_KEY_F && act == GLFW_PRESS) {
-            if (physicsWorld.enabled)
-                physicsWorld.debugDump();
-            else
-                std::cout << "Enable physics (Y) first" << std::endl;
+            if (model.physicsEnabled()) model.physics().debugDump();
+            else std::cout << "Enable physics (Y) first" << std::endl;
         }
-        if (key == GLFW_KEY_H && act == GLFW_PRESS) {
-            renderer.showModel = !renderer.showModel;
-            std::cout << "Model mesh: " << (renderer.showModel ? "ON" : "OFF") << std::endl;
-        }
-        if (key == GLFW_KEY_O && act == GLFW_PRESS) {
-            renderer.showOutline = !renderer.showOutline;
-            std::cout << "Outline: " << (renderer.showOutline ? "ON" : "OFF") << std::endl;
-        }
-        if (key == GLFW_KEY_T && act == GLFW_PRESS) {
-            renderer.showToon = !renderer.showToon;
-            std::cout << "Toon shading: " << (renderer.showToon ? "ON" : "OFF") << std::endl;
+        if (key == GLFW_KEY_H && act == GLFW_PRESS) model.showModel(!model.renderer().showModel);
+        if (key == GLFW_KEY_O && act == GLFW_PRESS) model.showOutline(!model.renderer().showOutline);
+        if (key == GLFW_KEY_T && act == GLFW_PRESS) model.showToon(!model.renderer().showToon);
+        if (key == GLFW_KEY_P && act == GLFW_PRESS) {
+            model.applyVpd(!model.vpdApplied());
+            std::cout << "VPD pose: " << (model.vpdApplied() ? "ON" : "OFF") << std::endl;
         }
         if (key == GLFW_KEY_K && act == GLFW_PRESS) {
-            renderer.useSkinning = !renderer.useSkinning;
-            if (renderer.useSkinning) {
-                if (vpdPoseApplied)
-                    renderer.updateBoneTexture(model, vpdPoses, {});
-                else
-                    renderer.updateBoneTexture(model, {}, {});
-            }
-            std::cout << "Skinned rendering: " << (renderer.useSkinning ? "ON" : "OFF") << std::endl;
+            model.renderer().useSkinning = !model.renderer().useSkinning;
+            std::cout << "GPU skinning: " << (model.renderer().useSkinning ? "ON" : "OFF") << std::endl;
         }
         if (key == GLFW_KEY_Y && act == GLFW_PRESS) {
-            physicsWorld.enabled = !physicsWorld.enabled;
-            std::cout << "Physics: " << (physicsWorld.enabled ? "ON" : "OFF") << std::endl;
+            model.enablePhysics(!model.physicsEnabled());
+            std::cout << "Physics: " << (model.physicsEnabled() ? "ON" : "OFF") << std::endl;
         }
-        if (key == GLFW_KEY_P && act == GLFW_PRESS) {
-            if (!vpdPoses.empty()) {
-                vpdPoseApplied = !vpdPoseApplied;
-                if (vpdPoseApplied) {
-                    if (vmdMixer) {
-                        std::unordered_map<std::string, std::pair<std::array<float,3>, std::array<float,4>>> vmdT;
-                        for (const auto& bone : model.bones) {
-                            std::array<float,3> pos; std::array<float,4> rot;
-                            if (vmdMixer->getBoneTransform(bone.name, pos, rot))
-                                vmdT[bone.name] = {pos, rot};
-                        }
-                        auto& bm = morphCtl.boneMorphs();
-                        renderer.updateBoneTexture(model, vpdPoses, vmdT, bm.empty() ? nullptr : &bm);
-                    } else {
-                        auto& bm = morphCtl.boneMorphs();
-                        renderer.updateBoneTexture(model, vpdPoses, {}, bm.empty() ? nullptr : &bm);
-                    }
-                } else {
-                    auto& bm = morphCtl.boneMorphs();
-                    renderer.updateBoneTexture(model, {}, {}, bm.empty() ? nullptr : &bm);
-                }
-                std::cout << "VPD pose: " << (vpdPoseApplied ? "ON" : "OFF") << std::endl;
-            } else {
-                std::cout << "No VPD pose loaded" << std::endl;
-            }
-        }
-        if (key == GLFW_KEY_R && act == GLFW_PRESS) {
-            camera.reset();
-            std::cout << "Camera reset to default position" << std::endl;
-        }
+        if (key == GLFW_KEY_R && act == GLFW_PRESS) camera.reset();
         if (key == GLFW_KEY_I && act == GLFW_PRESS) {
-            idleEnabled = !idleEnabled;
-            if (!idleEnabled) morphCtl.clearMorphs();
-            std::cout << "Idle animation: " << (idleEnabled ? "ON" : "OFF") << std::endl;
+            static bool idle = true;
+            idle = !idle;
+            model.setIdleBlink(idle);
+            if (!idle) model.clearMorphs();
         }
-        if (key == GLFW_KEY_M && act == GLFW_PRESS) {
-            showMorph = !showMorph;
-            if (showMorph && !availableMorphs.empty()) {
-                activeMorphIndex = availableMorphs[0];
-                morphWeightValue = 0.0f;
-                morphCtl.clearMorphs();
-                const auto& m = model.morphs[activeMorphIndex];
-                morphCtl.setMorphWeight(m.name, morphWeightValue);
-                std::cout << "Morph mode: ON (showing morph: " << m.name << ")" << std::endl;
-            } else if (showMorph) {
-                std::cout << "Morph mode: ON (no available morphs found)" << std::endl;
-            } else {
-                morphCtl.clearMorphs();
-                std::cout << "Morph mode: OFF" << std::endl;
+        if (key == GLFW_KEY_COMMA && act != GLFW_RELEASE) {
+            if (!morphList.empty()) {
+                auto it = std::find(morphList.begin(), morphList.end(), morphIndex);
+                int idx = it != morphList.end() ? (int)(it - morphList.begin()) : 0;
+                idx = (idx - 1 + (int)morphList.size()) % (int)morphList.size();
+                morphIndex = morphList[idx];
+                morphWeight = savedWeights[model.data().morphs[morphIndex].name];
+                model.setMorphWeight(model.data().morphs[morphIndex].name, morphWeight);
             }
         }
-        if (key == GLFW_KEY_COMMA && (act == GLFW_PRESS || act == GLFW_REPEAT)) {
-            if (showMorph && !availableMorphs.empty()) {
-                auto it = std::find(availableMorphs.begin(), availableMorphs.end(), activeMorphIndex);
-                int idx = (it != availableMorphs.end()) ? (int)(it - availableMorphs.begin()) : 0;
-                idx = (idx - 1 + (int)availableMorphs.size()) % (int)availableMorphs.size();
-                activeMorphIndex = availableMorphs[idx];
-                morphCtl.clearMorphs();
-                const auto& m = model.morphs[activeMorphIndex];
-                morphCtl.setMorphWeight(m.name, morphWeightValue);
-                std::cout << "Active morph: " << m.name << " (weight=" << morphWeightValue << ")" << std::endl;
+        if (key == GLFW_KEY_PERIOD && act != GLFW_RELEASE) {
+            if (!morphList.empty()) {
+                auto it = std::find(morphList.begin(), morphList.end(), morphIndex);
+                int idx = it != morphList.end() ? (int)(it - morphList.begin()) : 0;
+                idx = (idx + 1) % (int)morphList.size();
+                morphIndex = morphList[idx];
+                morphWeight = savedWeights[model.data().morphs[morphIndex].name];
+                model.setMorphWeight(model.data().morphs[morphIndex].name, morphWeight);
             }
         }
-        if (key == GLFW_KEY_PERIOD && (act == GLFW_PRESS || act == GLFW_REPEAT)) {
-            if (showMorph && !availableMorphs.empty()) {
-                auto it = std::find(availableMorphs.begin(), availableMorphs.end(), activeMorphIndex);
-                int idx = (it != availableMorphs.end()) ? (int)(it - availableMorphs.begin()) : 0;
-                idx = (idx + 1) % (int)availableMorphs.size();
-                activeMorphIndex = availableMorphs[idx];
-                morphCtl.clearMorphs();
-                const auto& m = model.morphs[activeMorphIndex];
-                morphCtl.setMorphWeight(m.name, morphWeightValue);
-                std::cout << "Active morph: " << m.name << " (weight=" << morphWeightValue << ")" << std::endl;
+        if (key == GLFW_KEY_UP && act != GLFW_RELEASE) {
+            if (morphIndex >= 0 && morphIndex < model.data().morphCount()) {
+                morphWeight = std::min(1.0f, morphWeight + 0.1f);
+                auto& name = model.data().morphs[morphIndex].name;
+                savedWeights[name] = morphWeight;
+                model.setMorphWeight(name, morphWeight);
             }
         }
-        if (key == GLFW_KEY_UP && (act == GLFW_PRESS || act == GLFW_REPEAT)) {
-            if (showMorph) {
-                morphWeightValue = std::min(1.0f, morphWeightValue + 0.1f);
-                if (activeMorphIndex >= 0 && activeMorphIndex < model.morphCount()) {
-                    morphCtl.setMorphWeight(model.morphs[activeMorphIndex].name, morphWeightValue);
-                    std::cout << "Morph weight: " << morphWeightValue << std::endl;
-                }
-            }
-        }
-        if (key == GLFW_KEY_DOWN && (act == GLFW_PRESS || act == GLFW_REPEAT)) {
-            if (showMorph) {
-                morphWeightValue = std::max(0.0f, morphWeightValue - 0.1f);
-                if (activeMorphIndex >= 0 && activeMorphIndex < model.morphCount()) {
-                    morphCtl.setMorphWeight(model.morphs[activeMorphIndex].name, morphWeightValue);
-                    std::cout << "Morph weight: " << morphWeightValue << std::endl;
-                }
+        if (key == GLFW_KEY_DOWN && act != GLFW_RELEASE) {
+            if (morphIndex >= 0 && morphIndex < model.data().morphCount()) {
+                morphWeight = std::max(0.0f, morphWeight - 0.1f);
+                auto& name = model.data().morphs[morphIndex].name;
+                savedWeights[name] = morphWeight;
+                model.setMorphWeight(name, morphWeight);
             }
         }
         if (key == GLFW_KEY_SPACE && act == GLFW_PRESS) {
-            if (vmdMixer) {
-                if (vmdMixer->playing()) vmdMixer->pause();
-                else vmdMixer->play();
-            } else {
-                std::cout << "No VMD animation loaded" << std::endl;
-            }
+            if (auto* m = model.vmdMixer()) m->playing() ? m->pause() : m->play();
         }
         if (key == GLFW_KEY_L && act == GLFW_PRESS) {
-            if (vmdMixer) {
-                vmdMixer->setLoop(!vmdMixer->loop());
-                std::cout << "VMD loop: " << (vmdMixer->loop() ? "ON" : "OFF") << std::endl;
-            }
+            if (auto* m = model.vmdMixer()) m->setLoop(!m->loop());
         }
-        if (key == GLFW_KEY_LEFT_BRACKET && (act == GLFW_PRESS || act == GLFW_REPEAT)) {
-            if (vmdMixer) {
-                vmdMixer->setFrame(std::max(0.0f, vmdMixer->currentFrame() - 30));
-                std::cout << "VMD frame: " << vmdMixer->currentFrame()
-                          << "/" << vmdMixer->maxFrame() << std::endl;
-            }
+        if (key == GLFW_KEY_LEFT_BRACKET && act != GLFW_RELEASE) {
+            if (auto* m = model.vmdMixer()) m->setFrame(std::max(0.0f, m->currentFrame() - 30));
         }
-        if (key == GLFW_KEY_RIGHT_BRACKET && (act == GLFW_PRESS || act == GLFW_REPEAT)) {
-            if (vmdMixer) {
-                vmdMixer->setFrame(std::min((float)vmdMixer->maxFrame(),
-                                              vmdMixer->currentFrame() + 30));
-                std::cout << "VMD frame: " << vmdMixer->currentFrame()
-                          << "/" << vmdMixer->maxFrame() << std::endl;
-            }
+        if (key == GLFW_KEY_RIGHT_BRACKET && act != GLFW_RELEASE) {
+            if (auto* m = model.vmdMixer()) m->setFrame(std::min((float)m->maxFrame(), m->currentFrame() + 30));
         }
     };
-
-    // FPS tracking
-    int fpsFrameCount = 0;
-    float fpsElapsed = 0;
 
     // Update
     app.onUpdate = [&](float dt) {
-        {
-            auto* win = app.glfwWindow();
-            camera.update(dt,
-                glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS,
-                glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS,
-                glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS,
-                glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS,
-                glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS,
-                glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS);
-        }
-        fpsFrameCount++;
-        fpsElapsed += dt;
-        if (fpsElapsed >= 0.5f) {
-            float fps = (float)fpsFrameCount / fpsElapsed;
-            app.setTitle("MMD PMX Viewer - " + model.name + " [" + std::to_string((int)fps) + " FPS]");
-            fpsFrameCount = 0;
-            fpsElapsed = 0;
-        }
-
-        if (vmdMixer) {
-            vmdMixer->update(dt);
-            std::unordered_map<std::string, std::pair<std::array<float,3>, std::array<float,4>>> vmdTransforms;
-            for (const auto& bone : model.bones) {
-                std::array<float,3> pos; std::array<float,4> rot;
-                if (vmdMixer->getBoneTransform(bone.name, pos, rot))
-                    vmdTransforms[bone.name] = {pos, rot};
-            }
-            if (!vmdTransforms.empty())
-                poseWorld = BoneSkinning::computePoseWorldMatrices(model, vpdPoses, vmdTransforms);
-            // Apply VMD morph weights
-            std::unordered_map<std::string, float> vmdMorphs;
-            for (const auto& m : model.morphs) {
-                float w = vmdMixer->getMorphWeight(m.name);
-                if (w != 0) vmdMorphs[m.name] = w;
-            }
-            if (!vmdMorphs.empty()) morphCtl.setMorphWeights(vmdMorphs);
-        }
-
-        if (physicsWorld.enabled) {
-            physicsWorld.updateMode0Bodies(poseWorld);
-            physicsWorld.step(dt, poseWorld);
-            physicsWorld.getBoneTransforms(poseWorld);
-            BoneSkinning::recomputeAfterPhysicsBones(model, vpdPoses, poseWorld);
-        }
-        auto& boneMorphs = morphCtl.boneMorphs();
-        renderer.updateBoneTexture(model, poseWorld, boneMorphs.empty() ? nullptr : &boneMorphs);
+        auto* win = app.glfwWindow();
+        camera.update(dt,
+            glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS,
+            glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS,
+            glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS,
+            glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS,
+            glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS,
+            glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS);
+        model.update(dt);
     };
 
     // Render
-    float idleTime = 0;
     app.onRender = [&]() {
         glFrontFace(GL_CW);
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LEQUAL);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LEQUAL);
+        glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         auto proj = Camera::projectionMatrix(app.width(), app.height());
         auto view = camera.viewMatrix();
 
-        if (auto* s = shaders.get("axis")) {
+        if (auto* s = shaders.get("axis"))
             worldAxis.render(*s, proj, view);
-        }
 
-        // Idle animation
-        bool idleActive = idleEnabled && (!vmdMixer || !vmdMixer->playing());
-        if (idleActive) idleTime += app.deltaTime();
-
-        if (idleActive) {
-            float blinkPhase = fmodf(idleTime, 4.0f);
-            float w = 0;
-            if (blinkPhase < 0.15f) {
-                float t = blinkPhase / 0.15f;
-                w = t < 0.5f ? t * 2.0f : (1.0f - t) * 2.0f;
-            }
-            std::unordered_map<std::string, float> bm;
-            for (auto& nm : {"blink", "blink_l", "blink_r", "まばたき", "まぶたき", "ウィンク", "ｳｨﾝｸ"})
-                bm[nm] = w;
-            // Merge blink morphs into existing weights (don't replace manual selection)
-            for (auto& [name, wt] : bm)
-                morphCtl.morphWeights()[name] = wt;
-            morphCtl.updateMorphOffsets();
-        }
-
-        // Write morph offsets to GPU before rendering
-        applyMorphOffsets();
-
-        // Sync morph material overrides
-        renderer.clearMaterialOverrides();
-        for (size_t i = 0; i < model.materials.size(); ++i) {
-            if (auto* ov = morphCtl.getMaterialOverride((int)i)) {
-                renderer.setMaterialOverride((int)i, *ov);
-            }
-        }
-
-        if (renderer.useSkinning) {
-            bool useMorph = showMorph && morphCtl.hasActiveMorphs();
-            if (auto* s = shaders.get(useMorph ? "morph_outline" : "outline_skinned"))
-                useMorph ? renderer.renderMorphOutlinePass(*s, proj, view) : renderer.renderSkinnedOutlinePass(*s, proj, view);
-            auto* sn = useMorph ? (renderer.showToon ? "morph" : "morph_notoon")
-                                : (renderer.showToon ? "skinned" : "skinned_notoon");
-            if (auto* s = shaders.get(sn)) {
-                if (renderer.showToon) {
-                    s->use();
-                    s->setVec3("camera_pos", camera.x, camera.y, camera.z);
-                    s->setFloat("shadow_thresh", 0.0f);
-                    s->setFloat("rim_power", 4.0f);
-                    s->setVec3("rim_color", 1.0f, 1.0f, 1.0f);
-                    s->setInt("gradient_map", 2);
-                    glActiveTexture(GL_TEXTURE2);
-                    glBindTexture(GL_TEXTURE_2D, shaders.gradientTexture()->id);
-                }
-                useMorph ? renderer.renderMorphMainPass(*s, proj, view) : renderer.renderSkinnedMainPass(*s, proj, view);
-            }
-        } else {
-            if (auto* s = shaders.get("outline"))
-                renderer.renderOutlinePass(*s, proj, view);
-            auto* sn = renderer.showToon ? "toon" : "main";
-            if (auto* s = shaders.get(sn)) {
-                if (renderer.showToon) {
-                    s->use();
-                    s->setVec3("camera_pos", camera.x, camera.y, camera.z);
-                    s->setFloat("shadow_thresh", 0.0f);
-                    s->setFloat("rim_power", 4.0f);
-                    s->setVec3("rim_color", 1.0f, 1.0f, 1.0f);
-                    s->setInt("gradient_map", 1);
-                    glActiveTexture(GL_TEXTURE1);
-                    glBindTexture(GL_TEXTURE_2D, shaders.gradientTexture()->id);
-                }
-                renderer.renderMainPass(*s, proj, view);
-            }
-        }
-
-        // Physics debug
-        if (auto* s = shaders.get("rigidbody")) {
-            if (physicsWorld.enabled && physicsDebug.showRigidBody)
-                physicsDebug.updateFromPhysics(physicsWorld);
-            glLineWidth(2.0f);
-            physicsDebug.render(*s, proj, view, renderer.modelMatrix());
-            glLineWidth(1.0f);
-        }
+        float camPos[3] = {camera.x, camera.y, camera.z};
+        model.draw(shaders, proj, view, camPos);
+        model.drawPhysicsDebug(shaders, proj, view);
     };
 
     app.run();
     glFinish();
-
     return 0;
 }

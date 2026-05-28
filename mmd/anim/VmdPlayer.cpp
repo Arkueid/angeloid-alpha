@@ -168,7 +168,7 @@ std::array<float, 4> VmdInterp::slerpQuat(const std::array<float, 4>& qa,
 // --- VmdPlayer ---
 
 VmdPlayer::VmdPlayer(VmdAnimation anim, float fps)
-    : mAnimation(std::move(anim)), mFps(fps) {}
+    : mAnimation(std::move(anim)), mFps(fps), mPlaying(true) {}
 
 void VmdPlayer::play()  { mPlaying = true; }
 void VmdPlayer::pause() { mPlaying = false; }
