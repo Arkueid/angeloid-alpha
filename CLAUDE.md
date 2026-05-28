@@ -7,15 +7,17 @@ cmake -B build -S . && cmake --build build --config Release
 ```
 
 ## Project structure
-- `mmd/` — pure computation library (no GPU/window deps)
+- `mmd/` — computation + rendering library
+  - `Model.h/.cpp` — facade class: load/update/draw
   - `pmx/` — PmxModel, PmxReader
   - `anim/` — BoneSkinning, MorphController, VmdPlayer, VpdLoader, PhysicsWorld (Bullet)
   - `encoding/` — text encoding
   - `math/` — Vec2/3/4, Quat
-- `viewer/` — application (GLFW + OpenGL)
+  - `render/opengl/` — ModelRenderer, ShaderManager, GPU wrappers
+      - `gpu/` — Mesh, Texture, Shader (OpenGL primitives)
+      - `debug/` — RigidBodyRenderer, WorldAxis
+- `viewer/` — thin application shell
   - `window/` — IWindow, GlfwWindow, Camera
-  - `opengl/` — Mesh, Texture, ShaderProgram (OpenGL backend)
-  - `render/` — ModelRenderer, ShaderManager, WorldAxis, PhysicsDebug
 - `prototype/` — Python reference implementation
 - `resources/` — shared assets (models, textures, shaders, VMD, VPD)
 
