@@ -247,6 +247,13 @@ int main(int argc, char* argv[])
             glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS,
             glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS);
         model.update(dt);
+
+        static int fc = 0; static float et = 0;
+        fc++; et += dt;
+        if (et >= 0.5f) {
+            app.setTitle("MMD PMX Viewer - " + model.data().name + " [" + std::to_string((int)(fc/et)) + " FPS]");
+            fc = 0; et = 0;
+        }
     };
 
     // Render

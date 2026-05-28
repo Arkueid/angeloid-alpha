@@ -14,6 +14,7 @@ GlfwWindow::GlfwWindow(int width, int height, const std::string& title)
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
     glfwWindowHint(GLFW_DEPTH_BITS, 24);
+    glfwWindowHint(GLFW_SAMPLES, 4);
 
     mWindow = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
     if (!mWindow) {
@@ -32,6 +33,7 @@ GlfwWindow::GlfwWindow(int width, int height, const std::string& title)
     std::cout << "Renderer: " << glGetString(GL_RENDERER) << "\n";
 
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_MULTISAMPLE);
 
     glfwSetFramebufferSizeCallback(mWindow, framebufferSizeCallback);
     glfwSetKeyCallback(mWindow, keyCallback);
