@@ -1,4 +1,4 @@
-#include "opengl/Texture.h"
+#include "render/opengl/gpu/Texture.h"
 
 namespace Gpu {
 

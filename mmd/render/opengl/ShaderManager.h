@@ -1,7 +1,7 @@
 #pragma once
 
-#include "opengl/Shader.h"
-#include "opengl/Texture.h"
+#include "render/opengl/gpu/Shader.h"
+#include "render/opengl/gpu/Texture.h"
 
 #include <filesystem>
 #include <memory>

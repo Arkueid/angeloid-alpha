@@ -1,14 +1,14 @@
 #include "window/GlfwWindow.h"
 #include "window/Camera.h"
-#include "render/ModelRenderer.h"
+#include "render/opengl/ModelRenderer.h"
 #include "anim/MorphController.h"
 #include "pmx/PmxReader.h"
-#include "render/ShaderManager.h"
+#include "render/opengl/ShaderManager.h"
 #include "anim/BoneSkinning.h"
 #include "anim/PhysicsWorld.h"
 #include "anim/VmdPlayer.h"
-#include "render/PhysicsDebug.h"
-#include "render/WorldAxis.h"
+#include "render/opengl/debug/RigidBodyRenderer.h"
+#include "render/opengl/debug/WorldAxis.h"
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -146,7 +146,7 @@ int main(int argc, char* argv[])
     WorldAxis worldAxis;
     Camera camera;
 
-    PhysicsDebug physicsDebug;
+    RigidBodyRenderer physicsDebug;
     physicsDebug.showRigidBody = false;
     physicsDebug.showJoint = false;
 

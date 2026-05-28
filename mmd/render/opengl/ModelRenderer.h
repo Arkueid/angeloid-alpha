@@ -1,7 +1,7 @@
 #pragma once
 
-#include "opengl/Mesh.h"
-#include "opengl/Texture.h"
+#include "render/opengl/gpu/Mesh.h"
+#include "render/opengl/gpu/Texture.h"
 #include "anim/MorphController.h"
 #include "pmx/PmxModel.h"
 #include "anim/VpdLoader.h"

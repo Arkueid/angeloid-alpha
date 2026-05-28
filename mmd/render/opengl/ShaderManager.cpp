@@ -1,4 +1,4 @@
-#include "render/ShaderManager.h"
+#include "render/opengl/ShaderManager.h"
 
 #include <GL/glew.h>
 #include <array>

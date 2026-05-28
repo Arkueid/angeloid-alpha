@@ -1,8 +1,8 @@
 #pragma once
 
-#include "opengl/Mesh.h"
-#include "opengl/Texture.h"
-#include "opengl/Shader.h"
+#include "render/opengl/gpu/Mesh.h"
+#include "render/opengl/gpu/Texture.h"
+#include "render/opengl/gpu/Shader.h"
 #include "pmx/PmxModel.h"
 
 #include <array>
@@ -10,7 +10,7 @@
 
 class PhysicsWorld;
 
-class PhysicsDebug {
+class RigidBodyRenderer {
 public:
     void build(const PmxModel& model, float modelScale = 1.0f);
     void updateFromPhysics(const PhysicsWorld& world);

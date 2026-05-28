@@ -1,4 +1,4 @@
-#include "opengl/Mesh.h"
+#include "render/opengl/gpu/Mesh.h"
 
 #include <cstring>
 

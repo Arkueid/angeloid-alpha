@@ -1,4 +1,4 @@
-#include "opengl/Shader.h"
+#include "render/opengl/gpu/Shader.h"
 
 #include <cstdio>
 #include <filesystem>

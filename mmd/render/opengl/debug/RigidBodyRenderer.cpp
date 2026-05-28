@@ -1,6 +1,6 @@
-#include "render/PhysicsDebug.h"
+#include "render/opengl/debug/RigidBodyRenderer.h"
 #include "anim/PhysicsWorld.h"
-#include "opengl/Shader.h"
+#include "render/opengl/gpu/Shader.h"
 
 #include <btBulletDynamicsCommon.h>
 
@@ -259,7 +259,7 @@ static void buildPass(const PmxModel& model, float cx, float my, float cz, float
     }
 }
 
-void PhysicsDebug::build(const PmxModel& model, float modelScale)
+void RigidBodyRenderer::build(const PmxModel& model, float modelScale)
 {
     Vec3 minPos = {1e9f,1e9f,1e9f}, maxPos = {-1e9f,-1e9f,-1e9f};
     for (const auto& v : model.vertices) {
@@ -279,7 +279,7 @@ void PhysicsDebug::build(const PmxModel& model, float modelScale)
     buildPass(model, mCx, mMy, mCz, modelScale, true,  mRbAnimated, mJtAnimated);
 }
 
-void PhysicsDebug::updateFromPhysics(const PhysicsWorld& world)
+void RigidBodyRenderer::updateFromPhysics(const PhysicsWorld& world)
 {
     Vec3 colors[] = {{1,1,0},{1,0.5f,0},{0,1,1},{1,0,1}};
     const auto& bodies = world.bodies();
@@ -358,7 +358,7 @@ void PhysicsDebug::updateFromPhysics(const PhysicsWorld& world)
     }
 }
 
-void PhysicsDebug::render(Gpu::ShaderProgram& shader,
+void RigidBodyRenderer::render(Gpu::ShaderProgram& shader,
                            const std::array<float, 16>& projection,
                            const std::array<float, 16>& view,
                            const float* modelMatParam) const

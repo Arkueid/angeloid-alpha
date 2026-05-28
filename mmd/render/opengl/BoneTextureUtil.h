@@ -1,7 +1,7 @@
 #pragma once
 
 #include "anim/BoneSkinning.h"
-#include "opengl/Texture.h"
+#include "render/opengl/gpu/Texture.h"
 
 #include <GL/glew.h>
 #include <memory>

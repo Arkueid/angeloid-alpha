@@ -12,6 +12,14 @@ set(MMD_SOURCES
     anim/VmdPlayer.cpp
     anim/VpdLoader.cpp
     encoding/Encoding.cpp
+    render/opengl/gpu/Mesh.cpp
+    render/opengl/gpu/Texture.cpp
+    render/opengl/gpu/Shader.cpp
+    render/opengl/ModelRenderer.cpp
+    render/opengl/debug/RigidBodyRenderer.cpp
+    render/opengl/ShaderManager.cpp
+    render/opengl/debug/WorldAxis.cpp
+    render/opengl/StbImage.cpp
 )
 
 add_library(mmd STATIC ${MMD_SOURCES})
@@ -19,4 +27,11 @@ add_library(mmd STATIC ${MMD_SOURCES})
 target_include_directories(mmd PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/bullet/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/stb
+    ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/glad/include
+)
+
+target_link_libraries(mmd PUBLIC
+    glfw glad
+    BulletDynamics BulletCollision LinearMath
 )

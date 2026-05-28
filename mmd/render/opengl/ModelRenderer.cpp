@@ -1,7 +1,7 @@
-#include "render/ModelRenderer.h"
-#include "render/BoneTextureUtil.h"
+#include "render/opengl/ModelRenderer.h"
+#include "render/opengl/BoneTextureUtil.h"
 #include "anim/BoneSkinning.h"
-#include "opengl/Shader.h"
+#include "render/opengl/gpu/Shader.h"
 #include "anim/VpdLoader.h"
 
 #include <GL/glew.h>
