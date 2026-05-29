@@ -38,7 +38,6 @@ void main() {
     vec3 view_dir = normalize(camera_pos - v_world_pos);
 
     float NdotL = dot(normal, light);
-    float shadow = NdotL > shadow_thresh ? 1.0 : 0.0;
 
     vec4 tex_color;
     if (has_texture) {

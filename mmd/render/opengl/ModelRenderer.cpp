@@ -158,26 +158,31 @@ void ModelRenderer::loadTextures(const std::filesystem::path& textureDir,
             tex->setWrap(true, true);
             mTextures.push_back(std::move(tex));
             stbi_image_free(data);
-            std::cout << "  [" << i << "] OK: " << fs::path(pathStr).filename().string() << std::endl;
+            auto u8name = texPath.filename().u8string();
+            std::string name(u8name.begin(), u8name.end());
+            std::cout << "  [" << i << "] OK: " << name << std::endl;
         } else {
             std::cout << "  [" << i << "] Not found: " << texName << std::endl;
             mTextures.push_back(nullptr);
         }
     }
 
-    // Load default toon texture
+    // Load shared toon textures (toon01.bmp ~ toon10.bmp)
+    mSharedToons.resize(10);
     if (!toonDir.empty()) {
-        fs::path toonPath = fs::path(toonDir) / "toon01.bmp";
-        int w, h, comp;
-        uint8_t* data = stbi_load(toonPath.string().c_str(), &w, &h, &comp, 4);
-        if (data) {
-            mDefaultToon = std::make_unique<Gpu::Texture>(w, h, 4, data);
-            mDefaultToon->setFilter(GL_LINEAR, GL_LINEAR);
-            mDefaultToon->setWrap(true, true);
-            stbi_image_free(data);
-            std::cout << "  [toon] OK: toon01.bmp" << std::endl;
-        } else {
-            std::cout << "  [toon] Not found: toon01.bmp" << std::endl;
+        for (int ti = 1; ti <= 10; ++ti) {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "toon%02d.bmp", ti);
+            fs::path toonPath = fs::path(toonDir) / buf;
+            int w, h, comp;
+            uint8_t* data = stbi_load(toonPath.string().c_str(), &w, &h, &comp, 4);
+            if (data) {
+                auto tex = std::make_unique<Gpu::Texture>(w, h, 4, data);
+                tex->setFilter(GL_LINEAR, GL_LINEAR);
+                tex->setWrap(true, true);
+                mSharedToons[ti - 1] = std::move(tex);
+                stbi_image_free(data);
+            }
         }
     }
 }
@@ -306,12 +311,23 @@ void ModelRenderer::renderMainPass(Gpu::ShaderProgram& shader,
 
         // Toon
         const auto& toon = mMaterialToon[batch.materialIndex];
-        if (toon.textureIndex >= 0 && toon.textureIndex < (int)mTextures.size()
+        if (toon.sharingFlag != 0) {
+            int si = toon.textureIndex;
+            if (si >= 0 && si < (int)mSharedToons.size() && mSharedToons[si]) {
+                mSharedToons[si]->bind(4);
+                shader.setInt("has_toon", 1);
+            } else if (mSharedToons[0]) {
+                mSharedToons[0]->bind(4);
+                shader.setInt("has_toon", 1);
+            } else {
+                shader.setInt("has_toon", 0);
+            }
+        } else if (toon.textureIndex >= 0 && toon.textureIndex < (int)mTextures.size()
             && mTextures[toon.textureIndex]) {
             mTextures[toon.textureIndex]->bind(4);
             shader.setInt("has_toon", 1);
-        } else if (mDefaultToon) {
-            mDefaultToon->bind(4);
+        } else if (mSharedToons[0]) {
+            mSharedToons[0]->bind(4);
             shader.setInt("has_toon", 1);
         } else {
             shader.setInt("has_toon", 0);
@@ -654,12 +670,23 @@ void ModelRenderer::renderSkinnedMainPass(Gpu::ShaderProgram& shader,
         }
 
         const auto& toon = mMaterialToon[batch.materialIndex];
-        if (toon.textureIndex >= 0 && toon.textureIndex < (int)mTextures.size()
+        if (toon.sharingFlag != 0) {
+            int si = toon.textureIndex;
+            if (si >= 0 && si < (int)mSharedToons.size() && mSharedToons[si]) {
+                mSharedToons[si]->bind(4);
+                shader.setInt("has_toon", 1);
+            } else if (mSharedToons[0]) {
+                mSharedToons[0]->bind(4);
+                shader.setInt("has_toon", 1);
+            } else {
+                shader.setInt("has_toon", 0);
+            }
+        } else if (toon.textureIndex >= 0 && toon.textureIndex < (int)mTextures.size()
             && mTextures[toon.textureIndex]) {
             mTextures[toon.textureIndex]->bind(4);
             shader.setInt("has_toon", 1);
-        } else if (mDefaultToon) {
-            mDefaultToon->bind(4);
+        } else if (mSharedToons[0]) {
+            mSharedToons[0]->bind(4);
             shader.setInt("has_toon", 1);
         } else {
             shader.setInt("has_toon", 0);
@@ -762,11 +789,20 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
             shader.setInt("sphere_mode", sphere.mode);
         } else { shader.setInt("sphere_mode", 0); }
         const auto& toon = mMaterialToon[batch.materialIndex];
-        if (toon.textureIndex >= 0 && toon.textureIndex < (int)mTextures.size() && mTextures[toon.textureIndex]) {
+        if (toon.sharingFlag != 0) {
+            int si = toon.textureIndex;
+            if (si >= 0 && si < (int)mSharedToons.size() && mSharedToons[si]) {
+                mSharedToons[si]->bind(4);
+                shader.setInt("has_toon", 1);
+            } else if (mSharedToons[0]) {
+                mSharedToons[0]->bind(4);
+                shader.setInt("has_toon", 1);
+            } else { shader.setInt("has_toon", 0); }
+        } else if (toon.textureIndex >= 0 && toon.textureIndex < (int)mTextures.size() && mTextures[toon.textureIndex]) {
             mTextures[toon.textureIndex]->bind(4);
             shader.setInt("has_toon", 1);
-        } else if (mDefaultToon) {
-            mDefaultToon->bind(4);
+        } else if (mSharedToons[0]) {
+            mSharedToons[0]->bind(4);
             shader.setInt("has_toon", 1);
         } else { shader.setInt("has_toon", 0); }
 

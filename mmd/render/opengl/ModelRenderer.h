@@ -137,7 +137,7 @@ private:
     // Textures
     std::vector<std::unique_ptr<Gpu::Texture>> mTextures;
     std::unique_ptr<Gpu::Texture> mDummyTexture;
-    std::unique_ptr<Gpu::Texture> mDefaultToon;
+    std::vector<std::unique_ptr<Gpu::Texture>> mSharedToons; // toon01-10.bmp
 
     // Material batches
     std::vector<MaterialBatch> mMaterialBatches;

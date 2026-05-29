@@ -84,11 +84,7 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex,
                 }
             }
         }
-    } else if (morph.morph_type == MORPH_TYPE_UV ||
-               morph.morph_type == MORPH_TYPE_UV_EXT1 ||
-               morph.morph_type == MORPH_TYPE_UV_EXT2 ||
-               morph.morph_type == MORPH_TYPE_UV_EXT3 ||
-               morph.morph_type == MORPH_TYPE_UV_EXT4) {
+    } else if (morph.morph_type == MORPH_TYPE_UV) {
         for (const auto& offset : morph.offsets) {
             if (auto* u = std::get_if<UVMorphOffset>(&offset)) {
                 int i = u->vertex_index;
@@ -98,6 +94,12 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex,
                 }
             }
         }
+    } else if (morph.morph_type == MORPH_TYPE_UV_EXT1 ||
+               morph.morph_type == MORPH_TYPE_UV_EXT2 ||
+               morph.morph_type == MORPH_TYPE_UV_EXT3 ||
+               morph.morph_type == MORPH_TYPE_UV_EXT4) {
+        // Extended UV morphs are skipped: the renderer only uses the base UV
+        // channel, so there is nowhere to apply these offsets to.
     } else if (morph.morph_type == MORPH_TYPE_MATERIAL) {
         int matCount = model.materialCount();
         for (const auto& offset : morph.offsets) {
