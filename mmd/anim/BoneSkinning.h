@@ -34,35 +34,28 @@ struct BoneSkinning {
     static std::vector<std::array<float, 16>> computeBindWorldMatrices(const PmxModel& model);
     static std::vector<std::array<float, 16>> computePoseWorldMatrices(const PmxModel& model);
     static std::vector<std::array<float, 16>> computePoseWorldMatrices(
-        const PmxModel& model,
-        const std::unordered_map<std::string, VpdPose>& vpdPoses);
+        const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses);
     static std::vector<std::array<float, 16>> computePoseWorldMatrices(
-        const PmxModel& model,
-        const std::unordered_map<std::string, VpdPose>& vpdPoses,
-        const std::unordered_map<std::string,
-            std::pair<std::array<float,3>, std::array<float,4>>>& vmdTransforms);
+        const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses,
+        const std::unordered_map<
+            std::string, std::pair<std::array<float, 3>, std::array<float, 4>>>& vmdTransforms);
 
     static std::vector<float> computeSkinningMatrices(const PmxModel& model);
     static std::vector<float> computeSkinningMatrices(
-        const PmxModel& model,
-        const std::unordered_map<std::string, VpdPose>& vpdPoses);
+        const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses);
     static std::vector<float> computeSkinningMatrices(
-        const PmxModel& model,
-        const std::unordered_map<std::string, VpdPose>& vpdPoses,
+        const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses,
         const std::unordered_map<std::string, VmdBoneTransform>& vmdTransforms);
     static std::vector<float> computeSkinningMatrices(
-        const PmxModel& model,
-        const std::vector<std::array<float, 16>>& poseWorld);
+        const PmxModel& model, const std::vector<std::array<float, 16>>& poseWorld);
 
     // Recompute bones with BONEFLAG_IS_AFTER_PHYSICS_DEFORM after physics step
-    static void recomputeAfterPhysicsBones(
-        const PmxModel& model,
-        const std::unordered_map<std::string, VpdPose>& vpdPoses,
-        std::vector<std::array<float, 16>>& poseWorld);
+    static void recomputeAfterPhysicsBones(const PmxModel& model,
+                                           const std::unordered_map<std::string, VpdPose>& vpdPoses,
+                                           std::vector<std::array<float, 16>>& poseWorld);
 
     // Overlay physics world matrices onto skinning matrices
-    static void applyPhysics(const PmxModel& model,
-                             std::vector<float>& skinMatrices,
+    static void applyPhysics(const PmxModel& model, std::vector<float>& skinMatrices,
                              const std::vector<std::array<float, 16>>& physicsMats);
 
     static BoneTextureData packBoneMatrices(const std::vector<float>& matrices, int numBones);

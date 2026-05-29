@@ -1,6 +1,7 @@
 #include "anim/VmdPlayer.h"
-#include "math/VecMath.h"
+
 #include "encoding/Encoding.h"
+#include "math/VecMath.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,7 +14,8 @@
 static std::string decodeShiftJisName(const char* raw, int maxLen)
 {
     std::string bytes;
-    for (int i = 0; i < maxLen && raw[i] != '\0'; ++i) bytes += raw[i];
+    for (int i = 0; i < maxLen && raw[i] != '\0'; ++i)
+        bytes += raw[i];
     return Encoding::cp932ToUtf8(bytes);
 }
 
@@ -85,12 +87,14 @@ VmdAnimation VmdAnimation::load(const std::filesystem::path& path)
 
     // Sort keyframes by frame
     for (auto& [_, kfs] : anim.boneKeyframes) {
-        std::sort(kfs.begin(), kfs.end(),
-                  [](auto& a, auto& b) { return a.frame < b.frame; });
+        std::sort(kfs.begin(), kfs.end(), [](auto& a, auto& b) {
+            return a.frame < b.frame;
+        });
     }
     for (auto& [_, kfs] : anim.morphKeyframes) {
-        std::sort(kfs.begin(), kfs.end(),
-                  [](auto& a, auto& b) { return a.frame < b.frame; });
+        std::sort(kfs.begin(), kfs.end(), [](auto& a, auto& b) {
+            return a.frame < b.frame;
+        });
     }
 
     return anim;
@@ -101,7 +105,7 @@ VmdAnimation VmdAnimation::load(const std::filesystem::path& path)
 float VmdInterp::bezier(float t, float p0, float p1, float p2, float p3)
 {
     float u = 1.0f - t;
-    return u*u*u*p0 + 3.0f*u*u*t*p1 + 3.0f*u*t*t*p2 + t*t*t*p3;
+    return u * u * u * p0 + 3.0f * u * u * t * p1 + 3.0f * u * t * t * p2 + t * t * t * p3;
 }
 
 static float solveBezierX(float targetX, float ax, float bx, int iterations = 16)
@@ -110,8 +114,10 @@ static float solveBezierX(float targetX, float ax, float bx, int iterations = 16
     for (int i = 0; i < iterations; ++i) {
         float mid = (lo + hi) * 0.5f;
         float x = VmdInterp::bezier(mid, 0.0f, ax, bx, 1.0f);
-        if (x < targetX) lo = mid;
-        else hi = mid;
+        if (x < targetX)
+            lo = mid;
+        else
+            hi = mid;
     }
     return (lo + hi) * 0.5f;
 }
@@ -120,9 +126,9 @@ float VmdInterp::interpBezier(float t, const uint8_t* interp, int axis)
 {
     // Each axis has 16 bytes: [x1, y1] x 4 points, stored as uint8 / 127
     int idx = axis * 16;
-    float ax = interp[idx + 0]  / 127.0f;
-    float ay = interp[idx + 4]  / 127.0f;
-    float bx = interp[idx + 8]  / 127.0f;
+    float ax = interp[idx + 0] / 127.0f;
+    float ay = interp[idx + 4] / 127.0f;
+    float bx = interp[idx + 8] / 127.0f;
     float by = interp[idx + 12] / 127.0f;
 
     if (std::abs(ax - ay) < 0.001f && std::abs(bx - by) < 0.001f)
@@ -132,10 +138,13 @@ float VmdInterp::interpBezier(float t, const uint8_t* interp, int axis)
     return bezier(x, 0.0f, ay, by, 1.0f);
 }
 
-float VmdInterp::lerp(float a, float b, float t) { return a + (b - a) * t; }
+float VmdInterp::lerp(float a, float b, float t)
+{
+    return a + (b - a) * t;
+}
 
 std::array<float, 3> VmdInterp::lerpVec3(const std::array<float, 3>& a,
-                                           const std::array<float, 3>& b, float t)
+                                         const std::array<float, 3>& b, float t)
 {
     return {a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t};
 }
@@ -143,37 +152,55 @@ std::array<float, 3> VmdInterp::lerpVec3(const std::array<float, 3>& a,
 // --- VmdPlayer ---
 
 VmdPlayer::VmdPlayer(VmdAnimation anim, float fps)
-    : mAnimation(std::move(anim)), mFps(fps), mPlaying(true) {}
+    : mAnimation(std::move(anim)), mFps(fps), mPlaying(true)
+{
+}
 
-void VmdPlayer::play()  { mPlaying = true; }
-void VmdPlayer::pause() { mPlaying = false; }
-void VmdPlayer::stop()  { mPlaying = false; mCurrentFrame = 0; }
-void VmdPlayer::setFrame(float f) { mCurrentFrame = std::max(0.0f, std::min(f, (float)mAnimation.maxFrame)); }
+void VmdPlayer::play()
+{
+    mPlaying = true;
+}
+void VmdPlayer::pause()
+{
+    mPlaying = false;
+}
+void VmdPlayer::stop()
+{
+    mPlaying = false;
+    mCurrentFrame = 0;
+}
+void VmdPlayer::setFrame(float f)
+{
+    mCurrentFrame = std::max(0.0f, std::min(f, (float)mAnimation.maxFrame));
+}
 
 void VmdPlayer::update(float deltaTime)
 {
-    if (!mPlaying || mAnimation.maxFrame <= 0) return;
+    if (!mPlaying || mAnimation.maxFrame <= 0)
+        return;
     mCurrentFrame += deltaTime * mFps;
 
     if (mCurrentFrame >= (float)mAnimation.maxFrame) {
         if (mLoop) {
             mCurrentFrame = 0;
-        } else {
+        }
+        else {
             mCurrentFrame = (float)mAnimation.maxFrame;
             mPlaying = false;
         }
     }
 }
 
-bool VmdPlayer::getBoneTransform(const std::string& boneName,
-                                  std::array<float, 3>& posOut,
-                                  std::array<float, 4>& rotOut) const
+bool VmdPlayer::getBoneTransform(const std::string& boneName, std::array<float, 3>& posOut,
+                                 std::array<float, 4>& rotOut) const
 {
     auto it = mAnimation.boneKeyframes.find(boneName);
-    if (it == mAnimation.boneKeyframes.end()) return false;
+    if (it == mAnimation.boneKeyframes.end())
+        return false;
 
     const auto& kfs = it->second;
-    if (kfs.empty()) return false;
+    if (kfs.empty())
+        return false;
 
     if (kfs.size() == 1) {
         posOut = {kfs[0].px, kfs[0].py, kfs[0].pz};
@@ -197,7 +224,9 @@ bool VmdPlayer::getBoneTransform(const std::string& boneName,
     int left = 0, right = 0;
     for (size_t i = 0; i + 1 < kfs.size(); ++i) {
         if (kfs[i].frame <= (int)frame && (int)frame <= kfs[i + 1].frame) {
-            left = (int)i; right = (int)i + 1; break;
+            left = (int)i;
+            right = (int)i + 1;
+            break;
         }
     }
 
@@ -231,20 +260,26 @@ bool VmdPlayer::getBoneTransform(const std::string& boneName,
 float VmdPlayer::getMorphWeight(const std::string& morphName) const
 {
     auto it = mAnimation.morphKeyframes.find(morphName);
-    if (it == mAnimation.morphKeyframes.end()) return 0;
+    if (it == mAnimation.morphKeyframes.end())
+        return 0;
 
     const auto& kfs = it->second;
-    if (kfs.empty()) return 0;
-    if (kfs.size() == 1) return kfs[0].weight;
+    if (kfs.empty())
+        return 0;
+    if (kfs.size() == 1)
+        return kfs[0].weight;
 
     float frame = mCurrentFrame;
-    if (frame <= kfs.front().frame) return kfs.front().weight;
-    if (frame >= kfs.back().frame) return kfs.back().weight;
+    if (frame <= kfs.front().frame)
+        return kfs.front().weight;
+    if (frame >= kfs.back().frame)
+        return kfs.back().weight;
 
     for (size_t i = 0; i + 1 < kfs.size(); ++i) {
         if (kfs[i].frame <= (int)frame && (int)frame <= kfs[i + 1].frame) {
             float diff = (float)(kfs[i + 1].frame - kfs[i].frame);
-            if (diff == 0) return kfs[i].weight;
+            if (diff == 0)
+                return kfs[i].weight;
             float t = (frame - kfs[i].frame) / diff;
             return VmdInterp::lerp(kfs[i].weight, kfs[i + 1].weight, t);
         }
@@ -254,7 +289,9 @@ float VmdPlayer::getMorphWeight(const std::string& morphName) const
 
 // --- VmdMixer ---
 
-VmdMixer::VmdMixer(float fps) : mFps(fps) {}
+VmdMixer::VmdMixer(float fps) : mFps(fps)
+{
+}
 
 void VmdMixer::addVmd(VmdAnimation anim)
 {
@@ -262,29 +299,37 @@ void VmdMixer::addVmd(VmdAnimation anim)
     mPlayers.emplace_back(std::move(anim), mFps);
 }
 
-void VmdMixer::clear() { mPlayers.clear(); mMaxFrame = 0; }
+void VmdMixer::clear()
+{
+    mPlayers.clear();
+    mMaxFrame = 0;
+}
 
 void VmdMixer::play()
 {
     mPlaying = true;
-    for (auto& p : mPlayers) p.play();
+    for (auto& p : mPlayers)
+        p.play();
 }
 
 void VmdMixer::pause()
 {
     mPlaying = false;
-    for (auto& p : mPlayers) p.pause();
+    for (auto& p : mPlayers)
+        p.pause();
 }
 
 void VmdMixer::stop()
 {
     mPlaying = false;
-    for (auto& p : mPlayers) p.stop();
+    for (auto& p : mPlayers)
+        p.stop();
 }
 
 void VmdMixer::update(float deltaTime)
 {
-    if (!mPlaying) return;
+    if (!mPlaying)
+        return;
     for (auto& p : mPlayers) {
         p.setLoop(mLoop);
         p.update(deltaTime);
@@ -293,30 +338,39 @@ void VmdMixer::update(float deltaTime)
     if (mLoop) {
         bool allDone = true;
         for (auto& p : mPlayers)
-            if (p.currentFrame() < p.animation().maxFrame) { allDone = false; break; }
+            if (p.currentFrame() < p.animation().maxFrame) {
+                allDone = false;
+                break;
+            }
         if (allDone)
-            for (auto& p : mPlayers) p.setFrame(0);
+            for (auto& p : mPlayers)
+                p.setFrame(0);
     }
 }
 
-bool VmdMixer::getBoneTransform(const std::string& boneName,
-                                  std::array<float, 3>& posOut,
-                                  std::array<float, 4>& rotOut) const
+bool VmdMixer::getBoneTransform(const std::string& boneName, std::array<float, 3>& posOut,
+                                std::array<float, 4>& rotOut) const
 {
     bool has = false;
     std::array<float, 3> pos = {0, 0, 0};
     std::array<float, 4> rot;
 
     for (const auto& p : mPlayers) {
-        std::array<float, 3> pp; std::array<float, 4> pr;
+        std::array<float, 3> pp;
+        std::array<float, 4> pr;
         if (p.getBoneTransform(boneName, pp, pr)) {
-            pos[0] += pp[0]; pos[1] += pp[1]; pos[2] += pp[2];
-            if (!has) rot = pr;
-            else rot = quatSlerp(rot, pr, 0.5f);
+            pos[0] += pp[0];
+            pos[1] += pp[1];
+            pos[2] += pp[2];
+            if (!has)
+                rot = pr;
+            else
+                rot = quatSlerp(rot, pr, 0.5f);
             has = true;
         }
     }
-    if (!has) return false;
+    if (!has)
+        return false;
     posOut = pos;
     rotOut = rot;
     return true;
@@ -328,7 +382,10 @@ float VmdMixer::getMorphWeight(const std::string& morphName) const
     bool has = false;
     for (const auto& p : mPlayers) {
         float w = p.getMorphWeight(morphName);
-        if (w != 0) { sum += w; has = true; }
+        if (w != 0) {
+            sum += w;
+            has = true;
+        }
     }
     return has ? std::max(0.0f, std::min(1.0f, sum)) : 0;
 }
@@ -336,10 +393,12 @@ float VmdMixer::getMorphWeight(const std::string& morphName) const
 void VmdMixer::setLoop(bool loop)
 {
     mLoop = loop;
-    for (auto& p : mPlayers) p.setLoop(loop);
+    for (auto& p : mPlayers)
+        p.setLoop(loop);
 }
 
 void VmdMixer::setFrame(float frame)
 {
-    for (auto& p : mPlayers) p.setFrame(frame);
+    for (auto& p : mPlayers)
+        p.setFrame(frame);
 }

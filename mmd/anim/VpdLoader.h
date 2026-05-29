@@ -12,6 +12,6 @@ struct VpdPose {
 };
 
 class VpdLoader {
-public:
+   public:
     static std::unordered_map<std::string, VpdPose> load(const std::filesystem::path& path);
 };

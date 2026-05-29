@@ -24,7 +24,7 @@ struct MatMorphOverride {
 };
 
 class MorphController {
-public:
+   public:
     MorphController();
 
     void setModel(const PmxModel& model);
@@ -35,18 +35,39 @@ public:
 
     float getMaterialAlpha(int materialIndex, float originalAlpha) const;
     const MatMorphOverride* getMaterialOverride(int materialIndex) const;
-    bool hasActiveMorphs() const { return !mMorphWeights.empty(); }
+    bool hasActiveMorphs() const
+    {
+        return !mMorphWeights.empty();
+    }
 
-    std::unordered_map<std::string, float>& morphWeights() { return mMorphWeights; }
+    std::unordered_map<std::string, float>& morphWeights()
+    {
+        return mMorphWeights;
+    }
     void updateMorphOffsets();
-    bool offsetsChanged() const { return mOffsetsDirty; }
-    void clearOffsetsChanged() { mOffsetsDirty = false; }
+    bool offsetsChanged() const
+    {
+        return mOffsetsDirty;
+    }
+    void clearOffsetsChanged()
+    {
+        mOffsetsDirty = false;
+    }
 
-    const std::unordered_map<int, BoneMorphTransform>& boneMorphs() const { return mBoneMorphs; }
-    const std::vector<float>& positionOffsets() const { return mPosOffsets; }
-    const std::vector<float>& uvOffsets() const { return mUvOffsets; }
+    const std::unordered_map<int, BoneMorphTransform>& boneMorphs() const
+    {
+        return mBoneMorphs;
+    }
+    const std::vector<float>& positionOffsets() const
+    {
+        return mPosOffsets;
+    }
+    const std::vector<float>& uvOffsets() const
+    {
+        return mUvOffsets;
+    }
 
-private:
+   private:
     const PmxModel* mModel = nullptr;
     std::unordered_map<std::string, float> mMorphWeights;
     std::unordered_map<int, MatMorphOverride> mMaterialOverrides;

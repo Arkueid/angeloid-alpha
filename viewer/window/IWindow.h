@@ -5,7 +5,7 @@
 
 // Abstract window interface — decouples the application from GLFW/Qt/etc.
 class IWindow {
-public:
+   public:
     virtual ~IWindow() = default;
 
     virtual void run() = 0;

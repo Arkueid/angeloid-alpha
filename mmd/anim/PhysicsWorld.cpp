@@ -1,24 +1,23 @@
 #include "anim/PhysicsWorld.h"
+
 #include "anim/BoneSkinning.h"
-
-#include <btBulletDynamicsCommon.h>
-#include <BulletDynamics/ConstraintSolver/btGeneric6DofSpringConstraint.h>
-
 #include "util/Log.h"
 
+#include <BulletDynamics/ConstraintSolver/btGeneric6DofSpringConstraint.h>
 #include <algorithm>
+#include <btBulletDynamicsCommon.h>
 #include <cmath>
 #include <string>
 
 namespace {
-    constexpr float kGravityY = -9.8f;
-    constexpr int   kSolverIterations = 15;
-    constexpr int   kSubsteps = 10;
-    constexpr float kFixedTimestep = 1.0f / 240.0f;
-    constexpr float kMaxTimestep = 1.0f / 30.0f;
-    constexpr float kSleepLinearThreshold = 0.08f;
-    constexpr float kSleepAngularThreshold = 0.02f;
-    constexpr float kDeactivationTime = 0.5f;
+constexpr float kGravityY = -9.8f;
+constexpr int kSolverIterations = 15;
+constexpr int kSubsteps = 10;
+constexpr float kFixedTimestep = 1.0f / 240.0f;
+constexpr float kMaxTimestep = 1.0f / 30.0f;
+constexpr float kSleepLinearThreshold = 0.08f;
+constexpr float kSleepAngularThreshold = 0.02f;
+constexpr float kDeactivationTime = 0.5f;
 }
 
 PhysicsWorld::PhysicsWorld()
@@ -27,19 +26,21 @@ PhysicsWorld::PhysicsWorld()
     mDispatcher = std::make_unique<btCollisionDispatcher>(mCollisionCfg.get());
     mBroadphase = std::make_unique<btDbvtBroadphase>();
     mSolver = std::make_unique<btSequentialImpulseConstraintSolver>();
-    mWorld = std::make_unique<btDiscreteDynamicsWorld>(
-        mDispatcher.get(), mBroadphase.get(), mSolver.get(), mCollisionCfg.get());
+    mWorld = std::make_unique<btDiscreteDynamicsWorld>(mDispatcher.get(), mBroadphase.get(),
+                                                       mSolver.get(), mCollisionCfg.get());
     mWorld->setGravity(btVector3(0, kGravityY, 0));
     mWorld->getSolverInfo().m_numIterations = kSolverIterations;
-    mWorld->getSolverInfo().m_erp2 = 0.8f; // match Bullet 2.75 default for non-contact constraints
+    mWorld->getSolverInfo().m_erp2 = 0.8f;  // match Bullet 2.75 default for non-contact constraints
 }
 
 PhysicsWorld::~PhysicsWorld()
 {
     for (auto& c : mConstraints)
-        if (c) mWorld->removeConstraint(c.get());
+        if (c)
+            mWorld->removeConstraint(c.get());
     for (auto& b : mBodies)
-        if (b.body) mWorld->removeRigidBody(b.body);
+        if (b.body)
+            mWorld->removeRigidBody(b.body);
 }
 
 void PhysicsWorld::build(const PmxModel& model, float modelScale)
@@ -47,9 +48,12 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
     // Compute bounds
     float minX = 1e9f, minY = 1e9f, minZ = 1e9f, maxX = -1e9f, maxY = -1e9f, maxZ = -1e9f;
     for (const auto& v : model.vertices) {
-        minX = std::min(minX, v.position.x); maxX = std::max(maxX, v.position.x);
-        minY = std::min(minY, v.position.y); maxY = std::max(maxY, v.position.y);
-        minZ = std::min(minZ, v.position.z); maxZ = std::max(maxZ, v.position.z);
+        minX = std::min(minX, v.position.x);
+        maxX = std::max(maxX, v.position.x);
+        minY = std::min(minY, v.position.y);
+        maxY = std::max(maxY, v.position.y);
+        minZ = std::min(minZ, v.position.z);
+        maxZ = std::max(maxZ, v.position.z);
     }
     mCenter = {(minX + maxX) * 0.5f, (minY + maxY) * 0.5f, (minZ + maxZ) * 0.5f};
     mMinY = minY;
@@ -58,39 +62,50 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
 
     mBoneBindWorld = BoneSkinning::computeBindWorldMatrices(model);
 
-    for (auto& c : mConstraints) { if (c) mWorld->removeConstraint(c.get()); }
+    for (auto& c : mConstraints) {
+        if (c)
+            mWorld->removeConstraint(c.get());
+    }
     mConstraints.clear();
-    for (auto& b : mBodies) { if (b.body) mWorld->removeRigidBody(b.body); }
+    for (auto& b : mBodies) {
+        if (b.body)
+            mWorld->removeRigidBody(b.body);
+    }
     mBodies.clear();
     mShapes.clear();
 
     int countMode[3] = {};
     for (const auto& rb : model.rigidbodies) {
-        if (rb.mode >= 0 && rb.mode < 3) countMode[rb.mode]++;
+        if (rb.mode >= 0 && rb.mode < 3)
+            countMode[rb.mode]++;
     }
     MMD_INFO("PHYS", "%zu bodies (mode0/static=%d mode1/dyn=%d mode2/align=%d), %zu joints",
              model.rigidbodies.size(), countMode[0], countMode[1], countMode[2],
              model.joints.size());
 
-    for (const auto& rb : model.rigidbodies) addRigidBody(rb);
+    for (const auto& rb : model.rigidbodies)
+        addRigidBody(rb);
 
     int dynMassCount = 0;
     for (const auto& rb : model.rigidbodies) {
-        if ((rb.mode == 1 || rb.mode == 2) && rb.mass > 0) dynMassCount++;
+        if ((rb.mode == 1 || rb.mode == 2) && rb.mass > 0)
+            dynMassCount++;
     }
     MMD_INFO("PHYS", "  Dynamic mass bodies: %d", dynMassCount);
 
-    for (const auto& jt : model.joints) addJoint(jt);
+    for (const auto& jt : model.joints)
+        addJoint(jt);
 
     // Mark cloth-like bodies: connected to joints with rotation springs + freedom
     for (const auto& jt : model.joints) {
-        bool hasRotSpring = jt.spring_constant_rotation.x != 0
-                         || jt.spring_constant_rotation.y != 0
-                         || jt.spring_constant_rotation.z != 0;
-        float rlRange = fabsf(jt.rotation_limit_max.x - jt.rotation_limit_min.x)
-                      + fabsf(jt.rotation_limit_max.y - jt.rotation_limit_min.y)
-                      + fabsf(jt.rotation_limit_max.z - jt.rotation_limit_min.z);
-        if (!hasRotSpring || rlRange < 0.01f) continue;
+        bool hasRotSpring = jt.spring_constant_rotation.x != 0 ||
+                            jt.spring_constant_rotation.y != 0 ||
+                            jt.spring_constant_rotation.z != 0;
+        float rlRange = fabsf(jt.rotation_limit_max.x - jt.rotation_limit_min.x) +
+                        fabsf(jt.rotation_limit_max.y - jt.rotation_limit_min.y) +
+                        fabsf(jt.rotation_limit_max.z - jt.rotation_limit_min.z);
+        if (!hasRotSpring || rlRange < 0.01f)
+            continue;
         auto mark = [&](int idx) {
             if (idx >= 0 && idx < (int)mBodies.size() && mBodies[idx].mode == 1)
                 mBodies[idx].clothLike = true;
@@ -114,15 +129,21 @@ void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWo
     // Set all dynamic bodies to kinematic, align them to bone targets,
     // run one step, then switch back to dynamic. Prevents initial overlap explosion.
     for (auto& bb : mBodies) {
-        if (bb.mode == 0 || bb.boneIndex < 0 || bb.boneIndex >= (int)poseWorld.size()) continue;
-        if (bb.boneIndex >= (int)mBoneBindWorld.size()) continue;
+        if (bb.mode == 0 || bb.boneIndex < 0 || bb.boneIndex >= (int)poseWorld.size())
+            continue;
+        if (bb.boneIndex >= (int)mBoneBindWorld.size())
+            continue;
 
         // Make kinematic and align to bone
-        bb.body->setCollisionFlags(bb.body->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
-        btVector3 tgtPos; btQuaternion tgtRot;
+        bb.body->setCollisionFlags(bb.body->getCollisionFlags() |
+                                   btCollisionObject::CF_KINEMATIC_OBJECT);
+        btVector3 tgtPos;
+        btQuaternion tgtRot;
         computeBoneTarget(bb, poseWorld, tgtPos, tgtRot);
-        btTransform cur; cur.setIdentity();
-        cur.setOrigin(tgtPos); cur.setRotation(tgtRot);
+        btTransform cur;
+        cur.setIdentity();
+        cur.setOrigin(tgtPos);
+        cur.setRotation(tgtRot);
         bb.body->getMotionState()->setWorldTransform(cur);
         bb.body->setCenterOfMassTransform(cur);
     }
@@ -131,8 +152,10 @@ void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWo
 
     // Clear forces and switch back to dynamic
     for (auto& bb : mBodies) {
-        if (bb.mode == 0) continue;
-        bb.body->setCollisionFlags(bb.body->getCollisionFlags() & ~btCollisionObject::CF_KINEMATIC_OBJECT);
+        if (bb.mode == 0)
+            continue;
+        bb.body->setCollisionFlags(bb.body->getCollisionFlags() &
+                                   ~btCollisionObject::CF_KINEMATIC_OBJECT);
         bb.body->clearForces();
         bb.body->setLinearVelocity(btVector3(0, 0, 0));
         bb.body->setAngularVelocity(btVector3(0, 0, 0));
@@ -145,30 +168,34 @@ void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWo
 
 void PhysicsWorld::debugDump() const
 {
-    MMD_INFO("PHYS", "=== Physics dump (scale=%.4f center=%.2f,%.2f,%.2f) ===",
-             mModelScale, mCenter.x, mCenter.y, mCenter.z);
+    MMD_INFO("PHYS", "=== Physics dump (scale=%.4f center=%.2f,%.2f,%.2f) ===", mModelScale,
+             mCenter.x, mCenter.y, mCenter.z);
     int moved = 0, active = 0;
     for (size_t i = 0; i < mBodies.size(); ++i) {
         const auto& bb = mBodies[i];
-        if (!bb.body) continue;
+        if (!bb.body)
+            continue;
         btTransform t = bb.body->getCenterOfMassTransform();
         btVector3 p = t.getOrigin();
         btVector3 init(bb.initPosX, bb.initPosY, bb.initPosZ);
         float disp = (p - init).length();
-        if (bb.body->isActive()) active++;
+        if (bb.body->isActive())
+            active++;
         if (disp > 0.02f) {
             moved++;
             float mx = p.x() + mCenter.x, my = p.y() + mMinY, mz = p.z() + mCenter.z;
             float ix = init.x() + mCenter.x, iy = init.y() + mMinY, iz = init.z() + mCenter.z;
             const char* modeStr = bb.mode == 0 ? "STATIC" : (bb.mode == 1 ? "dyn" : "ALIGN");
             float mass = bb.body->getInvMass() > 0 ? 1.0f / bb.body->getInvMass() : 0;
-            MMD_INFO("PHYS", "  [%zu] %s %s bone=%d dMMD=%.4f active=%d mass=%.3f now=(%.2f,%.2f,%.2f) init=(%.2f,%.2f,%.2f)",
-                     i, modeStr, bb.name.c_str(), bb.boneIndex, disp,
-                     bb.body->isActive() ? 1 : 0, mass, mx, my, mz, ix, iy, iz);
+            MMD_INFO("PHYS",
+                     "  [%zu] %s %s bone=%d dMMD=%.4f active=%d mass=%.3f now=(%.2f,%.2f,%.2f) "
+                     "init=(%.2f,%.2f,%.2f)",
+                     i, modeStr, bb.name.c_str(), bb.boneIndex, disp, bb.body->isActive() ? 1 : 0,
+                     mass, mx, my, mz, ix, iy, iz);
         }
     }
-    MMD_INFO("PHYS", "  Bodies displaced>0.02mmd: %d  active: %d  total: %zu",
-             moved, active, mBodies.size());
+    MMD_INFO("PHYS", "  Bodies displaced>0.02mmd: %d  active: %d  total: %zu", moved, active,
+             mBodies.size());
     MMD_INFO("PHYS", "=== End dump ===");
 }
 
@@ -184,12 +211,16 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
     if (rb.shape_type == RIGID_SHAPE_SPHERE)
         shape = new btSphereShape(rb.shape_size.x * kSphereShapeScale);
     else if (rb.shape_type == RIGID_SHAPE_BOX)
-        shape = new btBoxShape(btVector3(rb.shape_size.x*kBoxShapeScale, rb.shape_size.y*kBoxShapeScale, rb.shape_size.z*kBoxShapeScale));
+        shape = new btBoxShape(btVector3(rb.shape_size.x * kBoxShapeScale,
+                                         rb.shape_size.y * kBoxShapeScale,
+                                         rb.shape_size.z * kBoxShapeScale));
     else if (rb.shape_type == RIGID_SHAPE_CAPSULE) {
         float capR = rb.shape_size.x * kCapsuleShapeScale;
         float capH = rb.shape_size.y * kCapsuleShapeScale;
         float minR = 0.01f;
-        if (capR < minR) { capR = minR; }
+        if (capR < minR) {
+            capR = minR;
+        }
         shape = new btCapsuleShape(capR, capH);
     }
     else
@@ -198,19 +229,24 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
 
     // MMD rotation order: Y * X * Z (matches saba: ry * rx * rz)
     btQuaternion qx, qy, qz;
-    qx.setRotation(btVector3(1,0,0), rb.shape_rotation.x);
-    qy.setRotation(btVector3(0,1,0), rb.shape_rotation.y);
-    qz.setRotation(btVector3(0,0,1), rb.shape_rotation.z);
+    qx.setRotation(btVector3(1, 0, 0), rb.shape_rotation.x);
+    qy.setRotation(btVector3(0, 1, 0), rb.shape_rotation.y);
+    qz.setRotation(btVector3(0, 0, 1), rb.shape_rotation.z);
     btQuaternion rot = qy * qx * qz;
-    btTransform t; t.setIdentity(); t.setOrigin(btVector3(px, py, pz)); t.setRotation(rot);
+    btTransform t;
+    t.setIdentity();
+    t.setOrigin(btVector3(px, py, pz));
+    t.setRotation(rot);
 
     btScalar mass = (rb.mode == 0) ? 0 : rb.mass;
-    btVector3 inertia(0,0,0);
-    if (mass > 0) shape->calculateLocalInertia(mass, inertia);
+    btVector3 inertia(0, 0, 0);
+    if (mass > 0)
+        shape->calculateLocalInertia(mass, inertia);
 
     auto* ms = new btDefaultMotionState(t);
     btRigidBody::btRigidBodyConstructionInfo ci(mass, ms, shape, inertia);
-    ci.m_restitution = rb.restitution; ci.m_friction = rb.friction;
+    ci.m_restitution = rb.restitution;
+    ci.m_friction = rb.friction;
     ci.m_linearDamping = rb.linear_damping;
     ci.m_angularDamping = rb.angular_damping;
 
@@ -228,14 +264,13 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
         if (rb.shape_type == RIGID_SHAPE_CAPSULE)
             ccdRadius = rb.shape_size.x * kCapsuleShapeScale;
         if (rb.shape_type == RIGID_SHAPE_BOX)
-            ccdRadius = std::min({rb.shape_size.x, rb.shape_size.y, rb.shape_size.z}) * kBoxShapeScale * 0.5f;
+            ccdRadius = std::min({rb.shape_size.x, rb.shape_size.y, rb.shape_size.z}) *
+                        kBoxShapeScale * 0.5f;
         body->setCcdMotionThreshold(ccdRadius * 0.5f);
         body->setCcdSweptSphereRadius(ccdRadius);
     }
 
-    mWorld->addRigidBody(body,
-        1 << rb.collision_group,
-        rb.no_collision_group);
+    mWorld->addRigidBody(body, 1 << rb.collision_group, rb.no_collision_group);
     btQuaternion initRot = t.getRotation();
     btVector3 initPos = t.getOrigin();
 
@@ -247,32 +282,39 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
         bpy = bw[13] - mMinY;
         bpz = bw[14] - mCenter.z;
         btMatrix3x3 bwBasis(bw[0], bw[4], bw[8], bw[1], bw[5], bw[9], bw[2], bw[6], bw[10]);
-        btQuaternion bwRot; bwBasis.getRotation(bwRot);
-        brx = bwRot.x(); bry = bwRot.y(); brz = bwRot.z(); brw = bwRot.w();
+        btQuaternion bwRot;
+        bwBasis.getRotation(bwRot);
+        brx = bwRot.x();
+        bry = bwRot.y();
+        brz = bwRot.z();
+        brw = bwRot.w();
     }
 
-    mBodies.push_back({body, rb.bone_index, rb.index, rb.mode,
-        initPos.x(), initPos.y(), initPos.z(),
-        initRot.x(), initRot.y(), initRot.z(), initRot.w(),
-        bpx, bpy, bpz, brx, bry, brz, brw,
-        false, rb.name});
+    mBodies.push_back({body,        rb.bone_index, rb.index,    rb.mode,     initPos.x(),
+                       initPos.y(), initPos.z(),   initRot.x(), initRot.y(), initRot.z(),
+                       initRot.w(), bpx,           bpy,         bpz,         brx,
+                       bry,         brz,           brw,         false,       rb.name});
 }
 
 void PhysicsWorld::addJoint(const PmxJoint& jt)
 {
-    if (jt.rigidbody_index_a < 0 || jt.rigidbody_index_b < 0) return;
-    if (jt.rigidbody_index_a >= (int)mBodies.size() || jt.rigidbody_index_b >= (int)mBodies.size()) return;
+    if (jt.rigidbody_index_a < 0 || jt.rigidbody_index_b < 0)
+        return;
+    if (jt.rigidbody_index_a >= (int)mBodies.size() || jt.rigidbody_index_b >= (int)mBodies.size())
+        return;
     auto *a = mBodies[jt.rigidbody_index_a].body, *b = mBodies[jt.rigidbody_index_b].body;
-    if (!a || !b) return;
+    if (!a || !b)
+        return;
 
     btVector3 pos(jt.position.x - mCenter.x, jt.position.y - mMinY, jt.position.z - mCenter.z);
 
     btQuaternion jqx, jqy, jqz;
-    jqx.setRotation(btVector3(1,0,0), jt.rotation.x);
-    jqy.setRotation(btVector3(0,1,0), jt.rotation.y);
-    jqz.setRotation(btVector3(0,0,1), jt.rotation.z);
+    jqx.setRotation(btVector3(1, 0, 0), jt.rotation.x);
+    jqy.setRotation(btVector3(0, 1, 0), jt.rotation.y);
+    jqz.setRotation(btVector3(0, 0, 1), jt.rotation.z);
     btQuaternion jtRot = jqy * jqx * jqz;
-    btMatrix3x3 jtBasis; jtBasis.setRotation(jtRot);
+    btMatrix3x3 jtBasis;
+    jtBasis.setRotation(jtRot);
 
     btTransform jointTransform;
     jointTransform.setIdentity();
@@ -287,31 +329,33 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
     btTypedConstraint* c = nullptr;
 
     switch (jt.joint_type) {
-    case 0: // 6DOF Spring — btGeneric6DofSpring2Constraint
-    case 1: // 6DOF — same constraint, PMX springs disabled per spec
-        break; // Handled below with the generic 6DOF path
+    case 0:     // 6DOF Spring — btGeneric6DofSpring2Constraint
+    case 1:     // 6DOF — same constraint, PMX springs disabled per spec
+        break;  // Handled below with the generic 6DOF path
 
-    case 2: { // P2P — btPoint2PointConstraint, limits/springs ignored
+    case 2: {  // P2P — btPoint2PointConstraint, limits/springs ignored
         c = new btPoint2PointConstraint(*a, *b, invA.getOrigin(), invB.getOrigin());
         break;
     }
-    case 3: { // ConeTwist — btConeTwistConstraint
+    case 3: {  // ConeTwist — btConeTwistConstraint
         auto* ct = new btConeTwistConstraint(*a, *b, invA, invB);
 
         // Rotation limits map to swing/twist spans
-        ct->setLimit(
-            jt.rotation_limit_min.z,          // swingSpan1
-            jt.rotation_limit_min.y,          // swingSpan2
-            jt.rotation_limit_min.x,          // twistSpan
-            jt.spring_constant_translation.x, // softness
-            jt.spring_constant_translation.y, // biasFactor
-            jt.spring_constant_translation.z  // relaxationFactor
+        ct->setLimit(jt.rotation_limit_min.z,           // swingSpan1
+                     jt.rotation_limit_min.y,           // swingSpan2
+                     jt.rotation_limit_min.x,           // twistSpan
+                     jt.spring_constant_translation.x,  // softness
+                     jt.spring_constant_translation.y,  // biasFactor
+                     jt.spring_constant_translation.z   // relaxationFactor
         );
 
         // Damping / fixThresh from translation limit fields
         float damping = jt.translation_limit_min.x;
         float fixThresh = jt.translation_limit_max.x;
-        if (damping == 0 && fixThresh == 0) { damping = 0.1f; fixThresh = 0.1f; }
+        if (damping == 0 && fixThresh == 0) {
+            damping = 0.1f;
+            fixThresh = 0.1f;
+        }
         ct->setDamping(damping);
         ct->setFixThresh(fixThresh);
 
@@ -320,16 +364,14 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
             ct->enableMotor(true);
             ct->setMaxMotorImpulse(jt.translation_limit_max.z);
             btQuaternion motorTarget;
-            motorTarget.setEulerZYX(
-                jt.spring_constant_rotation.z,
-                jt.spring_constant_rotation.y,
-                jt.spring_constant_rotation.x);
+            motorTarget.setEulerZYX(jt.spring_constant_rotation.z, jt.spring_constant_rotation.y,
+                                    jt.spring_constant_rotation.x);
             ct->setMotorTargetInConstraintSpace(motorTarget);
         }
         c = ct;
         break;
     }
-    case 4: { // Slider — btSliderConstraint (X-axis linear, X-axis angular)
+    case 4: {  // Slider — btSliderConstraint (X-axis linear, X-axis angular)
         auto* sl = new btSliderConstraint(*a, *b, invA, invB, true);
         sl->setLowerLinLimit(jt.translation_limit_min.x);
         sl->setUpperLinLimit(jt.translation_limit_max.x);
@@ -349,63 +391,93 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
         c = sl;
         break;
     }
-    case 5: { // Hinge — btHingeConstraint (Z-axis rotation)
+    case 5: {  // Hinge — btHingeConstraint (Z-axis rotation)
         auto* h = new btHingeConstraint(*a, *b, invA, invB);
-        float softness    = jt.spring_constant_translation.x;
-        float biasFactor  = jt.spring_constant_translation.y;
+        float softness = jt.spring_constant_translation.x;
+        float biasFactor = jt.spring_constant_translation.y;
         float relaxFactor = jt.spring_constant_translation.z;
         if (softness == 0 && biasFactor == 0 && relaxFactor == 0) {
-            softness = 0.9f; biasFactor = 0.3f; relaxFactor = 1.0f;
+            softness = 0.9f;
+            biasFactor = 0.3f;
+            relaxFactor = 1.0f;
         }
-        h->setLimit(jt.rotation_limit_min.x, jt.rotation_limit_max.x,
-                    softness, biasFactor, relaxFactor);
+        h->setLimit(jt.rotation_limit_min.x, jt.rotation_limit_max.x, softness, biasFactor,
+                    relaxFactor);
 
         if (jt.spring_constant_rotation.x != 0) {
-            h->enableAngularMotor(true, jt.spring_constant_rotation.y, jt.spring_constant_rotation.z);
+            h->enableAngularMotor(true, jt.spring_constant_rotation.y,
+                                  jt.spring_constant_rotation.z);
         }
         c = h;
         break;
     }
-    default: { // Unknown — fall back to 6DOF spring
+    default: {  // Unknown — fall back to 6DOF spring
         // Falls through to same logic as case 0 below
         break;
     }
     }
 
     // Types 0, 1, and default use btGeneric6DofSpringConstraint
-    if (!c && (jt.joint_type == 0 || jt.joint_type == 1 || jt.joint_type < 0 || jt.joint_type > 5)) {
+    if (!c &&
+        (jt.joint_type == 0 || jt.joint_type == 1 || jt.joint_type < 0 || jt.joint_type > 5)) {
         auto* sc = new btGeneric6DofSpringConstraint(*a, *b, invA, invB, true);
 
-        sc->setLinearLowerLimit(btVector3(
-            jt.translation_limit_min.x, jt.translation_limit_min.y, jt.translation_limit_min.z));
-        sc->setLinearUpperLimit(btVector3(
-            jt.translation_limit_max.x, jt.translation_limit_max.y, jt.translation_limit_max.z));
-        sc->setAngularLowerLimit(btVector3(jt.rotation_limit_min.x, jt.rotation_limit_min.y, jt.rotation_limit_min.z));
-        sc->setAngularUpperLimit(btVector3(jt.rotation_limit_max.x, jt.rotation_limit_max.y, jt.rotation_limit_max.z));
+        sc->setLinearLowerLimit(btVector3(jt.translation_limit_min.x, jt.translation_limit_min.y,
+                                          jt.translation_limit_min.z));
+        sc->setLinearUpperLimit(btVector3(jt.translation_limit_max.x, jt.translation_limit_max.y,
+                                          jt.translation_limit_max.z));
+        sc->setAngularLowerLimit(
+            btVector3(jt.rotation_limit_min.x, jt.rotation_limit_min.y, jt.rotation_limit_min.z));
+        sc->setAngularUpperLimit(
+            btVector3(jt.rotation_limit_max.x, jt.rotation_limit_max.y, jt.rotation_limit_max.z));
 
         // PMX springs (type 0 and default only; type 1 skips per spec)
         if (jt.joint_type != 1) {
             const float* st = &jt.spring_constant_translation.x;
             const float* sr = &jt.spring_constant_rotation.x;
-            if (st[0] != 0) { sc->enableSpring(0, true); sc->setStiffness(0, st[0]); }
-            if (st[1] != 0) { sc->enableSpring(1, true); sc->setStiffness(1, st[1]); }
-            if (st[2] != 0) { sc->enableSpring(2, true); sc->setStiffness(2, st[2]); }
-            if (sr[0] != 0) { sc->enableSpring(3, true); sc->setStiffness(3, sr[0]); }
-            if (sr[1] != 0) { sc->enableSpring(4, true); sc->setStiffness(4, sr[1]); }
-            if (sr[2] != 0) { sc->enableSpring(5, true); sc->setStiffness(5, sr[2]); }
+            if (st[0] != 0) {
+                sc->enableSpring(0, true);
+                sc->setStiffness(0, st[0]);
+            }
+            if (st[1] != 0) {
+                sc->enableSpring(1, true);
+                sc->setStiffness(1, st[1]);
+            }
+            if (st[2] != 0) {
+                sc->enableSpring(2, true);
+                sc->setStiffness(2, st[2]);
+            }
+            if (sr[0] != 0) {
+                sc->enableSpring(3, true);
+                sc->setStiffness(3, sr[0]);
+            }
+            if (sr[1] != 0) {
+                sc->enableSpring(4, true);
+                sc->setStiffness(4, sr[1]);
+            }
+            if (sr[2] != 0) {
+                sc->enableSpring(5, true);
+                sc->setStiffness(5, sr[2]);
+            }
         }
 
         // Tiered spring fallback for tight translation DOFs (applies to both type 0 and 1)
-        float lo[3] = {jt.translation_limit_min.x, jt.translation_limit_min.y, jt.translation_limit_min.z};
-        float hi[3] = {jt.translation_limit_max.x, jt.translation_limit_max.y, jt.translation_limit_max.z};
+        float lo[3] = {jt.translation_limit_min.x, jt.translation_limit_min.y,
+                       jt.translation_limit_min.z};
+        float hi[3] = {jt.translation_limit_max.x, jt.translation_limit_max.y,
+                       jt.translation_limit_max.z};
         const float* st = &jt.spring_constant_translation.x;
         for (int i = 0; i < 3; ++i) {
             float range = fabsf(hi[i] - lo[i]);
-            if (jt.joint_type == 0 && st[i] != 0) continue;
+            if (jt.joint_type == 0 && st[i] != 0)
+                continue;
             float k = 0;
-            if (range < 0.001f)      k = 10000.0f;
-            else if (range < 0.2f)   k = 2000.0f;
-            else if (range < 0.5f)   k = 500.0f;
+            if (range < 0.001f)
+                k = 10000.0f;
+            else if (range < 0.2f)
+                k = 2000.0f;
+            else if (range < 0.5f)
+                k = 500.0f;
             if (k > 0) {
                 sc->enableSpring(i, true);
                 sc->setStiffness(i, k);
@@ -417,14 +489,15 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
         c = sc;
     }
 
-    if (!c) return;
+    if (!c)
+        return;
     mWorld->addConstraint(c, true);
     mConstraints.emplace_back(c);
 }
 
 void PhysicsWorld::computeBoneTarget(const BulletBody& bb,
-    const std::vector<std::array<float, 16>>& poseWorld,
-    btVector3& outPos, btQuaternion& outRot) const
+                                     const std::vector<std::array<float, 16>>& poseWorld,
+                                     btVector3& outPos, btQuaternion& outRot) const
 {
     const auto& pw = poseWorld[bb.boneIndex];
     const auto& bw = mBoneBindWorld[bb.boneIndex];
@@ -435,12 +508,14 @@ void PhysicsWorld::computeBoneTarget(const BulletBody& bb,
     float bodyModelZ = bb.initPosZ + mCenter.z;
 
     float bbx = bw[12], bby = bw[13], bbz = bw[14];
-    btMatrix3x3 bwBasis(bw[0], bw[4], bw[8],  bw[1], bw[5], bw[9],  bw[2], bw[6], bw[10]);
-    btQuaternion bwRot; bwBasis.getRotation(bwRot);
+    btMatrix3x3 bwBasis(bw[0], bw[4], bw[8], bw[1], bw[5], bw[9], bw[2], bw[6], bw[10]);
+    btQuaternion bwRot;
+    bwBasis.getRotation(bwRot);
 
     float bax = pw[12], bay = pw[13], baz = pw[14];
-    btMatrix3x3 pwBasis(pw[0], pw[4], pw[8],  pw[1], pw[5], pw[9],  pw[2], pw[6], pw[10]);
-    btQuaternion pwRot; pwBasis.getRotation(pwRot);
+    btMatrix3x3 pwBasis(pw[0], pw[4], pw[8], pw[1], pw[5], pw[9], pw[2], pw[6], pw[10]);
+    btQuaternion pwRot;
+    pwBasis.getRotation(pwRot);
 
     btVector3 offset(bodyModelX - bbx, bodyModelY - bby, bodyModelZ - bbz);
     btQuaternion deltaRot = pwRot * bwRot.inverse();
@@ -459,14 +534,17 @@ void PhysicsWorld::computeBoneTarget(const BulletBody& bb,
 void PhysicsWorld::updateMode0Bodies(const std::vector<std::array<float, 16>>& poseWorld)
 {
     for (auto& bb : mBodies) {
-        if (bb.mode != 0 || bb.boneIndex < 0 || bb.boneIndex >= (int)poseWorld.size()) continue;
-        if (bb.boneIndex >= (int)mBoneBindWorld.size()) continue;
+        if (bb.mode != 0 || bb.boneIndex < 0 || bb.boneIndex >= (int)poseWorld.size())
+            continue;
+        if (bb.boneIndex >= (int)mBoneBindWorld.size())
+            continue;
 
         btVector3 newPos;
         btQuaternion newRot;
         computeBoneTarget(bb, poseWorld, newPos, newRot);
 
-        btTransform cur; cur.setIdentity();
+        btTransform cur;
+        cur.setIdentity();
         cur.setOrigin(newPos);
         cur.setRotation(newRot);
         bb.body->getMotionState()->setWorldTransform(cur);
@@ -476,14 +554,17 @@ void PhysicsWorld::updateMode0Bodies(const std::vector<std::array<float, 16>>& p
 
 void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>>& poseWorld)
 {
-    if (!enabled) return;
+    if (!enabled)
+        return;
 
     // Mode 2: pull toward bone-animated transform
     // Scale forces by deltaTime so behavior is frame-rate independent
-    float dtScale = deltaTime * 60.0f; // = 1.0 at 60fps
+    float dtScale = deltaTime * 60.0f;  // = 1.0 at 60fps
     for (auto& bb : mBodies) {
-        if (bb.mode != 2 || bb.boneIndex < 0 || bb.boneIndex >= (int)poseWorld.size()) continue;
-        if (bb.boneIndex >= (int)mBoneBindWorld.size()) continue;
+        if (bb.mode != 2 || bb.boneIndex < 0 || bb.boneIndex >= (int)poseWorld.size())
+            continue;
+        if (bb.boneIndex >= (int)mBoneBindWorld.size())
+            continue;
 
         btVector3 tgtPos;
         btQuaternion tgtRot;
@@ -494,17 +575,20 @@ void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>
         float errLen = posErr.length();
         if (errLen > 0.005f) {
             bb.body->activate(true);
-            bb.body->applyCentralForce((posErr * 50.0f - bb.body->getLinearVelocity() * 15.0f) * dtScale);
+            bb.body->applyCentralForce((posErr * 50.0f - bb.body->getLinearVelocity() * 15.0f) *
+                                       dtScale);
         }
         btQuaternion curRot = cur.getRotation();
         btQuaternion diff = curRot.inverse() * tgtRot;
-        if (diff.w() < 0) diff = btQuaternion(-diff.x(), -diff.y(), -diff.z(), -diff.w());
-        float axLen = sqrtf(diff.x()*diff.x() + diff.y()*diff.y() + diff.z()*diff.z());
+        if (diff.w() < 0)
+            diff = btQuaternion(-diff.x(), -diff.y(), -diff.z(), -diff.w());
+        float axLen = sqrtf(diff.x() * diff.x() + diff.y() * diff.y() + diff.z() * diff.z());
         if (axLen > 0.001f) {
             bb.body->activate(true);
             float angle = 2.0f * atan2f(axLen, diff.w());
-            btVector3 axis(diff.x()/axLen, diff.y()/axLen, diff.z()/axLen);
-            bb.body->setAngularVelocity(bb.body->getAngularVelocity() * powf(0.85f, dtScale) + axis * angle * 10.0f * dtScale);
+            btVector3 axis(diff.x() / axLen, diff.y() / axLen, diff.z() / axLen);
+            bb.body->setAngularVelocity(bb.body->getAngularVelocity() * powf(0.85f, dtScale) +
+                                        axis * angle * 10.0f * dtScale);
         }
     }
 
@@ -516,8 +600,10 @@ void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>
 void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) const
 {
     for (const auto& bb : mBodies) {
-        if (bb.boneIndex < 0 || bb.boneIndex >= (int)out.size()) continue;
-        if (!bb.body->isActive()) continue;
+        if (bb.boneIndex < 0 || bb.boneIndex >= (int)out.size())
+            continue;
+        if (!bb.body->isActive())
+            continue;
         btTransform t = bb.body->getCenterOfMassTransform();
         btVector3 bodyPos = t.getOrigin();
         btQuaternion bodyRot = t.getRotation();
@@ -539,10 +625,22 @@ void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) co
         float tz = boneNewPos.z() + mCenter.z;
         auto& m = out[bb.boneIndex];
         const btQuaternion& r = boneNewRot;
-        m[0]=1-2*(r.y()*r.y()+r.z()*r.z()); m[4]=2*(r.x()*r.y()-r.z()*r.w()); m[8]=2*(r.x()*r.z()+r.y()*r.w()); m[12]=tx;
-        m[1]=2*(r.x()*r.y()+r.z()*r.w());  m[5]=1-2*(r.x()*r.x()+r.z()*r.z()); m[9]=2*(r.y()*r.z()-r.x()*r.w()); m[13]=ty;
-        m[2]=2*(r.x()*r.z()-r.y()*r.w());  m[6]=2*(r.y()*r.z()+r.x()*r.w());  m[10]=1-2*(r.x()*r.x()+r.y()*r.y()); m[14]=tz;
-        m[3]=0; m[7]=0; m[11]=0; m[15]=1;
+        m[0] = 1 - 2 * (r.y() * r.y() + r.z() * r.z());
+        m[4] = 2 * (r.x() * r.y() - r.z() * r.w());
+        m[8] = 2 * (r.x() * r.z() + r.y() * r.w());
+        m[12] = tx;
+        m[1] = 2 * (r.x() * r.y() + r.z() * r.w());
+        m[5] = 1 - 2 * (r.x() * r.x() + r.z() * r.z());
+        m[9] = 2 * (r.y() * r.z() - r.x() * r.w());
+        m[13] = ty;
+        m[2] = 2 * (r.x() * r.z() - r.y() * r.w());
+        m[6] = 2 * (r.y() * r.z() + r.x() * r.w());
+        m[10] = 1 - 2 * (r.x() * r.x() + r.y() * r.y());
+        m[14] = tz;
+        m[3] = 0;
+        m[7] = 0;
+        m[11] = 0;
+        m[15] = 1;
     }
 }
 
@@ -551,14 +649,17 @@ void PhysicsWorld::debugTrackCloth() const
     static int fc = 0;
     if (fc % 60 == 0) {
         for (const auto& bb : mBodies) {
-            if (!bb.clothLike || !bb.body) continue;
+            if (!bb.clothLike || !bb.body)
+                continue;
             btTransform t = bb.body->getCenterOfMassTransform();
-            btVector3 p = t.getOrigin(); btQuaternion r = t.getRotation();
+            btVector3 p = t.getOrigin();
+            btQuaternion r = t.getRotation();
             float Y = p.y() + mMinY;
             float initY = bb.initPosY + mMinY;
-            float pitch = atan2f(2*(r.w()*r.x()+r.y()*r.z()), 1-2*(r.x()*r.x()+r.y()*r.y()));
-            MMD_DEBUG("ANIM", "F%4d [%d]%s Y=%.4f(init=%.4f dY=%+.4f) pitch=%.2f",
-                fc, bb.rigidBodyIndex, bb.name.c_str(), Y, initY, Y-initY, pitch);
+            float pitch = atan2f(2 * (r.w() * r.x() + r.y() * r.z()),
+                                 1 - 2 * (r.x() * r.x() + r.y() * r.y()));
+            MMD_DEBUG("ANIM", "F%4d [%d]%s Y=%.4f(init=%.4f dY=%+.4f) pitch=%.2f", fc,
+                      bb.rigidBodyIndex, bb.name.c_str(), Y, initY, Y - initY, pitch);
         }
     }
     fc++;

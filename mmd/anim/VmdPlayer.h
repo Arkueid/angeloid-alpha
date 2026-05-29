@@ -25,16 +25,17 @@ struct VmdMorphKeyframe {
 // --- Interpolation helpers ---
 
 namespace VmdInterp {
-    float bezier(float t, float p0, float p1, float p2, float p3);
-    float interpBezier(float t, const uint8_t* interp, int axis);
-    float lerp(float a, float b, float t);
-    std::array<float, 3> lerpVec3(const std::array<float, 3>& a, const std::array<float, 3>& b, float t);
+float bezier(float t, float p0, float p1, float p2, float p3);
+float interpBezier(float t, const uint8_t* interp, int axis);
+float lerp(float a, float b, float t);
+std::array<float, 3> lerpVec3(const std::array<float, 3>& a, const std::array<float, 3>& b,
+                              float t);
 }
 
 // --- Single VMD animation ---
 
 class VmdAnimation {
-public:
+   public:
     std::string modelName;
     std::unordered_map<std::string, std::vector<VmdBoneKeyframe>> boneKeyframes;
     std::unordered_map<std::string, std::vector<VmdMorphKeyframe>> morphKeyframes;
@@ -47,7 +48,7 @@ public:
 // --- Player that advances frames and samples transforms ---
 
 class VmdPlayer {
-public:
+   public:
     explicit VmdPlayer(VmdAnimation anim, float fps = 30.0f);
 
     void play();
@@ -57,22 +58,39 @@ public:
     void update(float deltaTime);
 
     // Returns (position vec3, rotation quat) or nullptr-equivalent via bool
-    bool getBoneTransform(const std::string& boneName,
-                          std::array<float, 3>& posOut,
+    bool getBoneTransform(const std::string& boneName, std::array<float, 3>& posOut,
                           std::array<float, 4>& rotOut) const;
 
     float getMorphWeight(const std::string& morphName) const;
 
-    const VmdAnimation& animation() const { return mAnimation; }
-    float currentFrame() const { return mCurrentFrame; }
-    bool playing() const { return mPlaying; }
+    const VmdAnimation& animation() const
+    {
+        return mAnimation;
+    }
+    float currentFrame() const
+    {
+        return mCurrentFrame;
+    }
+    bool playing() const
+    {
+        return mPlaying;
+    }
 
-    bool loop() const { return mLoop; }
-    void setLoop(bool loop) { mLoop = loop; }
+    bool loop() const
+    {
+        return mLoop;
+    }
+    void setLoop(bool loop)
+    {
+        mLoop = loop;
+    }
     void setFrame(float frame);
-    void setFps(float fps) { mFps = fps; }
+    void setFps(float fps)
+    {
+        mFps = fps;
+    }
 
-private:
+   private:
     VmdAnimation mAnimation;
     float mFps = 30;
     float mCurrentFrame = 0;
@@ -83,7 +101,7 @@ private:
 // --- Mixer: blends multiple VMD layers ---
 
 class VmdMixer {
-public:
+   public:
     explicit VmdMixer(float fps = 30.0f);
 
     void addVmd(VmdAnimation anim);
@@ -95,20 +113,31 @@ public:
 
     void update(float deltaTime);
 
-    bool getBoneTransform(const std::string& boneName,
-                          std::array<float, 3>& posOut,
+    bool getBoneTransform(const std::string& boneName, std::array<float, 3>& posOut,
                           std::array<float, 4>& rotOut) const;
 
     float getMorphWeight(const std::string& morphName) const;
 
-    float currentFrame() const { return mPlayers.empty() ? 0 : mPlayers[0].currentFrame(); }
-    float maxFrame() const { return mMaxFrame; }
-    bool playing() const { return mPlaying; }
-    bool loop() const { return mLoop; }
+    float currentFrame() const
+    {
+        return mPlayers.empty() ? 0 : mPlayers[0].currentFrame();
+    }
+    float maxFrame() const
+    {
+        return mMaxFrame;
+    }
+    bool playing() const
+    {
+        return mPlaying;
+    }
+    bool loop() const
+    {
+        return mLoop;
+    }
     void setLoop(bool loop);
     void setFrame(float frame);
 
-private:
+   private:
     std::vector<VmdPlayer> mPlayers;
     float mFps = 30;
     float mMaxFrame = 0;

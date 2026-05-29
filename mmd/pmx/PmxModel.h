@@ -4,12 +4,17 @@
 
 #include <cstdint>
 #include <string>
-#include <vector>
 #include <variant>
+#include <vector>
 
 // --- Bone deform types ---
-struct Bdef1 { int32_t index0 = 0; };
-struct Bdef2 { int32_t index0 = 0, index1 = 0; float weight0 = 0; };
+struct Bdef1 {
+    int32_t index0 = 0;
+};
+struct Bdef2 {
+    int32_t index0 = 0, index1 = 0;
+    float weight0 = 0;
+};
 struct Bdef4 {
     int32_t index0 = 0, index1 = 0, index2 = 0, index3 = 0;
     float weight0 = 0, weight1 = 0, weight2 = 0, weight3 = 0;
@@ -65,7 +70,10 @@ struct PmxMaterial {
     std::string comment;
     int32_t vertex_count = 0;
 
-    bool hasFlag(uint8_t mask) const { return (flag & mask) != 0; }
+    bool hasFlag(uint8_t mask) const
+    {
+        return (flag & mask) != 0;
+    }
 };
 
 // --- Bone ---
@@ -106,8 +114,8 @@ struct PmxBone {
     int32_t layer = 0;
     uint16_t flag = 0;
 
-    Vec3 tail_position;             // set when !hasFlag(BONEFLAG_TAILPOS_IS_BONE)
-    int32_t tail_index = -1;        // set when hasFlag(BONEFLAG_TAILPOS_IS_BONE)
+    Vec3 tail_position;       // set when !hasFlag(BONEFLAG_TAILPOS_IS_BONE)
+    int32_t tail_index = -1;  // set when hasFlag(BONEFLAG_TAILPOS_IS_BONE)
 
     int32_t effect_index = -1;
     float effect_factor = 0;
@@ -123,7 +131,10 @@ struct PmxBone {
     // Index in the bones array (set after loading)
     int index = -1;
 
-    bool hasFlag(uint16_t mask) const { return (flag & mask) != 0; }
+    bool hasFlag(uint16_t mask) const
+    {
+        return (flag & mask) != 0;
+    }
 };
 
 // --- Morph ---
@@ -174,13 +185,8 @@ struct GroupMorphOffset {
     float value = 0;
 };
 
-using MorphOffset = std::variant<
-    GroupMorphOffset,
-    VertexMorphOffset,
-    BoneMorphOffset,
-    UVMorphOffset,
-    MaterialMorphOffset
->;
+using MorphOffset = std::variant<GroupMorphOffset, VertexMorphOffset, BoneMorphOffset,
+                                 UVMorphOffset, MaterialMorphOffset>;
 
 struct PmxMorph {
     std::string name;
@@ -237,7 +243,7 @@ struct PmxJoint {
 
 // --- Display Slot ---
 struct DisplaySlotReference {
-    int32_t display_type = 0; // 0 = bone, 1 = morph
+    int32_t display_type = 0;  // 0 = bone, 1 = morph
     int32_t ref_index = 0;
 };
 
@@ -266,10 +272,28 @@ struct PmxModel {
     std::vector<PmxRigidBody> rigidbodies;
     std::vector<PmxJoint> joints;
 
-    int vertexCount() const { return (int)vertices.size(); }
-    int faceCount() const { return (int)indices.size() / 3; }
-    int textureCount() const { return (int)textures.size(); }
-    int materialCount() const { return (int)materials.size(); }
-    int boneCount() const { return (int)bones.size(); }
-    int morphCount() const { return (int)morphs.size(); }
+    int vertexCount() const
+    {
+        return (int)vertices.size();
+    }
+    int faceCount() const
+    {
+        return (int)indices.size() / 3;
+    }
+    int textureCount() const
+    {
+        return (int)textures.size();
+    }
+    int materialCount() const
+    {
+        return (int)materials.size();
+    }
+    int boneCount() const
+    {
+        return (int)bones.size();
+    }
+    int morphCount() const
+    {
+        return (int)morphs.size();
+    }
 };

@@ -11,8 +11,7 @@ struct Texture {
     int height = 0;
     int components = 0;
 
-    Texture(int w, int h, int comps, const void* data = nullptr,
-            GLenum dtype = GL_UNSIGNED_BYTE);
+    Texture(int w, int h, int comps, const void* data = nullptr, GLenum dtype = GL_UNSIGNED_BYTE);
     ~Texture();
     Texture(const Texture&) = delete;
     Texture& operator=(const Texture&) = delete;
@@ -30,4 +29,4 @@ struct Texture {
     static GLenum internalFromComps(int comps, bool isFloat = false);
 };
 
-} // namespace Gpu
+}  // namespace Gpu

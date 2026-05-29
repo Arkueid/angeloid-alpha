@@ -15,7 +15,8 @@ void MorphController::setModel(const PmxModel& model)
     for (int i = 0; i < model.morphCount(); ++i) {
         const auto& m = model.morphs[i];
         mMorphNameIndex[m.name] = i;
-        if (!m.english_name.empty()) mMorphNameIndex[m.english_name] = i;
+        if (!m.english_name.empty())
+            mMorphNameIndex[m.english_name] = i;
     }
 }
 
@@ -37,53 +38,53 @@ void MorphController::clearMorphs()
     updateMorphOffsets();
 }
 
-static void applyMorphRecursive(const PmxModel& model, int morphIndex,
-                                 float weight,
-                                 std::vector<float>& posOffsets,
-                                 std::vector<float>& uvOffsets,
-                                 int vertexCount,
-                                 std::unordered_map<int, MatMorphOverride>& matOverrides,
-                                 std::unordered_map<int, BoneMorphTransform>& boneMorphs)
+static void applyMorphRecursive(const PmxModel& model, int morphIndex, float weight,
+                                std::vector<float>& posOffsets, std::vector<float>& uvOffsets,
+                                int vertexCount,
+                                std::unordered_map<int, MatMorphOverride>& matOverrides,
+                                std::unordered_map<int, BoneMorphTransform>& boneMorphs)
 {
-    if (morphIndex < 0 || morphIndex >= model.morphCount()) return;
+    if (morphIndex < 0 || morphIndex >= model.morphCount())
+        return;
     const auto& morph = model.morphs[morphIndex];
 
     if (morph.morph_type == MORPH_TYPE_GROUP) {
         for (const auto& offset : morph.offsets) {
             if (auto* g = std::get_if<GroupMorphOffset>(&offset)) {
-                applyMorphRecursive(model, g->morph_index,
-                    g->value * weight,
-                    posOffsets, uvOffsets, vertexCount, matOverrides, boneMorphs);
+                applyMorphRecursive(model, g->morph_index, g->value * weight, posOffsets, uvOffsets,
+                                    vertexCount, matOverrides, boneMorphs);
             }
         }
-    } else if (morph.morph_type == MORPH_TYPE_VERTEX) {
+    }
+    else if (morph.morph_type == MORPH_TYPE_VERTEX) {
         for (const auto& offset : morph.offsets) {
             if (auto* v = std::get_if<VertexMorphOffset>(&offset)) {
                 int i = v->vertex_index;
                 if (i >= 0 && i < vertexCount) {
-                    posOffsets[i*3+0] += v->position_offset.x * weight;
-                    posOffsets[i*3+1] += v->position_offset.y * weight;
-                    posOffsets[i*3+2] += v->position_offset.z * weight;
+                    posOffsets[i * 3 + 0] += v->position_offset.x * weight;
+                    posOffsets[i * 3 + 1] += v->position_offset.y * weight;
+                    posOffsets[i * 3 + 2] += v->position_offset.z * weight;
                 }
             }
         }
-    } else if (morph.morph_type == MORPH_TYPE_UV) {
+    }
+    else if (morph.morph_type == MORPH_TYPE_UV) {
         for (const auto& offset : morph.offsets) {
             if (auto* u = std::get_if<UVMorphOffset>(&offset)) {
                 int i = u->vertex_index;
                 if (i >= 0 && i < vertexCount) {
-                    uvOffsets[i*2+0] += u->uv_offset.x * weight;
-                    uvOffsets[i*2+1] += u->uv_offset.y * weight;
+                    uvOffsets[i * 2 + 0] += u->uv_offset.x * weight;
+                    uvOffsets[i * 2 + 1] += u->uv_offset.y * weight;
                 }
             }
         }
-    } else if (morph.morph_type == MORPH_TYPE_UV_EXT1 ||
-               morph.morph_type == MORPH_TYPE_UV_EXT2 ||
-               morph.morph_type == MORPH_TYPE_UV_EXT3 ||
-               morph.morph_type == MORPH_TYPE_UV_EXT4) {
+    }
+    else if (morph.morph_type == MORPH_TYPE_UV_EXT1 || morph.morph_type == MORPH_TYPE_UV_EXT2 ||
+             morph.morph_type == MORPH_TYPE_UV_EXT3 || morph.morph_type == MORPH_TYPE_UV_EXT4) {
         // Extended UV morphs are skipped: the renderer only uses the base UV
         // channel, so there is nowhere to apply these offsets to.
-    } else if (morph.morph_type == MORPH_TYPE_MATERIAL) {
+    }
+    else if (morph.morph_type == MORPH_TYPE_MATERIAL) {
         int matCount = model.materialCount();
         for (const auto& offset : morph.offsets) {
             if (auto* m = std::get_if<MaterialMorphOffset>(&offset)) {
@@ -100,8 +101,8 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex,
                     // Alpha
                     float curA = ov.alpha;
                     float na = (m->calc_mode == 0)
-                        ? curA * (m->diffuse.w * weight + (1.0f - weight))
-                        : curA + m->diffuse.w * weight;
+                                   ? curA * (m->diffuse.w * weight + (1.0f - weight))
+                                   : curA + m->diffuse.w * weight;
                     ov.alpha = std::max(0.0f, std::min(1.0f, na));
                     // Diffuse RGB (multiply mode)
                     ov.diffuse.x *= 1.0f + (m->diffuse.x - 1.0f) * weight;
@@ -125,16 +126,19 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex,
                 }
             }
         }
-    } else if (morph.morph_type == MORPH_TYPE_BONE) {
+    }
+    else if (morph.morph_type == MORPH_TYPE_BONE) {
         for (const auto& offset : morph.offsets) {
             if (auto* b = std::get_if<BoneMorphOffset>(&offset)) {
                 int idx = b->bone_index;
-                if (idx < 0) continue;
+                if (idx < 0)
+                    continue;
                 auto& bm = boneMorphs[idx];
                 bm.translation[0] += b->position.x * weight;
                 bm.translation[1] += b->position.y * weight;
                 bm.translation[2] += b->position.z * weight;
-                std::array<float, 4> mr = {b->rotation.x, b->rotation.y, b->rotation.z, b->rotation.w};
+                std::array<float, 4> mr = {b->rotation.x, b->rotation.y, b->rotation.z,
+                                           b->rotation.w};
                 bm.rotation = quatSlerp(bm.rotation, mr, weight);
             }
         }
@@ -143,7 +147,8 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex,
 
 void MorphController::updateMorphOffsets()
 {
-    if (!mModel) return;
+    if (!mModel)
+        return;
 
     int vc = mModel->vertexCount();
     std::memset(mPosOffsets.data(), 0, vc * 3 * sizeof(float));
@@ -153,15 +158,18 @@ void MorphController::updateMorphOffsets()
 
     bool anyActive = false;
     for (const auto& [name, weight] : mMorphWeights) {
-        if (weight == 0.0f) continue;
+        if (weight == 0.0f)
+            continue;
         auto it = mMorphNameIndex.find(name);
         int morphIdx = it != mMorphNameIndex.end() ? it->second : -1;
-        if (morphIdx < 0) continue;
-        applyMorphRecursive(*mModel, morphIdx, weight,
-                           mPosOffsets, mUvOffsets, vc, mMaterialOverrides, mBoneMorphs);
+        if (morphIdx < 0)
+            continue;
+        applyMorphRecursive(*mModel, morphIdx, weight, mPosOffsets, mUvOffsets, vc,
+                            mMaterialOverrides, mBoneMorphs);
         anyActive = true;
     }
-    if (anyActive || mLastHadActive) mOffsetsDirty = true;
+    if (anyActive || mLastHadActive)
+        mOffsetsDirty = true;
     mLastHadActive = anyActive;
 }
 

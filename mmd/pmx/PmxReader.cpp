@@ -1,4 +1,5 @@
 #include "pmx/PmxReader.h"
+
 #include "encoding/Encoding.h"
 
 #include <cstring>
@@ -28,45 +29,83 @@ void BinaryReader::readBytes(void* dst, size_t len)
     mPos += len;
 }
 
-int8_t  BinaryReader::readS8()    { return readVal<int8_t>(); }
-uint8_t BinaryReader::readU8()    { return readVal<uint8_t>(); }
-int16_t BinaryReader::readS16()   { return readVal<int16_t>(); }
-uint16_t BinaryReader::readU16()  { return readVal<uint16_t>(); }
-int32_t BinaryReader::readS32()   { return readVal<int32_t>(); }
-uint32_t BinaryReader::readU32()  { return readVal<uint32_t>(); }
-float   BinaryReader::readF32()   { return readVal<float>(); }
+int8_t BinaryReader::readS8()
+{
+    return readVal<int8_t>();
+}
+uint8_t BinaryReader::readU8()
+{
+    return readVal<uint8_t>();
+}
+int16_t BinaryReader::readS16()
+{
+    return readVal<int16_t>();
+}
+uint16_t BinaryReader::readU16()
+{
+    return readVal<uint16_t>();
+}
+int32_t BinaryReader::readS32()
+{
+    return readVal<int32_t>();
+}
+uint32_t BinaryReader::readU32()
+{
+    return readVal<uint32_t>();
+}
+float BinaryReader::readF32()
+{
+    return readVal<float>();
+}
 
 int32_t BinaryReader::readIndex(uint8_t size)
 {
-    if (size == 1) return readS8();
-    if (size == 2) return readS16();
+    if (size == 1)
+        return readS8();
+    if (size == 2)
+        return readS16();
     return readS32();
 }
 
 uint32_t BinaryReader::readVertexIndex(uint8_t size)
 {
     if (size <= 2) {
-        if (size == 1) return readU8();
+        if (size == 1)
+            return readU8();
         return readU16();
     }
     return readS32();
 }
 
-Vec2 BinaryReader::readVec2() { return {readF32(), readF32()}; }
-Vec3 BinaryReader::readVec3() { return {readF32(), readF32(), readF32()}; }
-Vec4 BinaryReader::readVec4() { return {readF32(), readF32(), readF32(), readF32()}; }
-Quat BinaryReader::readQuat() { return {readF32(), readF32(), readF32(), readF32()}; }
+Vec2 BinaryReader::readVec2()
+{
+    return {readF32(), readF32()};
+}
+Vec3 BinaryReader::readVec3()
+{
+    return {readF32(), readF32(), readF32()};
+}
+Vec4 BinaryReader::readVec4()
+{
+    return {readF32(), readF32(), readF32(), readF32()};
+}
+Quat BinaryReader::readQuat()
+{
+    return {readF32(), readF32(), readF32(), readF32()};
+}
 
 std::string BinaryReader::readText(uint8_t textEncoding)
 {
     int32_t len = readS32();
-    if (len <= 0) return {};
+    if (len <= 0)
+        return {};
 
     if (textEncoding == 0) {
         std::vector<uint16_t> raw(len / 2);
         readBytes(raw.data(), len);
         return Encoding::utf16leToUtf8(raw.data(), raw.size());
-    } else {
+    }
+    else {
         // UTF-8
         std::string result(len, '\0');
         readBytes(result.data(), len);
@@ -80,27 +119,27 @@ static BoneDeform readDeform(BinaryReader& r, uint8_t boneIndexSize)
     uint8_t deformType = r.readU8();
     if (deformType == 0) {
         return Bdef1{r.readIndex(boneIndexSize)};
-    } else if (deformType == 1) {
-        return Bdef2{
-            r.readIndex(boneIndexSize),
-            r.readIndex(boneIndexSize),
-            r.readF32()
-        };
-    } else if (deformType == 2) {
-        return Bdef4{
-            r.readIndex(boneIndexSize),
-            r.readIndex(boneIndexSize),
-            r.readIndex(boneIndexSize),
-            r.readIndex(boneIndexSize),
-            r.readF32(), r.readF32(), r.readF32(), r.readF32()
-        };
-    } else if (deformType == 3) {
-        return Sdef{
-            r.readIndex(boneIndexSize),
-            r.readIndex(boneIndexSize),
-            r.readF32(),
-            r.readVec3(), r.readVec3(), r.readVec3()
-        };
+    }
+    else if (deformType == 1) {
+        return Bdef2{r.readIndex(boneIndexSize), r.readIndex(boneIndexSize), r.readF32()};
+    }
+    else if (deformType == 2) {
+        return Bdef4{r.readIndex(boneIndexSize),
+                     r.readIndex(boneIndexSize),
+                     r.readIndex(boneIndexSize),
+                     r.readIndex(boneIndexSize),
+                     r.readF32(),
+                     r.readF32(),
+                     r.readF32(),
+                     r.readF32()};
+    }
+    else if (deformType == 3) {
+        return Sdef{r.readIndex(boneIndexSize),
+                    r.readIndex(boneIndexSize),
+                    r.readF32(),
+                    r.readVec3(),
+                    r.readVec3(),
+                    r.readVec3()};
     }
     throw std::runtime_error("Unknown deform type: " + std::to_string(deformType));
 }
@@ -199,7 +238,8 @@ PmxModel PmxReader::load(const std::filesystem::path& path)
         mat.toon_sharing_flag = r.readS8();
         if (mat.toon_sharing_flag == 0) {
             mat.toon_texture_index = r.readIndex(textureIndexSize);
-        } else {
+        }
+        else {
             mat.toon_texture_index = r.readS8();
         }
 
@@ -222,11 +262,13 @@ PmxModel PmxReader::load(const std::filesystem::path& path)
 
         if (!bone.hasFlag(BONEFLAG_TAILPOS_IS_BONE)) {
             bone.tail_position = r.readVec3();
-        } else {
+        }
+        else {
             bone.tail_index = r.readIndex(boneIndexSize);
         }
 
-        if (bone.hasFlag(BONEFLAG_IS_EXTERNAL_ROTATION) || bone.hasFlag(BONEFLAG_IS_EXTERNAL_TRANSLATION)) {
+        if (bone.hasFlag(BONEFLAG_IS_EXTERNAL_ROTATION) ||
+            bone.hasFlag(BONEFLAG_IS_EXTERNAL_TRANSLATION)) {
             bone.effect_index = r.readIndex(boneIndexSize);
             bone.effect_factor = r.readF32();
         }
@@ -280,31 +322,24 @@ PmxModel PmxReader::load(const std::filesystem::path& path)
 
         for (int32_t oi = 0; oi < offsetCount; ++oi) {
             if (morph.morph_type == MORPH_TYPE_GROUP) {
-                morph.offsets.push_back(GroupMorphOffset{
-                    r.readIndex(morphIndexSize),
-                    r.readF32()
-                });
-            } else if (morph.morph_type == MORPH_TYPE_VERTEX) {
-                morph.offsets.push_back(VertexMorphOffset{
-                    (int32_t)r.readVertexIndex(vertexIndexSize),
-                    r.readVec3()
-                });
-            } else if (morph.morph_type == MORPH_TYPE_BONE) {
-                morph.offsets.push_back(BoneMorphOffset{
-                    r.readIndex(boneIndexSize),
-                    r.readVec3(),
-                    r.readQuat()
-                });
-            } else if (morph.morph_type == MORPH_TYPE_UV ||
-                       morph.morph_type == MORPH_TYPE_UV_EXT1 ||
-                       morph.morph_type == MORPH_TYPE_UV_EXT2 ||
-                       morph.morph_type == MORPH_TYPE_UV_EXT3 ||
-                       morph.morph_type == MORPH_TYPE_UV_EXT4) {
-                morph.offsets.push_back(UVMorphOffset{
-                    (int32_t)r.readVertexIndex(vertexIndexSize),
-                    r.readVec4()
-                });
-            } else if (morph.morph_type == MORPH_TYPE_MATERIAL) {
+                morph.offsets.push_back(GroupMorphOffset{r.readIndex(morphIndexSize), r.readF32()});
+            }
+            else if (morph.morph_type == MORPH_TYPE_VERTEX) {
+                morph.offsets.push_back(
+                    VertexMorphOffset{(int32_t)r.readVertexIndex(vertexIndexSize), r.readVec3()});
+            }
+            else if (morph.morph_type == MORPH_TYPE_BONE) {
+                morph.offsets.push_back(
+                    BoneMorphOffset{r.readIndex(boneIndexSize), r.readVec3(), r.readQuat()});
+            }
+            else if (morph.morph_type == MORPH_TYPE_UV || morph.morph_type == MORPH_TYPE_UV_EXT1 ||
+                     morph.morph_type == MORPH_TYPE_UV_EXT2 ||
+                     morph.morph_type == MORPH_TYPE_UV_EXT3 ||
+                     morph.morph_type == MORPH_TYPE_UV_EXT4) {
+                morph.offsets.push_back(
+                    UVMorphOffset{(int32_t)r.readVertexIndex(vertexIndexSize), r.readVec4()});
+            }
+            else if (morph.morph_type == MORPH_TYPE_MATERIAL) {
                 MaterialMorphOffset mmo;
                 mmo.material_index = r.readIndex(materialIndexSize);
                 mmo.calc_mode = r.readS8();
@@ -339,7 +374,8 @@ PmxModel PmxReader::load(const std::filesystem::path& path)
             int32_t displayType = r.readS8();
             if (displayType == 0) {
                 slot.references.push_back({displayType, r.readIndex(boneIndexSize)});
-            } else {
+            }
+            else {
                 slot.references.push_back({displayType, r.readIndex(morphIndexSize)});
             }
         }

@@ -23,9 +23,8 @@ Gpu::ShaderProgram* ShaderManager::get(const std::string& name)
     return it != mPrograms.end() ? it->second.get() : nullptr;
 }
 
-Gpu::ShaderProgram& ShaderManager::addProgram(const std::string& name,
-                                               const std::string& vertFile,
-                                               const std::string& fragFile)
+Gpu::ShaderProgram& ShaderManager::addProgram(const std::string& name, const std::string& vertFile,
+                                              const std::string& fragFile)
 {
     auto vertSrc = Gpu::ShaderProgram::readFile(mShaderDir + "/" + vertFile);
     auto fragSrc = Gpu::ShaderProgram::readFile(mShaderDir + "/" + fragFile);
@@ -162,10 +161,7 @@ void ShaderManager::createGradientTexture()
 {
     // 4-level gray gradient: dark → light
     uint8_t gradient[] = {
-        60,  60,  60,
-        120, 120, 120,
-        180, 180, 180,
-        220, 220, 220,
+        60, 60, 60, 120, 120, 120, 180, 180, 180, 220, 220, 220,
     };
     mGradientTexture = std::make_unique<Gpu::Texture>(4, 1, 3, gradient);
     mGradientTexture->setFilter(GL_LINEAR, GL_LINEAR);
@@ -175,9 +171,18 @@ void ShaderManager::createGradientTexture()
 void ShaderManager::setOutlineThickness(float thickness)
 {
     auto* outline = get("outline");
-    if (outline) { outline->use(); outline->setFloat("outline_thickness", thickness); }
+    if (outline) {
+        outline->use();
+        outline->setFloat("outline_thickness", thickness);
+    }
     auto* outlineSk = get("outline_skinned");
-    if (outlineSk) { outlineSk->use(); outlineSk->setFloat("outline_thickness", thickness); }
+    if (outlineSk) {
+        outlineSk->use();
+        outlineSk->setFloat("outline_thickness", thickness);
+    }
     auto* morphOl = get("morph_outline");
-    if (morphOl) { morphOl->use(); morphOl->setFloat("outline_thickness", thickness); }
+    if (morphOl) {
+        morphOl->use();
+        morphOl->setFloat("outline_thickness", thickness);
+    }
 }

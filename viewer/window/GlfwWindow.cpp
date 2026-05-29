@@ -48,7 +48,8 @@ GlfwWindow::GlfwWindow(int width, int height, const std::string& title)
 
 GlfwWindow::~GlfwWindow()
 {
-    if (mWindow) glfwDestroyWindow(mWindow);
+    if (mWindow)
+        glfwDestroyWindow(mWindow);
     glfwTerminate();
 }
 
@@ -59,11 +60,13 @@ void GlfwWindow::run()
         mDeltaTime = now - mLastTime;
         mLastTime = now;
 
-        if (onUpdate) onUpdate(mDeltaTime);
+        if (onUpdate)
+            onUpdate(mDeltaTime);
 
         if (onRender) {
             onRender();
-        } else {
+        }
+        else {
             glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         }
@@ -86,31 +89,37 @@ void GlfwWindow::close()
 void GlfwWindow::framebufferSizeCallback(GLFWwindow* win, int w, int h)
 {
     auto* self = static_cast<GlfwWindow*>(glfwGetWindowUserPointer(win));
-    self->mWidth = w; self->mHeight = h;
+    self->mWidth = w;
+    self->mHeight = h;
     glViewport(0, 0, w, h);
-    if (self->onResize) self->onResize(w, h);
+    if (self->onResize)
+        self->onResize(w, h);
 }
 
 void GlfwWindow::keyCallback(GLFWwindow* win, int key, int scancode, int action, int mods)
 {
     auto* self = static_cast<GlfwWindow*>(glfwGetWindowUserPointer(win));
-    if (self->onKey) self->onKey(key, scancode, action, mods);
+    if (self->onKey)
+        self->onKey(key, scancode, action, mods);
 }
 
 void GlfwWindow::mouseButtonCallback(GLFWwindow* win, int button, int action, int mods)
 {
     auto* self = static_cast<GlfwWindow*>(glfwGetWindowUserPointer(win));
-    if (self->onMouseButton) self->onMouseButton(button, action, mods);
+    if (self->onMouseButton)
+        self->onMouseButton(button, action, mods);
 }
 
 void GlfwWindow::cursorPosCallback(GLFWwindow* win, double x, double y)
 {
     auto* self = static_cast<GlfwWindow*>(glfwGetWindowUserPointer(win));
-    if (self->onCursorPos) self->onCursorPos(x, y);
+    if (self->onCursorPos)
+        self->onCursorPos(x, y);
 }
 
 void GlfwWindow::scrollCallback(GLFWwindow* win, double xoffset, double yoffset)
 {
     auto* self = static_cast<GlfwWindow*>(glfwGetWindowUserPointer(win));
-    if (self->onScroll) self->onScroll(xoffset, yoffset);
+    if (self->onScroll)
+        self->onScroll(xoffset, yoffset);
 }

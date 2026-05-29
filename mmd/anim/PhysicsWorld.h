@@ -7,8 +7,8 @@
 #include <vector>
 
 // Shape size multipliers from PMX value to Bullet parameter
-inline constexpr float kSphereShapeScale  = 0.9f;  // btSphereShape radius
-inline constexpr float kBoxShapeScale     = 0.9f;  // btBoxShape half-extent
+inline constexpr float kSphereShapeScale = 0.9f;   // btSphereShape radius
+inline constexpr float kBoxShapeScale = 0.9f;      // btBoxShape half-extent
 inline constexpr float kCapsuleShapeScale = 0.9f;  // btCapsuleShape radius & height
 
 class btDiscreteDynamicsWorld;
@@ -33,12 +33,12 @@ struct BulletBody {
     // Bone bind world transform (Bullet space) — for delta-based bone feedback
     float bonePosX = 0, bonePosY = 0, bonePosZ = 0;
     float boneRotX = 0, boneRotY = 0, boneRotZ = 0, boneRotW = 1;
-    bool clothLike = false; // rotation-spring joints: use physics rotation, bone position
+    bool clothLike = false;  // rotation-spring joints: use physics rotation, bone position
     std::string name;
 };
 
 class PhysicsWorld {
-public:
+   public:
     PhysicsWorld();
     ~PhysicsWorld();
 
@@ -48,8 +48,14 @@ public:
     void getBoneTransforms(std::vector<std::array<float, 16>>& out) const;
 
     // For debug visualization
-    const std::vector<BulletBody>& bodies() const { return mBodies; }
-    float modelScale() const { return mModelScale; }
+    const std::vector<BulletBody>& bodies() const
+    {
+        return mBodies;
+    }
+    float modelScale() const
+    {
+        return mModelScale;
+    }
     void debugDump() const;
     void debugTrackCloth() const;
 
@@ -59,11 +65,12 @@ public:
 
     bool enabled = true;
 
-private:
+   private:
     void addRigidBody(const PmxRigidBody& rb);
     void addJoint(const PmxJoint& jt);
-    void computeBoneTarget(const BulletBody& bb, const std::vector<std::array<float, 16>>& poseWorld,
-                           btVector3& outPos, btQuaternion& outRot) const;
+    void computeBoneTarget(const BulletBody& bb,
+                           const std::vector<std::array<float, 16>>& poseWorld, btVector3& outPos,
+                           btQuaternion& outRot) const;
 
     std::unique_ptr<btDefaultCollisionConfiguration> mCollisionCfg;
     std::unique_ptr<btCollisionDispatcher> mDispatcher;
@@ -78,5 +85,5 @@ private:
     float mModelScale = 1.0f;
     Vec3 mCenter;
     float mMinY = 0;
-    std::vector<std::array<float, 16>> mBoneBindWorld; // bone bind-pose world matrices
+    std::vector<std::array<float, 16>> mBoneBindWorld;  // bone bind-pose world matrices
 };

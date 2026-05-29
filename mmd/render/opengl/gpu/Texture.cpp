@@ -15,7 +15,10 @@ Texture::Texture(int w, int h, int comps, const void* data, GLenum dtype)
     glTexImage2D(GL_TEXTURE_2D, 0, ifmt, width, height, 0, fmt, dtype, data);
 }
 
-Texture::~Texture() { destroy(); }
+Texture::~Texture()
+{
+    destroy();
+}
 
 Texture::Texture(Texture&& other) noexcept
     : id(other.id), width(other.width), height(other.height), components(other.components)
@@ -27,8 +30,10 @@ Texture& Texture::operator=(Texture&& other) noexcept
 {
     if (this != &other) {
         destroy();
-        id = other.id; other.id = 0;
-        width = other.width; height = other.height;
+        id = other.id;
+        other.id = 0;
+        width = other.width;
+        height = other.height;
         components = other.components;
     }
     return *this;
@@ -84,10 +89,15 @@ GLenum Texture::formatFromComps(int comps, bool isFloat)
 {
     (void)isFloat;
     switch (comps) {
-        case 1: return GL_RED;
-        case 2: return GL_RG;
-        case 3: return GL_RGB;
-        case 4: default: return GL_RGBA;
+    case 1:
+        return GL_RED;
+    case 2:
+        return GL_RG;
+    case 3:
+        return GL_RGB;
+    case 4:
+    default:
+        return GL_RGBA;
     }
 }
 
@@ -95,18 +105,28 @@ GLenum Texture::internalFromComps(int comps, bool isFloat)
 {
     if (isFloat) {
         switch (comps) {
-            case 1: return GL_R32F;
-            case 2: return GL_RG32F;
-            case 3: return GL_RGB32F;
-            case 4: default: return GL_RGBA32F;
+        case 1:
+            return GL_R32F;
+        case 2:
+            return GL_RG32F;
+        case 3:
+            return GL_RGB32F;
+        case 4:
+        default:
+            return GL_RGBA32F;
         }
     }
     switch (comps) {
-        case 1: return GL_R8;
-        case 2: return GL_RG8;
-        case 3: return GL_RGB8;
-        case 4: default: return GL_RGBA8;
+    case 1:
+        return GL_R8;
+    case 2:
+        return GL_RG8;
+    case 3:
+        return GL_RGB8;
+    case 4:
+    default:
+        return GL_RGBA8;
     }
 }
 
-} // namespace Gpu
+}  // namespace Gpu

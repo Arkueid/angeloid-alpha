@@ -1,4 +1,5 @@
 #include "render/opengl/gpu/Shader.h"
+
 #include "util/Log.h"
 
 #include <cstdio>
@@ -48,8 +49,10 @@ GLuint ShaderProgram::compileProgram(const std::string& vertexSrc, const std::st
     GLuint vs = compileShader(GL_VERTEX_SHADER, vertexSrc);
     GLuint fs = compileShader(GL_FRAGMENT_SHADER, fragmentSrc);
     if (!vs || !fs) {
-        if (vs) glDeleteShader(vs);
-        if (fs) glDeleteShader(fs);
+        if (vs)
+            glDeleteShader(vs);
+        if (fs)
+            glDeleteShader(fs);
         return 0;
     }
 
@@ -77,12 +80,15 @@ GLuint ShaderProgram::compileProgram(const std::string& vertexSrc, const std::st
 
 ShaderProgram::ShaderProgram(const std::string& vertexSrc, const std::string& fragmentSrc)
     : mProgramId(compileProgram(vertexSrc, fragmentSrc))
-{}
+{
+}
 
-ShaderProgram::~ShaderProgram() { destroy(); }
+ShaderProgram::~ShaderProgram()
+{
+    destroy();
+}
 
-ShaderProgram::ShaderProgram(ShaderProgram&& other) noexcept
-    : mProgramId(other.mProgramId)
+ShaderProgram::ShaderProgram(ShaderProgram&& other) noexcept : mProgramId(other.mProgramId)
 {
     other.mProgramId = 0;
 }
@@ -110,37 +116,43 @@ static GLint getLocation(GLuint program, const std::string& name)
 void ShaderProgram::setInt(const std::string& name, int value) const
 {
     GLint loc = getLocation(mProgramId, name);
-    if (loc != -1) glUniform1i(loc, value);
+    if (loc != -1)
+        glUniform1i(loc, value);
 }
 
 void ShaderProgram::setFloat(const std::string& name, float value) const
 {
     GLint loc = getLocation(mProgramId, name);
-    if (loc != -1) glUniform1f(loc, value);
+    if (loc != -1)
+        glUniform1f(loc, value);
 }
 
 void ShaderProgram::setVec2(const std::string& name, float x, float y) const
 {
     GLint loc = getLocation(mProgramId, name);
-    if (loc != -1) glUniform2f(loc, x, y);
+    if (loc != -1)
+        glUniform2f(loc, x, y);
 }
 
 void ShaderProgram::setVec3(const std::string& name, float x, float y, float z) const
 {
     GLint loc = getLocation(mProgramId, name);
-    if (loc != -1) glUniform3f(loc, x, y, z);
+    if (loc != -1)
+        glUniform3f(loc, x, y, z);
 }
 
 void ShaderProgram::setVec4(const std::string& name, float x, float y, float z, float w) const
 {
     GLint loc = getLocation(mProgramId, name);
-    if (loc != -1) glUniform4f(loc, x, y, z, w);
+    if (loc != -1)
+        glUniform4f(loc, x, y, z, w);
 }
 
 void ShaderProgram::setMat4(const std::string& name, const float* data) const
 {
     GLint loc = getLocation(mProgramId, name);
-    if (loc != -1) glUniformMatrix4fv(loc, 1, GL_FALSE, data);
+    if (loc != -1)
+        glUniformMatrix4fv(loc, 1, GL_FALSE, data);
 }
 
 void ShaderProgram::destroy()
@@ -151,4 +163,4 @@ void ShaderProgram::destroy()
     }
 }
 
-} // namespace Gpu
+}  // namespace Gpu

@@ -1,14 +1,15 @@
 #pragma once
 
+#include "Camera.h"
+#include "anim/BoneSkinning.h"
+#include "anim/MorphController.h"
+#include "anim/PhysicsWorld.h"
+#include "anim/VmdPlayer.h"
+#include "anim/VpdLoader.h"
 #include "pmx/PmxModel.h"
 #include "render/opengl/ModelRenderer.h"
 #include "render/opengl/ShaderManager.h"
-#include "Camera.h"
-#include "anim/PhysicsWorld.h"
-#include "anim/MorphController.h"
-#include "anim/BoneSkinning.h"
-#include "anim/VpdLoader.h"
-#include "anim/VmdPlayer.h"
+#include "render/opengl/debug/RigidBodyRenderer.h"
 
 #include <array>
 #include <filesystem>
@@ -17,19 +18,15 @@
 #include <unordered_map>
 #include <vector>
 
-#include "render/opengl/debug/RigidBodyRenderer.h"
-
 namespace mmd {
 
 class Model {
-public:
+   public:
     Model() = default;
 
     // --- Loading ---
-    void load(const std::filesystem::path& pmxPath,
-              const std::filesystem::path& texDir,
-              const std::filesystem::path& toonDir,
-              const std::filesystem::path& shaderDir);
+    void load(const std::filesystem::path& pmxPath, const std::filesystem::path& texDir,
+              const std::filesystem::path& toonDir, const std::filesystem::path& shaderDir);
     void loadVpd(const std::filesystem::path& vpdPath);
 
     // --- Per-frame ---
@@ -38,8 +35,14 @@ public:
 
     // --- Physics ---
     void enablePhysics(bool on);
-    bool physicsEnabled() const { return mPhysics.enabled; }
-    void showRigidBodies(bool v) { mShowRigidBodies = v; }
+    bool physicsEnabled() const
+    {
+        return mPhysics.enabled;
+    }
+    void showRigidBodies(bool v)
+    {
+        mShowRigidBodies = v;
+    }
 
     // --- VMD animation ---
     void loadVmd(const std::filesystem::path& path);
@@ -55,34 +58,76 @@ public:
 
     // --- VPD pose ---
     void applyVpd(bool on);
-    bool vpdApplied() const { return mVpdApplied; }
+    bool vpdApplied() const
+    {
+        return mVpdApplied;
+    }
 
     // --- Display toggles ---
-    void showModel(bool v) { mRenderer.showModel = v; }
-    void showOutline(bool v) { mRenderer.showOutline = v; }
-    void showToon(bool v) { mRenderer.showToon = v; }
-    bool showModel() const { return mRenderer.showModel; }
-    bool showOutline() const { return mRenderer.showOutline; }
-    bool showToon() const { return mRenderer.showToon; }
-    bool isSkinned() const { return mRenderer.useSkinning; }
-    void setSkinning(bool on) { mRenderer.useSkinning = on; }
+    void showModel(bool v)
+    {
+        mRenderer.showModel = v;
+    }
+    void showOutline(bool v)
+    {
+        mRenderer.showOutline = v;
+    }
+    void showToon(bool v)
+    {
+        mRenderer.showToon = v;
+    }
+    bool showModel() const
+    {
+        return mRenderer.showModel;
+    }
+    bool showOutline() const
+    {
+        return mRenderer.showOutline;
+    }
+    bool showToon() const
+    {
+        return mRenderer.showToon;
+    }
+    bool isSkinned() const
+    {
+        return mRenderer.useSkinning;
+    }
+    void setSkinning(bool on)
+    {
+        mRenderer.useSkinning = on;
+    }
 
     // --- Morphs ---
     void setMorphWeight(const std::string& name, float weight);
     void clearMorphs();
     void setMorphWeights(const std::unordered_map<std::string, float>& weights);
-    void setIdleBlink(bool on) { mIdleEnabled = on; }
+    void setIdleBlink(bool on)
+    {
+        mIdleEnabled = on;
+    }
     int morphCount() const;
     std::vector<int> interactableMorphs() const;
     std::string morphName(int index) const;
 
     // --- Accessors ---
-    const std::string& modelName() const { return mData.name; }
-    const PmxModel& data() const { return mData; }
-    float modelScale() const { return mRenderer.modelScale(); }
-    const float* modelMatrix() const { return mRenderer.modelMatrix(); }
+    const std::string& modelName() const
+    {
+        return mData.name;
+    }
+    const PmxModel& data() const
+    {
+        return mData;
+    }
+    float modelScale() const
+    {
+        return mRenderer.modelScale();
+    }
+    const float* modelMatrix() const
+    {
+        return mRenderer.modelMatrix();
+    }
 
-private:
+   private:
     void syncBoneTexture();
     void syncMorphOffsets();
 
@@ -106,4 +151,4 @@ private:
     bool mShowRigidBodies = false;
 };
 
-} // namespace mmd
+}  // namespace mmd

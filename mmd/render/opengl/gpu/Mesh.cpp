@@ -25,11 +25,11 @@ Vao::~Vao()
 }
 
 Vao::Vao(Vao&& other) noexcept
-    : vaoId(other.vaoId)
-    , vbos(std::move(other.vbos))
-    , ebo(other.ebo)
-    , indexCount(other.indexCount)
-    , vertexCount(other.vertexCount)
+    : vaoId(other.vaoId),
+      vbos(std::move(other.vbos)),
+      ebo(other.ebo),
+      indexCount(other.indexCount),
+      vertexCount(other.vertexCount)
 {
     other.vaoId = 0;
     other.ebo = 0;
@@ -41,32 +41,43 @@ Vao& Vao::operator=(Vao&& other) noexcept
 {
     if (this != &other) {
         destroy();
-        vaoId = other.vaoId; other.vaoId = 0;
+        vaoId = other.vaoId;
+        other.vaoId = 0;
         vbos = std::move(other.vbos);
-        ebo = other.ebo; other.ebo = 0;
-        indexCount = other.indexCount; other.indexCount = 0;
-        vertexCount = other.vertexCount; other.vertexCount = 0;
+        ebo = other.ebo;
+        other.ebo = 0;
+        indexCount = other.indexCount;
+        other.indexCount = 0;
+        vertexCount = other.vertexCount;
+        other.vertexCount = 0;
     }
     return *this;
 }
 
-void Vao::bind() const { glBindVertexArray(vaoId); }
-void Vao::unbind() { glBindVertexArray(0); }
+void Vao::bind() const
+{
+    glBindVertexArray(vaoId);
+}
+void Vao::unbind()
+{
+    glBindVertexArray(0);
+}
 
-GLuint Vao::addVbo(const void* data, size_t bytes, int location, int size,
-                   GLenum dtype, int stride, int offset)
+GLuint Vao::addVbo(const void* data, size_t bytes, int location, int size, GLenum dtype, int stride,
+                   int offset)
 {
     GLuint vbo;
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, bytes, data, GL_STATIC_DRAW);
     glEnableVertexAttribArray(location);
-    if (dtype == GL_INT || dtype == GL_UNSIGNED_INT ||
-        dtype == GL_SHORT || dtype == GL_UNSIGNED_SHORT ||
-        dtype == GL_BYTE || dtype == GL_UNSIGNED_BYTE) {
+    if (dtype == GL_INT || dtype == GL_UNSIGNED_INT || dtype == GL_SHORT ||
+        dtype == GL_UNSIGNED_SHORT || dtype == GL_BYTE || dtype == GL_UNSIGNED_BYTE) {
         glVertexAttribIPointer(location, size, dtype, stride, (const void*)(intptr_t)offset);
-    } else {
-        glVertexAttribPointer(location, size, dtype, GL_FALSE, stride, (const void*)(intptr_t)offset);
+    }
+    else {
+        glVertexAttribPointer(location, size, dtype, GL_FALSE, stride,
+                              (const void*)(intptr_t)offset);
     }
     vbos.push_back(vbo);
     return vbo;
@@ -79,9 +90,11 @@ void Vao::setEbo(const void* data, size_t bytes, GLenum indexType)
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, bytes, data, GL_STATIC_DRAW);
     if (indexType == GL_UNSIGNED_INT) {
         indexCount = (int)(bytes / 4);
-    } else if (indexType == GL_UNSIGNED_SHORT) {
+    }
+    else if (indexType == GL_UNSIGNED_SHORT) {
         indexCount = (int)(bytes / 2);
-    } else {
+    }
+    else {
         indexCount = (int)bytes;
     }
 }
@@ -98,7 +111,8 @@ void Vao::render(GLenum mode, int count, int first) const
     if (ebo) {
         int n = count >= 0 ? count : indexCount;
         glDrawElements(mode, n, GL_UNSIGNED_INT, (const void*)(intptr_t)(first * 4));
-    } else {
+    }
+    else {
         int n = count >= 0 ? count : vertexCount;
         glDrawArrays(mode, first, n);
     }
@@ -123,9 +137,8 @@ void Vao::destroy()
 
 // --- Gpu::Vao::create ---
 
-Vao Vao::create(const std::vector<VertexBufferDesc>& vertexBuffers,
-                          const void* indices, size_t indexBytes,
-                          GLenum indexType)
+Vao Vao::create(const std::vector<VertexBufferDesc>& vertexBuffers, const void* indices,
+                size_t indexBytes, GLenum indexType)
 {
     Vao vao;
     vao.bind();
@@ -135,11 +148,12 @@ Vao Vao::create(const std::vector<VertexBufferDesc>& vertexBuffers,
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
         glBufferData(GL_ARRAY_BUFFER, desc.bytes, desc.data, GL_STATIC_DRAW);
         glEnableVertexAttribArray(desc.location);
-        if (desc.dtype == GL_INT || desc.dtype == GL_UNSIGNED_INT ||
-            desc.dtype == GL_SHORT || desc.dtype == GL_UNSIGNED_SHORT ||
-            desc.dtype == GL_BYTE || desc.dtype == GL_UNSIGNED_BYTE) {
+        if (desc.dtype == GL_INT || desc.dtype == GL_UNSIGNED_INT || desc.dtype == GL_SHORT ||
+            desc.dtype == GL_UNSIGNED_SHORT || desc.dtype == GL_BYTE ||
+            desc.dtype == GL_UNSIGNED_BYTE) {
             glVertexAttribIPointer(desc.location, desc.size, desc.dtype, 0, nullptr);
-        } else {
+        }
+        else {
             glVertexAttribPointer(desc.location, desc.size, desc.dtype, GL_FALSE, 0, nullptr);
         }
         vao.vbos.push_back(vbo);
@@ -149,4 +163,4 @@ Vao Vao::create(const std::vector<VertexBufferDesc>& vertexBuffers,
     return vao;
 }
 
-} // namespace Gpu
+}  // namespace Gpu

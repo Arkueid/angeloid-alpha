@@ -1,4 +1,5 @@
 #include "anim/BoneSkinning.h"
+
 #include "anim/VpdLoader.h"
 
 #include <array>
@@ -11,34 +12,42 @@
 // --- Helpers ---
 
 // Extract 4 bone indices and 4 weights from a BoneDeform variant
-static void extractDeform(const BoneDeform& deform,
-                          int32_t outIndices[4], float outWeights[4])
+static void extractDeform(const BoneDeform& deform, int32_t outIndices[4], float outWeights[4])
 {
     std::memset(outIndices, 0, 4 * sizeof(int32_t));
     std::memset(outWeights, 0, 4 * sizeof(float));
 
-    std::visit([&](const auto& d) {
-        using T = std::decay_t<decltype(d)>;
-        if constexpr (std::is_same_v<T, Bdef1>) {
-            outIndices[0] = d.index0;
-            outWeights[0] = 1.0f;
-        } else if constexpr (std::is_same_v<T, Bdef2>) {
-            outIndices[0] = d.index0;
-            outIndices[1] = d.index1;
-            outWeights[0] = d.weight0;
-            outWeights[1] = 1.0f - d.weight0;
-        } else if constexpr (std::is_same_v<T, Bdef4>) {
-            outIndices[0] = d.index0; outIndices[1] = d.index1;
-            outIndices[2] = d.index2; outIndices[3] = d.index3;
-            outWeights[0] = d.weight0; outWeights[1] = d.weight1;
-            outWeights[2] = d.weight2; outWeights[3] = d.weight3;
-        } else if constexpr (std::is_same_v<T, Sdef>) {
-            outIndices[0] = d.index0;
-            outIndices[1] = d.index1;
-            outWeights[0] = d.weight0;
-            outWeights[1] = 1.0f - d.weight0;
-        }
-    }, deform);
+    std::visit(
+        [&](const auto& d) {
+            using T = std::decay_t<decltype(d)>;
+            if constexpr (std::is_same_v<T, Bdef1>) {
+                outIndices[0] = d.index0;
+                outWeights[0] = 1.0f;
+            }
+            else if constexpr (std::is_same_v<T, Bdef2>) {
+                outIndices[0] = d.index0;
+                outIndices[1] = d.index1;
+                outWeights[0] = d.weight0;
+                outWeights[1] = 1.0f - d.weight0;
+            }
+            else if constexpr (std::is_same_v<T, Bdef4>) {
+                outIndices[0] = d.index0;
+                outIndices[1] = d.index1;
+                outIndices[2] = d.index2;
+                outIndices[3] = d.index3;
+                outWeights[0] = d.weight0;
+                outWeights[1] = d.weight1;
+                outWeights[2] = d.weight2;
+                outWeights[3] = d.weight3;
+            }
+            else if constexpr (std::is_same_v<T, Sdef>) {
+                outIndices[0] = d.index0;
+                outIndices[1] = d.index1;
+                outWeights[0] = d.weight0;
+                outWeights[1] = 1.0f - d.weight0;
+            }
+        },
+        deform);
 }
 
 // --- Skinning data extraction ---
@@ -54,13 +63,12 @@ SkinningVertexData BoneSkinning::extractSkinningData(const PmxModel& model)
     result.boneWeights.reserve(n * 4);
 
     for (const auto& v : model.vertices) {
-        result.positions.insert(result.positions.end(),
-            {v.position.x, v.position.y, v.position.z});
-        result.normals.insert(result.normals.end(),
-            {v.normal.x, v.normal.y, v.normal.z});
+        result.positions.insert(result.positions.end(), {v.position.x, v.position.y, v.position.z});
+        result.normals.insert(result.normals.end(), {v.normal.x, v.normal.y, v.normal.z});
         result.uvs.insert(result.uvs.end(), {v.uv.x, v.uv.y});
 
-        int32_t idx[4]; float wt[4];
+        int32_t idx[4];
+        float wt[4];
         extractDeform(v.deform, idx, wt);
         result.boneIndices.insert(result.boneIndices.end(), idx, idx + 4);
         result.boneWeights.insert(result.boneWeights.end(), wt, wt + 4);
@@ -74,14 +82,16 @@ using Mat4 = std::array<float, 16>;
 
 static Mat4 identityMat()
 {
-    return {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    return {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
 }
 
 static Mat4 translateMat(float x, float y, float z)
 {
     // Column-major translation: col 3 = (x,y,z,1)
     auto m = identityMat();
-    m[12] = x; m[13] = y; m[14] = z;
+    m[12] = x;
+    m[13] = y;
+    m[14] = z;
     return m;
 }
 
@@ -111,14 +121,14 @@ static Mat4 inverseMat4(const Mat4& M)
     // Transpose 3x3
     for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 3; ++j)
-            r[i * 4 + j] = M[j * 4 + i]; // R^T
+            r[i * 4 + j] = M[j * 4 + i];  // R^T
     r[3 * 4 + 3] = 1.0f;
 
     // Translation: -R^T * t
     float tx = M[12], ty = M[13], tz = M[14];
-    r[12] = -(r[0]*tx + r[4]*ty + r[8]*tz);
-    r[13] = -(r[1]*tx + r[5]*ty + r[9]*tz);
-    r[14] = -(r[2]*tx + r[6]*ty + r[10]*tz);
+    r[12] = -(r[0] * tx + r[4] * ty + r[8] * tz);
+    r[13] = -(r[1] * tx + r[5] * ty + r[9] * tz);
+    r[14] = -(r[2] * tx + r[6] * ty + r[10] * tz);
     return r;
 }
 
@@ -136,7 +146,8 @@ std::vector<Mat4> BoneSkinning::computeBindWorldMatrices(const PmxModel& model)
             float lz = bone.position.z - parent.position.z;
             auto local = translateMat(lx, ly, lz);
             result[i] = mulMat4(result[bone.parent_index], local);
-        } else {
+        }
+        else {
             result[i] = translateMat(bone.position.x, bone.position.y, bone.position.z);
         }
     }
@@ -149,8 +160,7 @@ std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(const PmxModel& model)
     return BoneSkinning::computeBindWorldMatrices(model);
 }
 
-std::vector<float> BoneSkinning::computeSkinningMatrices(
-    const PmxModel& model)
+std::vector<float> BoneSkinning::computeSkinningMatrices(const PmxModel& model)
 {
     int n = model.boneCount();
     auto bindWorld = BoneSkinning::computeBindWorldMatrices(model);
@@ -166,8 +176,7 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
 }
 
 std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(
-    const PmxModel& model,
-    const std::unordered_map<std::string, VpdPose>& vpdPoses)
+    const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses)
 {
     int n = model.boneCount();
     std::vector<Mat4> result(n, identityMat());
@@ -188,16 +197,23 @@ std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(
                 float rot[9];
                 it->second.toMatrix(rot);
                 // Copy 3x3 rotation into column-major local
-                local[0] = rot[0]; local[4] = rot[1]; local[8]  = rot[2];
-                local[1] = rot[3]; local[5] = rot[4]; local[9]  = rot[5];
-                local[2] = rot[6]; local[6] = rot[7]; local[10] = rot[8];
+                local[0] = rot[0];
+                local[4] = rot[1];
+                local[8] = rot[2];
+                local[1] = rot[3];
+                local[5] = rot[4];
+                local[9] = rot[5];
+                local[2] = rot[6];
+                local[6] = rot[7];
+                local[10] = rot[8];
                 local[12] += it->second.tx;
                 local[13] += it->second.ty;
                 local[14] += it->second.tz;
             }
 
             result[i] = mulMat4(result[bone.parent_index], local);
-        } else {
+        }
+        else {
             local[12] = bone.position.x;
             local[13] = bone.position.y;
             local[14] = bone.position.z;
@@ -206,9 +222,15 @@ std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(
             if (it != vpdPoses.end()) {
                 float rot[9];
                 it->second.toMatrix(rot);
-                local[0] = rot[0]; local[4] = rot[1]; local[8]  = rot[2];
-                local[1] = rot[3]; local[5] = rot[4]; local[9]  = rot[5];
-                local[2] = rot[6]; local[6] = rot[7]; local[10] = rot[8];
+                local[0] = rot[0];
+                local[4] = rot[1];
+                local[8] = rot[2];
+                local[1] = rot[3];
+                local[5] = rot[4];
+                local[9] = rot[5];
+                local[2] = rot[6];
+                local[6] = rot[7];
+                local[10] = rot[8];
                 local[12] += it->second.tx;
                 local[13] += it->second.ty;
                 local[14] += it->second.tz;
@@ -221,10 +243,9 @@ std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(
 }
 
 std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(
-    const PmxModel& model,
-    const std::unordered_map<std::string, VpdPose>& vpdPoses,
-    const std::unordered_map<std::string,
-        std::pair<std::array<float,3>, std::array<float,4>>>& vmdTransforms)
+    const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses,
+    const std::unordered_map<std::string, std::pair<std::array<float, 3>, std::array<float, 4>>>&
+        vmdTransforms)
 {
     int n = model.boneCount();
     std::vector<Mat4> result(n, identityMat());
@@ -238,7 +259,8 @@ std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(
             local[12] = bone.position.x - parent.position.x;
             local[13] = bone.position.y - parent.position.y;
             local[14] = bone.position.z - parent.position.z;
-        } else {
+        }
+        else {
             local[12] = bone.position.x;
             local[13] = bone.position.y;
             local[14] = bone.position.z;
@@ -249,9 +271,15 @@ std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(
         if (vpdIt != vpdPoses.end()) {
             float rot[9];
             vpdIt->second.toMatrix(rot);
-            local[0] = rot[0]; local[4] = rot[1]; local[8]  = rot[2];
-            local[1] = rot[3]; local[5] = rot[4]; local[9]  = rot[5];
-            local[2] = rot[6]; local[6] = rot[7]; local[10] = rot[8];
+            local[0] = rot[0];
+            local[4] = rot[1];
+            local[8] = rot[2];
+            local[1] = rot[3];
+            local[5] = rot[4];
+            local[9] = rot[5];
+            local[2] = rot[6];
+            local[6] = rot[7];
+            local[10] = rot[8];
             local[12] += vpdIt->second.tx;
             local[13] += vpdIt->second.ty;
             local[14] += vpdIt->second.tz;
@@ -262,20 +290,23 @@ std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(
         if (vmdIt != vmdTransforms.end()) {
             const auto& pos = vmdIt->second.first;
             const auto& rot = vmdIt->second.second;
-            float qx=rot[0], qy=rot[1], qz=rot[2], qw=rot[3];
-            float x2=qx+qx, y2=qy+qy, z2=qz+qz;
-            float xx=qx*x2, xy=qx*y2, xz=qx*z2;
-            float yy=qy*y2, yz=qy*z2, zz=qz*z2;
-            float wx=qw*x2, wy=qw*y2, wz=qw*z2;
-            float r[9] = {
-                1.0f-(yy+zz), xy+wz,       xz-wy,
-                xy-wz,       1.0f-(xx+zz), yz+wx,
-                xz+wy,       yz-wx,       1.0f-(xx+yy)
-            };
+            float qx = rot[0], qy = rot[1], qz = rot[2], qw = rot[3];
+            float x2 = qx + qx, y2 = qy + qy, z2 = qz + qz;
+            float xx = qx * x2, xy = qx * y2, xz = qx * z2;
+            float yy = qy * y2, yz = qy * z2, zz = qz * z2;
+            float wx = qw * x2, wy = qw * y2, wz = qw * z2;
+            float r[9] = {1.0f - (yy + zz), xy + wz, xz - wy, xy - wz,         1.0f - (xx + zz),
+                          yz + wx,          xz + wy, yz - wx, 1.0f - (xx + yy)};
             // VMD rotation REPLACES local rotation
-            local[0] = r[0]; local[4] = r[3]; local[8]  = r[6];
-            local[1] = r[1]; local[5] = r[4]; local[9]  = r[7];
-            local[2] = r[2]; local[6] = r[5]; local[10] = r[8];
+            local[0] = r[0];
+            local[4] = r[3];
+            local[8] = r[6];
+            local[1] = r[1];
+            local[5] = r[4];
+            local[9] = r[7];
+            local[2] = r[2];
+            local[6] = r[5];
+            local[10] = r[8];
             local[12] += pos[0];
             local[13] += pos[1];
             local[14] += pos[2];
@@ -290,14 +321,15 @@ std::vector<Mat4> BoneSkinning::computePoseWorldMatrices(
 }
 
 void BoneSkinning::recomputeAfterPhysicsBones(
-    const PmxModel& model,
-    const std::unordered_map<std::string, VpdPose>& vpdPoses,
+    const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses,
     std::vector<std::array<float, 16>>& poseWorld)
 {
     for (int i = 0; i < model.boneCount(); ++i) {
         const auto& bone = model.bones[i];
-        if (!bone.hasFlag(BONEFLAG_IS_AFTER_PHYSICS_DEFORM)) continue;
-        if (bone.parent_index < 0) continue;
+        if (!bone.hasFlag(BONEFLAG_IS_AFTER_PHYSICS_DEFORM))
+            continue;
+        if (bone.parent_index < 0)
+            continue;
 
         auto local = identityMat();
         const auto& parent = model.bones[bone.parent_index];
@@ -309,9 +341,15 @@ void BoneSkinning::recomputeAfterPhysicsBones(
         if (it != vpdPoses.end()) {
             float rot[9];
             it->second.toMatrix(rot);
-            local[0] = rot[0]; local[4] = rot[1]; local[8]  = rot[2];
-            local[1] = rot[3]; local[5] = rot[4]; local[9]  = rot[5];
-            local[2] = rot[6]; local[6] = rot[7]; local[10] = rot[8];
+            local[0] = rot[0];
+            local[4] = rot[1];
+            local[8] = rot[2];
+            local[1] = rot[3];
+            local[5] = rot[4];
+            local[9] = rot[5];
+            local[2] = rot[6];
+            local[6] = rot[7];
+            local[10] = rot[8];
             local[12] += it->second.tx;
             local[13] += it->second.ty;
             local[14] += it->second.tz;
@@ -322,8 +360,7 @@ void BoneSkinning::recomputeAfterPhysicsBones(
 }
 
 std::vector<float> BoneSkinning::computeSkinningMatrices(
-    const PmxModel& model,
-    const std::unordered_map<std::string, VpdPose>& vpdPoses)
+    const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses)
 {
     int n = model.boneCount();
     auto bindWorld = BoneSkinning::computeBindWorldMatrices(model);
@@ -339,8 +376,7 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
 }
 
 std::vector<float> BoneSkinning::computeSkinningMatrices(
-    const PmxModel& model,
-    const std::vector<std::array<float, 16>>& poseWorld)
+    const PmxModel& model, const std::vector<std::array<float, 16>>& poseWorld)
 {
     int n = model.boneCount();
     auto bindWorld = BoneSkinning::computeBindWorldMatrices(model);
@@ -355,8 +391,7 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
 }
 
 std::vector<float> BoneSkinning::computeSkinningMatrices(
-    const PmxModel& model,
-    const std::unordered_map<std::string, VpdPose>& vpdPoses,
+    const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses,
     const std::unordered_map<std::string, VmdBoneTransform>& vmdTransforms)
 {
     int n = model.boneCount();
@@ -375,7 +410,8 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
             local[12] = bone.position.x - parent.position.x;
             local[13] = bone.position.y - parent.position.y;
             local[14] = bone.position.z - parent.position.z;
-        } else {
+        }
+        else {
             local[12] = bone.position.x;
             local[13] = bone.position.y;
             local[14] = bone.position.z;
@@ -386,9 +422,15 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
         if (vpdIt != vpdPoses.end()) {
             float rot[9];
             vpdIt->second.toMatrix(rot);
-            local[0] = rot[0]; local[4] = rot[1]; local[8]  = rot[2];
-            local[1] = rot[3]; local[5] = rot[4]; local[9]  = rot[5];
-            local[2] = rot[6]; local[6] = rot[7]; local[10] = rot[8];
+            local[0] = rot[0];
+            local[4] = rot[1];
+            local[8] = rot[2];
+            local[1] = rot[3];
+            local[5] = rot[4];
+            local[9] = rot[5];
+            local[2] = rot[6];
+            local[6] = rot[7];
+            local[10] = rot[8];
             local[12] += vpdIt->second.tx;
             local[13] += vpdIt->second.ty;
             local[14] += vpdIt->second.tz;
@@ -401,20 +443,23 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
             const auto& rot = vmdIt->second.second;
             // Quat to matrix
             float qx = rot[0], qy = rot[1], qz = rot[2], qw = rot[3];
-            float x2 = qx+qx, y2 = qy+qy, z2 = qz+qz;
-            float xx = qx*x2, xy = qx*y2, xz = qx*z2;
-            float yy = qy*y2, yz = qy*z2, zz = qz*z2;
-            float wx = qw*x2, wy = qw*y2, wz = qw*z2;
-            float r[9] = {
-                1.0f-(yy+zz), xy-wz,       xz+wy,
-                xy+wz,       1.0f-(xx+zz), yz-wx,
-                xz-wy,       yz+wx,       1.0f-(xx+yy)
-            };
+            float x2 = qx + qx, y2 = qy + qy, z2 = qz + qz;
+            float xx = qx * x2, xy = qx * y2, xz = qx * z2;
+            float yy = qy * y2, yz = qy * z2, zz = qz * z2;
+            float wx = qw * x2, wy = qw * y2, wz = qw * z2;
+            float r[9] = {1.0f - (yy + zz), xy - wz, xz + wy, xy + wz,         1.0f - (xx + zz),
+                          yz - wx,          xz - wy, yz + wx, 1.0f - (xx + yy)};
 
             // VMD rotation REPLACES existing local rotation (Python: local[:3,:3] = rot_mat)
-            local[0] = r[0]; local[4] = r[1]; local[8]  = r[2];
-            local[1] = r[3]; local[5] = r[4]; local[9]  = r[5];
-            local[2] = r[6]; local[6] = r[7]; local[10] = r[8];
+            local[0] = r[0];
+            local[4] = r[1];
+            local[8] = r[2];
+            local[1] = r[3];
+            local[5] = r[4];
+            local[9] = r[5];
+            local[2] = r[6];
+            local[6] = r[7];
+            local[10] = r[8];
 
             local[12] += pos[0];
             local[13] += pos[1];
@@ -424,7 +469,8 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
         // Accumulate hierarchy
         if (bone.parent_index >= 0) {
             poseWorld[i] = mulMat4(poseWorld[bone.parent_index], local);
-        } else {
+        }
+        else {
             poseWorld[i] = local;
         }
     }
@@ -443,24 +489,29 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
 
 static int nextPow2(int x)
 {
-    if (x <= 0) return 1;
+    if (x <= 0)
+        return 1;
     int p = 1;
-    while (p < x) p <<= 1;
+    while (p < x)
+        p <<= 1;
     return p;
 }
 
-void BoneSkinning::applyPhysics(const PmxModel& model,
-                                 std::vector<float>& skinMatrices,
-                                 const std::vector<std::array<float, 16>>& physicsMats)
+void BoneSkinning::applyPhysics(const PmxModel& model, std::vector<float>& skinMatrices,
+                                const std::vector<std::array<float, 16>>& physicsMats)
 {
     auto bindWorld = BoneSkinning::computeBindWorldMatrices(model);
 
     for (size_t i = 0; i < physicsMats.size() && i < (size_t)model.boneCount(); ++i) {
         bool hasPhysics = false;
         for (int j = 0; j < 16; ++j) {
-            if (physicsMats[i][j] != 0) { hasPhysics = true; break; }
+            if (physicsMats[i][j] != 0) {
+                hasPhysics = true;
+                break;
+            }
         }
-        if (!hasPhysics) continue;
+        if (!hasPhysics)
+            continue;
 
         auto invBind = inverseMat4(bindWorld[i]);
         auto M = mulMat4(physicsMats[i], invBind);
