@@ -15,10 +15,12 @@ struct BoneMorphTransform {
 
 struct MatMorphOverride {
     float alpha = 1.0f;
-    Vec3 diffuse = {1, 1, 1};    // multiplier
-    Vec3 specular = {1, 1, 1};   // multiplier
-    Vec3 ambient = {1, 1, 1};    // multiplier
+    Vec3 diffuse = {1, 1, 1};
+    Vec3 specular = {1, 1, 1};
+    Vec3 ambient = {1, 1, 1};
     float specularFactor = 1.0f;
+    Vec4 edgeColor = {0, 0, 0, 0};  // additive offset
+    float edgeSize = 0;
 };
 
 class MorphController {

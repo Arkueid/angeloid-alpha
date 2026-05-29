@@ -91,7 +91,12 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex,
                 int start = (idx < 0) ? 0 : idx;
                 int end = (idx < 0) ? matCount : idx + 1;
                 for (int mi = start; mi < end; ++mi) {
-                    auto& ov = matOverrides[mi];
+                    auto it = matOverrides.find(mi);
+                    if (it == matOverrides.end()) {
+                        it = matOverrides.emplace(mi, MatMorphOverride{}).first;
+                        it->second.alpha = model.materials[mi].alpha;
+                    }
+                    auto& ov = it->second;
                     // Alpha
                     float curA = ov.alpha;
                     float na = (m->calc_mode == 0)
@@ -111,6 +116,12 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex,
                     ov.ambient.x *= 1.0f + (m->ambient.x - 1.0f) * weight;
                     ov.ambient.y *= 1.0f + (m->ambient.y - 1.0f) * weight;
                     ov.ambient.z *= 1.0f + (m->ambient.z - 1.0f) * weight;
+                    // Edge (additive)
+                    ov.edgeColor.x += m->edge_color.x * weight;
+                    ov.edgeColor.y += m->edge_color.y * weight;
+                    ov.edgeColor.z += m->edge_color.z * weight;
+                    ov.edgeColor.w += m->edge_color.w * weight;
+                    ov.edgeSize += m->edge_size * weight;
                 }
             }
         }

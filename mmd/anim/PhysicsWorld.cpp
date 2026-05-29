@@ -4,9 +4,11 @@
 #include <btBulletDynamicsCommon.h>
 #include <BulletDynamics/ConstraintSolver/btGeneric6DofSpringConstraint.h>
 
+#include "util/Log.h"
+
 #include <algorithm>
 #include <cmath>
-#include <iostream>
+#include <string>
 
 namespace {
     constexpr float kGravityY = -9.8f;
@@ -66,10 +68,9 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
     for (const auto& rb : model.rigidbodies) {
         if (rb.mode >= 0 && rb.mode < 3) countMode[rb.mode]++;
     }
-    std::cout << "Physics: " << model.rigidbodies.size()
-              << " bodies (mode0/static=" << countMode[0] << " mode1/dyn=" << countMode[1]
-              << " mode2/align=" << countMode[2] << "), "
-              << model.joints.size() << " joints" << std::endl;
+    MMD_INFO("PHYS", "%zu bodies (mode0/static=%d mode1/dyn=%d mode2/align=%d), %zu joints",
+             model.rigidbodies.size(), countMode[0], countMode[1], countMode[2],
+             model.joints.size());
 
     for (const auto& rb : model.rigidbodies) addRigidBody(rb);
 
@@ -77,7 +78,7 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
     for (const auto& rb : model.rigidbodies) {
         if ((rb.mode == 1 || rb.mode == 2) && rb.mass > 0) dynMassCount++;
     }
-    std::cout << "  Dynamic mass bodies: " << dynMassCount << std::endl;
+    MMD_INFO("PHYS", "  Dynamic mass bodies: %d", dynMassCount);
 
     for (const auto& jt : model.joints) addJoint(jt);
 
@@ -98,14 +99,14 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
         mark(jt.rigidbody_index_b);
     }
     int clothCount = 0;
-    std::cout << "  Cloth-like bodies:";
+    std::string clothNames;
     for (const auto& b : mBodies) {
         if (b.clothLike) {
             clothCount++;
-            std::cout << " [" << b.rigidBodyIndex << "]" << b.name;
+            clothNames += " [" + std::to_string(b.rigidBodyIndex) + "]" + b.name;
         }
     }
-    std::cout << " (" << clothCount << " total)" << std::endl;
+    MMD_INFO("PHYS", "  Cloth-like bodies:%s (%d total)", clothNames.c_str(), clothCount);
 }
 
 void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWorld)
@@ -139,12 +140,13 @@ void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWo
         bb.body->getMotionState()->setWorldTransform(bb.body->getCenterOfMassTransform());
     }
 
-    std::cout << "Physics: reset complete, bodies aligned" << std::endl;
+    MMD_INFO("PHYS", "reset complete, bodies aligned");
 }
 
 void PhysicsWorld::debugDump() const
 {
-    std::cout << "=== Physics dump (scale=" << mModelScale << " center=" << mCenter.x << "," << mCenter.y << "," << mCenter.z << ")" << std::endl;
+    MMD_INFO("PHYS", "=== Physics dump (scale=%.4f center=%.2f,%.2f,%.2f) ===",
+             mModelScale, mCenter.x, mCenter.y, mCenter.z);
     int moved = 0, active = 0;
     for (size_t i = 0; i < mBodies.size(); ++i) {
         const auto& bb = mBodies[i];
@@ -159,16 +161,15 @@ void PhysicsWorld::debugDump() const
             float mx = p.x() + mCenter.x, my = p.y() + mMinY, mz = p.z() + mCenter.z;
             float ix = init.x() + mCenter.x, iy = init.y() + mMinY, iz = init.z() + mCenter.z;
             const char* modeStr = bb.mode == 0 ? "STATIC" : (bb.mode == 1 ? "dyn" : "ALIGN");
-            std::cout << "  [" << i << "] " << modeStr << " " << bb.name
-                      << " bone=" << bb.boneIndex
-                      << " dMMD=" << disp << " active=" << bb.body->isActive()
-                      << " mass=" << (bb.body->getInvMass() > 0 ? 1.0f/bb.body->getInvMass() : 0)
-                      << " now=(" << mx << "," << my << "," << mz << ")"
-                      << " init=(" << ix << "," << iy << "," << iz << ")" << std::endl;
+            float mass = bb.body->getInvMass() > 0 ? 1.0f / bb.body->getInvMass() : 0;
+            MMD_INFO("PHYS", "  [%zu] %s %s bone=%d dMMD=%.4f active=%d mass=%.3f now=(%.2f,%.2f,%.2f) init=(%.2f,%.2f,%.2f)",
+                     i, modeStr, bb.name.c_str(), bb.boneIndex, disp,
+                     bb.body->isActive() ? 1 : 0, mass, mx, my, mz, ix, iy, iz);
         }
     }
-    std::cout << "  Bodies displaced>0.02mmd: " << moved << "  active: " << active << "  total: " << mBodies.size() << std::endl;
-    std::cout << "=== End dump ===" << std::endl;
+    MMD_INFO("PHYS", "  Bodies displaced>0.02mmd: %d  active: %d  total: %zu",
+             moved, active, mBodies.size());
+    MMD_INFO("PHYS", "=== End dump ===");
 }
 
 void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
@@ -556,7 +557,7 @@ void PhysicsWorld::debugTrackCloth() const
             float Y = p.y() + mMinY;
             float initY = bb.initPosY + mMinY;
             float pitch = atan2f(2*(r.w()*r.x()+r.y()*r.z()), 1-2*(r.x()*r.x()+r.y()*r.y()));
-            printf("F%4d [%d]%s Y=%.4f(init=%.4f dY=%+.4f) pitch=%.2f\n",
+            MMD_DEBUG("ANIM", "F%4d [%d]%s Y=%.4f(init=%.4f dY=%+.4f) pitch=%.2f",
                 fc, bb.rigidBodyIndex, bb.name.c_str(), Y, initY, Y-initY, pitch);
         }
     }

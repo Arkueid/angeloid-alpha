@@ -1,4 +1,4 @@
-#include "window/Camera.h"
+#include "Camera.h"
 
 #include <algorithm>
 #include <cmath>
@@ -31,9 +31,9 @@ void Camera::update(float deltaTime, bool w, bool a, bool s, bool d, bool e, boo
     if (q) { y -= dt; }
 }
 
-void Camera::onMouseButton(int button, int action)
+void Camera::onMouseButton(bool pressed)
 {
-    if (button == 0) mPanning = (action == 1); // left button
+    mPanning = pressed;
 }
 
 void Camera::onCursorPos(double xpos, double ypos)

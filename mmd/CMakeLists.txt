@@ -18,8 +18,8 @@ set(MMD_SOURCES
     render/opengl/ModelRenderer.cpp
     render/opengl/debug/RigidBodyRenderer.cpp
     render/opengl/ShaderManager.cpp
-    render/opengl/debug/WorldAxis.cpp
     render/opengl/StbImage.cpp
+    Camera.cpp
     Model.cpp
 )
 

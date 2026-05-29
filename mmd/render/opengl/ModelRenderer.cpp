@@ -7,8 +7,9 @@
 #include <GL/glew.h>
 #include <stb_image.h>
 
+#include "util/Log.h"
+
 #include <algorithm>
-#include <iostream>
 #include <filesystem>
 
 namespace fs = std::filesystem;
@@ -16,23 +17,21 @@ namespace fs = std::filesystem;
 // --- Helpers ---
 
 static void buildInterleavedVao(Gpu::Vao& vao, GLuint sharedVbo, GLuint sharedEbo,
-                                 int vertexCount)
+                                 int indexCount)
 {
     vao.bind();
 
     glBindBuffer(GL_ARRAY_BUFFER, sharedVbo);
-    // loc 0: position (3f)
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-    // loc 1: normal (3f)
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-    // loc 2: uv (2f)
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
 
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sharedEbo);
     vao.ebo = sharedEbo;
-    vao.indexCount = vertexCount;
+    vao.indexCount = indexCount;
     Gpu::Vao::unbind();
 }
 
@@ -88,10 +87,10 @@ void ModelRenderer::loadModel(const PmxModel& model,
     float s = mScale;
     mModelMat = {s,0,0,0, 0,s,0,0, 0,0,-s,0, -mCenter.x*s, -mMinY*s, mCenter.z*s, 1};
 
-    std::cout << "Model bounds: min=(" << minPos.x << "," << minPos.y << "," << minPos.z
-              << ") max=(" << maxPos.x << "," << maxPos.y << "," << maxPos.z << ")\n";
-    std::cout << "Center: (" << mCenter.x << "," << mCenter.y << "," << mCenter.z
-              << ") scale: " << mScale << std::endl;
+    MMD_INFO("RENDER", "Model bounds: min=(%.4f,%.4f,%.4f) max=(%.4f,%.4f,%.4f)",
+             minPos.x, minPos.y, minPos.z, maxPos.x, maxPos.y, maxPos.z);
+    MMD_INFO("RENDER", "Center: (%.4f,%.4f,%.4f) scale: %.4f",
+             mCenter.x, mCenter.y, mCenter.z, mScale);
 
     // Build interleaved vertex data (PMX raw coordinates)
     mVertices.clear();
@@ -136,7 +135,7 @@ void ModelRenderer::loadModel(const PmxModel& model,
 void ModelRenderer::loadTextures(const std::filesystem::path& textureDir,
                                   const std::filesystem::path& toonDir)
 {
-    std::cout << "Loading " << mModel->textureCount() << " textures..." << std::endl;
+    MMD_INFO("RENDER", "Loading %d textures...", mModel->textureCount());
 
     for (size_t i = 0; i < mModel->textures.size(); ++i) {
         const auto& texName = mModel->textures[i];
@@ -178,9 +177,9 @@ void ModelRenderer::loadTextures(const std::filesystem::path& textureDir,
             stbi_image_free(data);
             auto u8name = texPath.filename().u8string();
             std::string name(u8name.begin(), u8name.end());
-            std::cout << "  [" << i << "] OK: " << name << std::endl;
+            MMD_INFO("RENDER", "  [%zu] OK: %s", i, name.c_str());
         } else {
-            std::cout << "  [" << i << "] Not found: " << texName << std::endl;
+            MMD_WARN("RENDER", "  [%zu] Not found: %s", i, texName.c_str());
             mTextures.push_back(nullptr);
         }
     }
@@ -391,9 +390,20 @@ glCullFace(GL_FRONT);
 
         const auto& edge = mMaterialEdge[batch.materialIndex];
         const auto& mat = mModel->materials[batch.materialIndex];
-        shader.setVec4("outline_color", edge.color.x, edge.color.y, edge.color.z, edge.color.w);
-        shader.setFloat("outline_thickness", edge.size * 0.001f);
-        auto* ov = getMaterialOverride(batch.materialIndex); float alpha = ov ? ov->alpha : mat.alpha; shader.setFloat("alpha", alpha);
+        auto* ov = getMaterialOverride(batch.materialIndex);
+        if (ov) {
+            shader.setVec4("outline_color",
+                edge.color.x + ov->edgeColor.x,
+                edge.color.y + ov->edgeColor.y,
+                edge.color.z + ov->edgeColor.z,
+                edge.color.w + ov->edgeColor.w);
+            shader.setFloat("outline_thickness", (edge.size + ov->edgeSize) * 0.001f);
+            shader.setFloat("alpha", ov->alpha);
+        } else {
+            shader.setVec4("outline_color", edge.color.x, edge.color.y, edge.color.z, edge.color.w);
+            shader.setFloat("outline_thickness", edge.size * 0.001f);
+            shader.setFloat("alpha", mat.alpha);
+        }
 
         mOutlineVao.bind();
         glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
@@ -415,11 +425,11 @@ void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::
         for (const auto& bone : model.bones) {
             if (vpdPoses.count(bone.name)) ++matched;
         }
-        std::cout << "VPD loaded: " << vpdPoses.size() << " poses, "
-                  << matched << "/" << model.boneCount() << " bones matched" << std::endl;
+        MMD_INFO("RENDER", "VPD loaded: %zu poses, %d/%d bones matched",
+                 vpdPoses.size(), matched, model.boneCount());
         if (matched == 0 && !vpdPoses.empty()) {
-            std::cout << "  VPD sample: " << vpdPoses.begin()->first << std::endl;
-            std::cout << "  PMX bone[0]: " << model.bones[0].name << std::endl;
+            MMD_WARN("RENDER", "  VPD sample: %s", vpdPoses.begin()->first.c_str());
+            MMD_WARN("RENDER", "  PMX bone[0]: %s", model.bones[0].name.c_str());
         }
         skinMatrices = BoneSkinning::computeSkinningMatrices(model, vpdPoses);
     } else {
@@ -429,8 +439,8 @@ void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::
     mBoneTexture = createBoneTexture(boneData);
     mBoneTextureWidth = boneData.width;
 
-    std::cout << "Bone texture: " << boneData.width << "x" << boneData.height
-              << " (" << model.boneCount() << " bones)" << std::endl;
+    MMD_INFO("RENDER", "Bone texture: %dx%d (%d bones)",
+             boneData.width, boneData.height, model.boneCount());
 
     // Extract skinning vertex data (PMX raw coordinates — modelMat handles display transform on GPU)
     auto skinData = BoneSkinning::extractSkinningData(model);
@@ -749,9 +759,20 @@ glCullFace(GL_FRONT);
 
         const auto& edge = mMaterialEdge[batch.materialIndex];
         const auto& mat = mModel->materials[batch.materialIndex];
-        shader.setVec4("outline_color", edge.color.x, edge.color.y, edge.color.z, edge.color.w);
-        shader.setFloat("outline_thickness", edge.size * 0.001f);
-        auto* ov = getMaterialOverride(batch.materialIndex); float alpha = ov ? ov->alpha : mat.alpha; shader.setFloat("alpha", alpha);
+        auto* ov = getMaterialOverride(batch.materialIndex);
+        if (ov) {
+            shader.setVec4("outline_color",
+                edge.color.x + ov->edgeColor.x,
+                edge.color.y + ov->edgeColor.y,
+                edge.color.z + ov->edgeColor.z,
+                edge.color.w + ov->edgeColor.w);
+            shader.setFloat("outline_thickness", (edge.size + ov->edgeSize) * 0.001f);
+            shader.setFloat("alpha", ov->alpha);
+        } else {
+            shader.setVec4("outline_color", edge.color.x, edge.color.y, edge.color.z, edge.color.w);
+            shader.setFloat("outline_thickness", edge.size * 0.001f);
+            shader.setFloat("alpha", mat.alpha);
+        }
 
         mSkinnedOutlineVao.bind();
         glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
@@ -849,9 +870,20 @@ void ModelRenderer::renderMorphOutlinePass(Gpu::ShaderProgram& shader,
         bool hasTex = (batch.textureIndex >= 0 && batch.textureIndex < (int)mTextures.size() && mTextures[batch.textureIndex]);
         if (hasTex) mTextures[batch.textureIndex]->bind(0); else mDummyTexture->bind(0);
         const auto& edge = mMaterialEdge[batch.materialIndex];
-        shader.setVec4("outline_color", edge.color.x, edge.color.y, edge.color.z, edge.color.w);
-        shader.setFloat("outline_thickness", edge.size * 0.001f);
-        auto* ov = getMaterialOverride(batch.materialIndex); float a2 = ov ? ov->alpha : mModel->materials[batch.materialIndex].alpha; shader.setFloat("alpha", a2);
+        auto* ov = getMaterialOverride(batch.materialIndex);
+        if (ov) {
+            shader.setVec4("outline_color",
+                edge.color.x + ov->edgeColor.x,
+                edge.color.y + ov->edgeColor.y,
+                edge.color.z + ov->edgeColor.z,
+                edge.color.w + ov->edgeColor.w);
+            shader.setFloat("outline_thickness", (edge.size + ov->edgeSize) * 0.001f);
+            shader.setFloat("alpha", ov->alpha);
+        } else {
+            shader.setVec4("outline_color", edge.color.x, edge.color.y, edge.color.z, edge.color.w);
+            shader.setFloat("outline_thickness", edge.size * 0.001f);
+            shader.setFloat("alpha", mModel->materials[batch.materialIndex].alpha);
+        }
         mMorphOutlineVao.bind();
         glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT, (void*)(intptr_t)(batch.first * sizeof(int32_t)));
     }

@@ -5,14 +5,14 @@
 
 class Camera {
 public:
-    Camera() = default;
+    static Camera& instance() { static Camera cam; return cam; }
 
     void reset();
 
     // Move camera based on key states (caller extracts keys from window system)
     void update(float deltaTime, bool w, bool a, bool s, bool d, bool e, bool q);
 
-    void onMouseButton(int button, int action);
+    void onMouseButton(bool pressed);
     void onCursorPos(double xpos, double ypos);
     void onScroll(double yoffset);
 
@@ -29,6 +29,7 @@ public:
     float mouseSensitivity = 0.1f;
 
 private:
+    Camera() = default;
     bool mPanning = false;
     double mLastMouseX = 0, mLastMouseY = 0;
 };

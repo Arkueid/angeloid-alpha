@@ -1,4 +1,5 @@
 #include "render/opengl/gpu/Shader.h"
+#include "util/Log.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -35,7 +36,7 @@ static GLuint compileShader(GLenum type, const std::string& src)
         char infoLog[1024];
         glGetShaderInfoLog(shader, sizeof(infoLog), nullptr, infoLog);
         std::string typeName = (type == GL_VERTEX_SHADER) ? "vertex" : "fragment";
-        fprintf(stderr, "Shader compile error (%s):\n%s\n", typeName.c_str(), infoLog);
+        MMD_ERROR("SHADER", "Shader compile error (%s):\n%s", typeName.c_str(), infoLog);
         glDeleteShader(shader);
         return 0;
     }
@@ -62,7 +63,7 @@ GLuint ShaderProgram::compileProgram(const std::string& vertexSrc, const std::st
     if (!success) {
         char infoLog[1024];
         glGetProgramInfoLog(program, sizeof(infoLog), nullptr, infoLog);
-        fprintf(stderr, "Shader link error:\n%s\n", infoLog);
+        MMD_ERROR("SHADER", "Shader link error:\n%s", infoLog);
         glDeleteProgram(program);
         program = 0;
     }

@@ -1,24 +1,26 @@
 #include "Model.h"
 #include "pmx/PmxReader.h"
-#include "render/opengl/ShaderManager.h"
 #include "render/opengl/gpu/Shader.h"
-#include "render/opengl/debug/RigidBodyRenderer.h"
+
+#include "util/Log.h"
 
 #include <GL/glew.h>
 #include <cmath>
-#include <iostream>
+#include <set>
 
 namespace mmd {
 
 void Model::load(const std::filesystem::path& pmxPath,
                  const std::filesystem::path& texDir,
-                 const std::filesystem::path& toonDir)
+                 const std::filesystem::path& toonDir,
+                 const std::filesystem::path& shaderDir)
 {
     mData = PmxReader::load(pmxPath);
-    std::cout << "Model: " << mData.name << " (" << mData.english_name << ")\n"
-              << "Vertices: " << mData.vertexCount() << ", Faces: " << mData.faceCount()
-              << ", Bones: " << mData.boneCount() << std::endl;
+    MMD_INFO("MODEL", "%s (%s)", mData.name.c_str(), mData.english_name.c_str());
+    MMD_INFO("MODEL", "Vertices: %d, Faces: %d, Bones: %d",
+             mData.vertexCount(), mData.faceCount(), mData.boneCount());
 
+    mShaders = std::make_unique<ShaderManager>(shaderDir);
     mRenderer.loadModel(mData, texDir, toonDir);
     mPhysics.build(mData, mRenderer.modelScale());
 
@@ -39,7 +41,7 @@ void Model::loadVpd(const std::filesystem::path& vpdPath)
     if (!vpdPath.empty() && std::filesystem::exists(vpdPath)) {
         mVpdPoses = VpdLoader::load(vpdPath);
         mVpdApplied = true;
-        std::cout << "VPD: " << mVpdPoses.size() << " poses" << std::endl;
+        MMD_INFO("MODEL", "VPD: %zu poses", mVpdPoses.size());
         mRenderer.setupSkinning(mData, vpdPath);
     } else {
         mRenderer.setupSkinning(mData);
@@ -65,7 +67,6 @@ void Model::update(float dt)
             else
                 mPoseWorld = BoneSkinning::computePoseWorldMatrices(mData, {}, vmdT);
         }
-        // Apply VMD morph weights
         std::unordered_map<std::string, float> vmdMorphs;
         for (const auto& m : mData.morphs) {
             float w = mVmdMixer->getMorphWeight(m.name);
@@ -88,10 +89,12 @@ void Model::update(float dt)
     syncBoneTexture();
 }
 
-void Model::draw(ShaderManager& shaders,
-                 const std::array<float, 16>& proj, const std::array<float, 16>& view,
-                 const float* cameraPos)
+void Model::draw(int screenWidth, int screenHeight)
 {
+    auto proj = Camera::projectionMatrix(screenWidth, screenHeight);
+    auto view = Camera::instance().viewMatrix();
+    float camPos[3] = {Camera::instance().x, Camera::instance().y, Camera::instance().z};
+
     // Morph offset sync
     syncMorphOffsets();
     mRenderer.clearMaterialOverrides();
@@ -102,77 +105,118 @@ void Model::draw(ShaderManager& shaders,
 
     if (mRenderer.useSkinning) {
         bool useMorph = mMorphCtl.hasActiveMorphs();
-        // Outline first (front-face cull + extrusion, must draw before main to not be depth-tested away)
         const char* ol = useMorph ? "morph_outline" : "outline_skinned";
-        if (auto* s = shaders.get(ol))
+        if (auto* s = mShaders->get(ol))
             useMorph ? mRenderer.renderMorphOutlinePass(*s, proj, view)
                      : mRenderer.renderSkinnedOutlinePass(*s, proj, view);
-        // Main model
         const char* sn = useMorph ? (mRenderer.showToon ? "morph" : "morph_notoon")
                                   : (mRenderer.showToon ? "skinned" : "skinned_notoon");
-        if (auto* s = shaders.get(sn)) {
-            if (mRenderer.showToon && cameraPos) {
+        if (auto* s = mShaders->get(sn)) {
+            if (mRenderer.showToon) {
                 s->use();
-                s->setVec3("camera_pos", cameraPos[0], cameraPos[1], cameraPos[2]);
+                s->setVec3("camera_pos", camPos[0], camPos[1], camPos[2]);
                 s->setFloat("shadow_thresh", 0.0f);
                 s->setFloat("rim_power", 4.0f);
                 s->setVec3("rim_color", 1.0f, 1.0f, 1.0f);
                 s->setInt("gradient_map", 2);
                 glActiveTexture(GL_TEXTURE2);
-                glBindTexture(GL_TEXTURE_2D, shaders.gradientTexture()->id);
+                glBindTexture(GL_TEXTURE_2D, mShaders->gradientTexture()->id);
             }
             useMorph ? mRenderer.renderMorphMainPass(*s, proj, view)
                      : mRenderer.renderSkinnedMainPass(*s, proj, view);
         }
     } else {
-        if (auto* s = shaders.get("outline"))
+        if (auto* s = mShaders->get("outline"))
             mRenderer.renderOutlinePass(*s, proj, view);
         auto* sn = mRenderer.showToon ? "toon" : "main";
-        if (auto* s = shaders.get(sn)) {
-            if (mRenderer.showToon && cameraPos) {
+        if (auto* s = mShaders->get(sn)) {
+            if (mRenderer.showToon) {
                 s->use();
-                s->setVec3("camera_pos", cameraPos[0], cameraPos[1], cameraPos[2]);
+                s->setVec3("camera_pos", camPos[0], camPos[1], camPos[2]);
                 s->setFloat("shadow_thresh", 0.0f);
                 s->setFloat("rim_power", 4.0f);
                 s->setVec3("rim_color", 1.0f, 1.0f, 1.0f);
                 s->setInt("gradient_map", 1);
                 glActiveTexture(GL_TEXTURE1);
-                glBindTexture(GL_TEXTURE_2D, shaders.gradientTexture()->id);
+                glBindTexture(GL_TEXTURE_2D, mShaders->gradientTexture()->id);
             }
             mRenderer.renderMainPass(*s, proj, view);
         }
     }
-}
 
-void Model::drawPhysicsDebug(ShaderManager& shaders,
-                             const std::array<float, 16>& proj, const std::array<float, 16>& view)
-{
-    // Lazy init — needs active GL context
-    if (!mShowPhysicsDebug) return;
-    if (!mPhysicsDebug) {
-        mPhysicsDebug = std::make_unique<RigidBodyRenderer>();
-        mPhysicsDebug->build(mData, mRenderer.modelScale());
-        mPhysicsDebug->showRigidBody = true;
-        mPhysicsDebug->showJoint = true;
-        mPhysicsDebug->useBoneMatrices = false;
-    }
-    if (!mPhysicsDebug->showRigidBody) return;
-    if (auto* s = shaders.get("rigidbody")) {
-        mPhysicsDebug->updateFromPhysics(mPhysics);
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LEQUAL);
-        glLineWidth(2.0f);
-        mPhysicsDebug->render(*s, proj, view, mRenderer.modelMatrix());
-        glLineWidth(1.0f);
+    // Rigid body debug overlay
+    if (mShowRigidBodies) {
+        if (!mPhysicsDebug) {
+            mPhysicsDebug = std::make_unique<RigidBodyRenderer>();
+            mPhysicsDebug->build(mData, mRenderer.modelScale());
+            mPhysicsDebug->showRigidBody = true;
+            mPhysicsDebug->showJoint = true;
+            mPhysicsDebug->useBoneMatrices = false;
+        }
+        if (mPhysicsDebug->showRigidBody) {
+            if (auto* s = mShaders->get("rigidbody")) {
+                mPhysicsDebug->updateFromPhysics(mPhysics);
+                glEnable(GL_DEPTH_TEST);
+                glDepthFunc(GL_LEQUAL);
+                glLineWidth(2.0f);
+                mPhysicsDebug->render(*s, proj, view, mRenderer.modelMatrix());
+                glLineWidth(1.0f);
+            }
+        }
     }
 }
 
 void Model::enablePhysics(bool on) { mPhysics.enabled = on; }
 
-void Model::setVmd(std::unique_ptr<VmdMixer> mixer)
+// --- VMD ---
+
+void Model::loadVmd(const std::filesystem::path& path)
 {
-    mVmdMixer = std::move(mixer);
-    if (mVmdMixer) mVmdMixer->play();
+    if (!std::filesystem::exists(path)) return;
+    auto anim = VmdAnimation::load(path);
+    MMD_INFO("MODEL", "VMD: %s (max frame: %d)", anim.modelName.c_str(), anim.maxFrame);
+    if (!mVmdMixer) {
+        mVmdMixer = std::make_unique<VmdMixer>();
+        mVmdMixer->play();
+    }
+    mVmdMixer->addVmd(std::move(anim));
+}
+
+bool Model::hasVmd() const { return mVmdMixer != nullptr; }
+void Model::vmdPlay() { if (mVmdMixer) mVmdMixer->play(); }
+void Model::vmdPause() { if (mVmdMixer) mVmdMixer->pause(); }
+bool Model::vmdPlaying() const { return mVmdMixer && mVmdMixer->playing(); }
+bool Model::vmdLoop() const { return mVmdMixer && mVmdMixer->loop(); }
+void Model::setVmdLoop(bool loop) { if (mVmdMixer) mVmdMixer->setLoop(loop); }
+float Model::vmdCurrentFrame() const { return mVmdMixer ? mVmdMixer->currentFrame() : 0; }
+float Model::vmdMaxFrame() const { return mVmdMixer ? mVmdMixer->maxFrame() : 0; }
+
+void Model::setVmdFrame(float frame)
+{
+    if (mVmdMixer) mVmdMixer->setFrame(frame);
+}
+
+// --- Morph iteration ---
+
+int Model::morphCount() const { return mData.morphCount(); }
+
+std::string Model::morphName(int index) const
+{
+    if (index < 0 || index >= mData.morphCount()) return {};
+    return mData.morphs[index].name;
+}
+
+std::vector<int> Model::interactableMorphs() const
+{
+    std::vector<int> result;
+    for (int i = 0; i < mData.morphCount(); ++i) {
+        int t = mData.morphs[i].morph_type;
+        if (t == MORPH_TYPE_VERTEX || t == MORPH_TYPE_GROUP ||
+            t == MORPH_TYPE_MATERIAL || t == MORPH_TYPE_UV ||
+            t == MORPH_TYPE_BONE)
+            result.push_back(i);
+    }
+    return result;
 }
 
 void Model::applyVpd(bool on)
@@ -186,7 +230,7 @@ void Model::applyVpd(bool on)
 
 void Model::setMorphWeight(const std::string& name, float weight)
 {
-    std::cout << "Morph: " << name << " weight=" << weight << std::endl;
+    MMD_INFO("MORPH", "%s = %.2f", name.c_str(), weight);
     mMorphCtl.setMorphWeight(name, weight);
 }
 
@@ -220,13 +264,10 @@ void Model::syncMorphOffsets()
             mMorphCtl.morphWeights()[nm] = w;
         mMorphCtl.updateMorphOffsets();
     }
-    if (mMorphCtl.offsetsChanged()) {
-        mRenderer.morphVbo()->write(mMorphCtl.positionOffsets().data(),
-            mMorphCtl.positionOffsets().size() * sizeof(float));
-        if (auto* uv = mRenderer.uvMorphVbo())
-            uv->write(mMorphCtl.uvOffsets().data(), mMorphCtl.uvOffsets().size() * sizeof(float));
-        mMorphCtl.clearOffsetsChanged();
-    }
+    mRenderer.morphVbo()->write(mMorphCtl.positionOffsets().data(),
+        mMorphCtl.positionOffsets().size() * sizeof(float));
+    if (auto* uv = mRenderer.uvMorphVbo())
+        uv->write(mMorphCtl.uvOffsets().data(), mMorphCtl.uvOffsets().size() * sizeof(float));
 }
 
 } // namespace mmd

@@ -25,13 +25,12 @@ set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_CPU_DEMOS OFF CACHE BOOL "" FORCE)
 set(BUILD_OPENGL3_DEMOS OFF CACHE BOOL "" FORCE)
 set(BUILD_BULLET2_DEMOS OFF CACHE BOOL "" FORCE)
-set(USE_MSVC_RUNTIME_LIBRARY_DLL OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/bullet bullet)
 
 add_executable(viewer
     main.cpp
     window/GlfwWindow.cpp
-    window/Camera.cpp
+    debug/WorldAxis.cpp
 )
 
 target_include_directories(viewer PRIVATE

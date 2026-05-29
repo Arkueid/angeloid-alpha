@@ -1,4 +1,4 @@
-#include "render/opengl/debug/WorldAxis.h"
+#include "debug/WorldAxis.h"
 
 #include <GL/glew.h>
 #include <vector>
