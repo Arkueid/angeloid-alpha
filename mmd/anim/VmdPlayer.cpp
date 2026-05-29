@@ -1,4 +1,5 @@
 #include "anim/VmdPlayer.h"
+#include "math/VecMath.h"
 #include "encoding/Encoding.h"
 
 #include <algorithm>
@@ -139,32 +140,6 @@ std::array<float, 3> VmdInterp::lerpVec3(const std::array<float, 3>& a,
     return {a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t};
 }
 
-std::array<float, 4> VmdInterp::slerpQuat(const std::array<float, 4>& qa,
-                                           const std::array<float, 4>& qb, float t)
-{
-    std::array<float, 4> a = qa, b = qb;
-    float dot = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
-    if (dot < 0) { b[0] = -b[0]; b[1] = -b[1]; b[2] = -b[2]; b[3] = -b[3]; dot = -dot; }
-
-    if (dot > 0.9995f) {
-        std::array<float, 4> r = {a[0] + t*(b[0] - a[0]), a[1] + t*(b[1] - a[1]),
-                                   a[2] + t*(b[2] - a[2]), a[3] + t*(b[3] - a[3])};
-        float len = std::sqrt(r[0]*r[0] + r[1]*r[1] + r[2]*r[2] + r[3]*r[3]);
-        if (len > 0) { r[0]/=len; r[1]/=len; r[2]/=len; r[3]/=len; }
-        return r;
-    }
-
-    float theta0 = std::acos(std::max(-1.0f, std::min(1.0f, dot)));
-    float theta = theta0 * t;
-    float sinTheta = std::sin(theta);
-    float sinTheta0 = std::sin(theta0);
-
-    float s1 = std::cos(theta) - dot * sinTheta / sinTheta0;
-    float s2 = sinTheta / sinTheta0;
-
-    return {s1*a[0] + s2*b[0], s1*a[1] + s2*b[1], s1*a[2] + s2*b[2], s1*a[3] + s2*b[3]};
-}
-
 // --- VmdPlayer ---
 
 VmdPlayer::VmdPlayer(VmdAnimation anim, float fps)
@@ -249,7 +224,7 @@ bool VmdPlayer::getBoneTransform(const std::string& boneName,
 
     std::array<float, 4> ql = {kl.qx, kl.qy, kl.qz, kl.qw};
     std::array<float, 4> qr = {kr.qx, kr.qy, kr.qz, kr.qw};
-    rotOut = VmdInterp::slerpQuat(ql, qr, tr);
+    rotOut = quatSlerp(ql, qr, tr);
     return true;
 }
 
@@ -337,7 +312,7 @@ bool VmdMixer::getBoneTransform(const std::string& boneName,
         if (p.getBoneTransform(boneName, pp, pr)) {
             pos[0] += pp[0]; pos[1] += pp[1]; pos[2] += pp[2];
             if (!has) rot = pr;
-            else rot = VmdInterp::slerpQuat(rot, pr, 0.5f);
+            else rot = quatSlerp(rot, pr, 0.5f);
             has = true;
         }
     }

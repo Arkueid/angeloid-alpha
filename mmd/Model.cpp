@@ -220,10 +220,13 @@ void Model::syncMorphOffsets()
             mMorphCtl.morphWeights()[nm] = w;
         mMorphCtl.updateMorphOffsets();
     }
-    mRenderer.morphVbo()->write(mMorphCtl.positionOffsets().data(),
-        mMorphCtl.positionOffsets().size() * sizeof(float));
-    if (auto* uv = mRenderer.uvMorphVbo())
-        uv->write(mMorphCtl.uvOffsets().data(), mMorphCtl.uvOffsets().size() * sizeof(float));
+    if (mMorphCtl.offsetsChanged()) {
+        mRenderer.morphVbo()->write(mMorphCtl.positionOffsets().data(),
+            mMorphCtl.positionOffsets().size() * sizeof(float));
+        if (auto* uv = mRenderer.uvMorphVbo())
+            uv->write(mMorphCtl.uvOffsets().data(), mMorphCtl.uvOffsets().size() * sizeof(float));
+        mMorphCtl.clearOffsetsChanged();
+    }
 }
 
 } // namespace mmd

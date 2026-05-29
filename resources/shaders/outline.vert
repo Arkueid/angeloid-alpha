@@ -13,7 +13,7 @@ uniform mat4 projection;
 uniform float outline_thickness;
 
 void main() {
-    mat3 normalMatrix = transpose(inverse(mat3(model)));
+    mat3 normalMatrix = mat3(model);
     vec3 worldNormal = normalize(normalMatrix * in_normal);
     vec3 worldPos = (model * vec4(in_position, 1.0)).xyz;
 

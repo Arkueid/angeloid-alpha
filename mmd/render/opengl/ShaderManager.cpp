@@ -179,5 +179,5 @@ void ShaderManager::setOutlineThickness(float thickness)
     auto* outlineSk = get("outline_skinned");
     if (outlineSk) { outlineSk->use(); outlineSk->setFloat("outline_thickness", thickness); }
     auto* morphOl = get("morph_outline");
-    if (morphOl) { morphOl->use(); morphOl->setFloat("morph_outline", thickness); }
+    if (morphOl) { morphOl->use(); morphOl->setFloat("outline_thickness", thickness); }
 }

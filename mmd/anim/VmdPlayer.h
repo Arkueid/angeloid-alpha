@@ -29,7 +29,6 @@ namespace VmdInterp {
     float interpBezier(float t, const uint8_t* interp, int axis);
     float lerp(float a, float b, float t);
     std::array<float, 3> lerpVec3(const std::array<float, 3>& a, const std::array<float, 3>& b, float t);
-    std::array<float, 4> slerpQuat(const std::array<float, 4>& a, const std::array<float, 4>& b, float t);
 }
 
 // --- Single VMD animation ---

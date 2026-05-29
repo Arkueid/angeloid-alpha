@@ -11,6 +11,12 @@ void MorphController::setModel(const PmxModel& model)
     mModel = &model;
     mPosOffsets.assign(model.vertexCount() * 3, 0);
     mUvOffsets.assign(model.vertexCount() * 2, 0);
+    mMorphNameIndex.clear();
+    for (int i = 0; i < model.morphCount(); ++i) {
+        const auto& m = model.morphs[i];
+        mMorphNameIndex[m.name] = i;
+        if (!m.english_name.empty()) mMorphNameIndex[m.english_name] = i;
+    }
 }
 
 void MorphController::setMorphWeight(const std::string& name, float weight)
@@ -29,29 +35,6 @@ void MorphController::clearMorphs()
 {
     mMorphWeights.clear();
     updateMorphOffsets();
-}
-
-std::array<float, 4> MorphController::slerpQuat(const std::array<float, 4>& qa,
-                                                  const std::array<float, 4>& qb, float t)
-{
-    if (t <= 0) return qa;
-    if (t >= 1) return qb;
-    std::array<float, 4> a = qa, b = qb;
-    float dot = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
-    if (dot < 0) { b[0] = -b[0]; b[1] = -b[1]; b[2] = -b[2]; b[3] = -b[3]; dot = -dot; }
-    if (dot > 0.9995f) {
-        std::array<float, 4> r = {a[0] + t*(b[0]-a[0]), a[1] + t*(b[1]-a[1]),
-                                   a[2] + t*(b[2]-a[2]), a[3] + t*(b[3]-a[3])};
-        float len = std::sqrt(r[0]*r[0] + r[1]*r[1] + r[2]*r[2] + r[3]*r[3]);
-        if (len > 0) { r[0]/=len; r[1]/=len; r[2]/=len; r[3]/=len; }
-        return r;
-    }
-    float theta0 = std::acos(std::max(-1.0f, std::min(1.0f, dot)));
-    float theta = theta0 * t;
-    float st = std::sin(theta), st0 = std::sin(theta0);
-    float s1 = std::cos(theta) - dot * st / st0;
-    float s2 = st / st0;
-    return {s1*a[0] + s2*b[0], s1*a[1] + s2*b[1], s1*a[2] + s2*b[2], s1*a[3] + s2*b[3]};
 }
 
 static void applyMorphRecursive(const PmxModel& model, int morphIndex,
@@ -141,7 +124,7 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex,
                 bm.translation[1] += b->position.y * weight;
                 bm.translation[2] += b->position.z * weight;
                 std::array<float, 4> mr = {b->rotation.x, b->rotation.y, b->rotation.z, b->rotation.w};
-                bm.rotation = MorphController::slerpQuat(bm.rotation, mr, weight);
+                bm.rotation = quatSlerp(bm.rotation, mr, weight);
             }
         }
     }
@@ -157,16 +140,18 @@ void MorphController::updateMorphOffsets()
     mMaterialOverrides.clear();
     mBoneMorphs.clear();
 
+    bool anyActive = false;
     for (const auto& [name, weight] : mMorphWeights) {
         if (weight == 0.0f) continue;
-        int morphIdx = -1;
-        for (const auto& m : mModel->morphs) {
-            if (m.name == name || m.english_name == name) { morphIdx = m.index; break; }
-        }
+        auto it = mMorphNameIndex.find(name);
+        int morphIdx = it != mMorphNameIndex.end() ? it->second : -1;
         if (morphIdx < 0) continue;
         applyMorphRecursive(*mModel, morphIdx, weight,
                            mPosOffsets, mUvOffsets, vc, mMaterialOverrides, mBoneMorphs);
+        anyActive = true;
     }
+    if (anyActive || mLastHadActive) mOffsetsDirty = true;
+    mLastHadActive = anyActive;
 }
 
 float MorphController::getMaterialAlpha(int materialIndex, float originalAlpha) const

@@ -37,14 +37,12 @@ public:
 
     std::unordered_map<std::string, float>& morphWeights() { return mMorphWeights; }
     void updateMorphOffsets();
+    bool offsetsChanged() const { return mOffsetsDirty; }
+    void clearOffsetsChanged() { mOffsetsDirty = false; }
 
     const std::unordered_map<int, BoneMorphTransform>& boneMorphs() const { return mBoneMorphs; }
     const std::vector<float>& positionOffsets() const { return mPosOffsets; }
     const std::vector<float>& uvOffsets() const { return mUvOffsets; }
-
-    // Quaternion slerp (used by applyMorphRecursive)
-    static std::array<float, 4> slerpQuat(const std::array<float, 4>& a,
-                                           const std::array<float, 4>& b, float t);
 
 private:
     const PmxModel* mModel = nullptr;
@@ -52,6 +50,10 @@ private:
     std::unordered_map<int, MatMorphOverride> mMaterialOverrides;
     std::unordered_map<int, BoneMorphTransform> mBoneMorphs;
 
+    std::unordered_map<std::string, int> mMorphNameIndex;
+
     std::vector<float> mPosOffsets;
     std::vector<float> mUvOffsets;
+    bool mOffsetsDirty = true;
+    bool mLastHadActive = false;
 };

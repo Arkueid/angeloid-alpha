@@ -45,7 +45,7 @@ struct MaterialSphere {
 class ModelRenderer {
 public:
     ModelRenderer();
-    ~ModelRenderer() = default;
+    ~ModelRenderer();
 
     void loadModel(const PmxModel& model,
                    const std::filesystem::path& textureDir,
@@ -138,6 +138,8 @@ private:
     std::vector<std::unique_ptr<Gpu::Texture>> mTextures;
     std::unique_ptr<Gpu::Texture> mDummyTexture;
     std::vector<std::unique_ptr<Gpu::Texture>> mSharedToons; // toon01-10.bmp
+    GLuint mStaticVbo = 0;
+    GLuint mStaticEbo = 0;
 
     // Material batches
     std::vector<MaterialBatch> mMaterialBatches;

@@ -15,17 +15,12 @@ namespace fs = std::filesystem;
 
 // --- Helpers ---
 
-static void buildInterleavedVao(Gpu::Vao& vao,
-                                 const std::vector<float>& verts,
-                                 const std::vector<int32_t>& indices)
+static void buildInterleavedVao(Gpu::Vao& vao, GLuint sharedVbo, GLuint sharedEbo,
+                                 int vertexCount)
 {
     vao.bind();
 
-    GLuint vbo;
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(float), verts.data(), GL_STATIC_DRAW);
-
+    glBindBuffer(GL_ARRAY_BUFFER, sharedVbo);
     // loc 0: position (3f)
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
@@ -36,8 +31,8 @@ static void buildInterleavedVao(Gpu::Vao& vao,
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
 
-    vao.vbos.push_back(vbo);
-    vao.setEbo(indices.data(), indices.size() * sizeof(int32_t));
+    vao.ebo = sharedEbo;
+    vao.indexCount = vertexCount;
     Gpu::Vao::unbind();
 }
 
@@ -50,6 +45,15 @@ ModelRenderer::ModelRenderer()
     mDummyTexture = std::make_unique<Gpu::Texture>(1, 1, 4, white);
     mDummyTexture->setFilter(GL_NEAREST, GL_NEAREST);
     mDummyTexture->setWrap(false, false);
+}
+
+ModelRenderer::~ModelRenderer()
+{
+    mModelVao.ebo = 0;
+    mToonVao.ebo = 0;
+    mOutlineVao.ebo = 0;
+    if (mStaticVbo) glDeleteBuffers(1, &mStaticVbo);
+    if (mStaticEbo) glDeleteBuffers(1, &mStaticEbo);
 }
 
 void ModelRenderer::loadModel(const PmxModel& model,
@@ -103,10 +107,24 @@ void ModelRenderer::loadModel(const PmxModel& model,
     // Copy indices
     mIndices.assign(model.indices.begin(), model.indices.end());
 
-    // Create VAOs (three identical copies for different shader combos)
-    buildInterleavedVao(mModelVao, mVertices, mIndices);
-    buildInterleavedVao(mToonVao, mVertices, mIndices);
-    buildInterleavedVao(mOutlineVao, mVertices, mIndices);
+    // Create shared VBO/EBO for static VAOs
+    if (mStaticVbo) glDeleteBuffers(1, &mStaticVbo);
+    if (mStaticEbo) glDeleteBuffers(1, &mStaticEbo);
+    glGenBuffers(1, &mStaticVbo);
+    glBindBuffer(GL_ARRAY_BUFFER, mStaticVbo);
+    glBufferData(GL_ARRAY_BUFFER, mVertices.size() * sizeof(float), mVertices.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &mStaticEbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mStaticEbo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mIndices.size() * sizeof(int32_t), mIndices.data(), GL_STATIC_DRAW);
+
+    // Clear ownership from old VAOs before creating new ones
+    mModelVao.vbos.clear(); mModelVao.ebo = 0;
+    mToonVao.vbos.clear(); mToonVao.ebo = 0;
+    mOutlineVao.vbos.clear(); mOutlineVao.ebo = 0;
+
+    buildInterleavedVao(mModelVao, mStaticVbo, mStaticEbo, (int)mIndices.size());
+    buildInterleavedVao(mToonVao, mStaticVbo, mStaticEbo, (int)mIndices.size());
+    buildInterleavedVao(mOutlineVao, mStaticVbo, mStaticEbo, (int)mIndices.size());
 
     // Load textures
     loadTextures(textureDir, toonDir);
@@ -336,7 +354,6 @@ void ModelRenderer::renderMainPass(Gpu::ShaderProgram& shader,
         vao.bind();
         glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
                        (void*)(intptr_t)(batch.first * sizeof(int32_t)));
-        Gpu::Vao::unbind();
     }
 
     glDisable(GL_BLEND);
@@ -381,7 +398,6 @@ glCullFace(GL_FRONT);
         mOutlineVao.bind();
         glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
                        (void*)(intptr_t)(batch.first * sizeof(int32_t)));
-        Gpu::Vao::unbind();
     }
 
     glDisable(GL_CULL_FACE);
@@ -695,7 +711,6 @@ void ModelRenderer::renderSkinnedMainPass(Gpu::ShaderProgram& shader,
         vao.bind();
         glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
                        (void*)(intptr_t)(batch.first * sizeof(int32_t)));
-        Gpu::Vao::unbind();
     }
 }
 
@@ -741,7 +756,6 @@ glCullFace(GL_FRONT);
         mSkinnedOutlineVao.bind();
         glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
                        (void*)(intptr_t)(batch.first * sizeof(int32_t)));
-        Gpu::Vao::unbind();
     }
 
     glDisable(GL_CULL_FACE);
@@ -808,7 +822,6 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
 
         vao.bind();
         glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT, (void*)(intptr_t)(batch.first * sizeof(int32_t)));
-        Gpu::Vao::unbind();
     }
 }
 
@@ -841,7 +854,6 @@ void ModelRenderer::renderMorphOutlinePass(Gpu::ShaderProgram& shader,
         auto* ov = getMaterialOverride(batch.materialIndex); float a2 = ov ? ov->alpha : mModel->materials[batch.materialIndex].alpha; shader.setFloat("alpha", a2);
         mMorphOutlineVao.bind();
         glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT, (void*)(intptr_t)(batch.first * sizeof(int32_t)));
-        Gpu::Vao::unbind();
     }
     glDisable(GL_CULL_FACE);
 }
