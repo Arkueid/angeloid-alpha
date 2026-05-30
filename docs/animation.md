@@ -10,16 +10,16 @@ type: reference
 ```cpp
 auto anim = VmdAnimation::load(path);
 auto mixer = std::make_unique<VmdMixer>();
-mixer->addVmd(std::move(anim));
-mixer->play();
+int trackId = mixer->addVmd(anim.get());
+mixer->play(trackId);
 // Per frame: mixer->update(dt);
 ```
 
-**Critical**: `VmdPlayer` constructor must set `mPlaying = true`. Default was `false` — VMD would never advance.
-
-**Multi-layer**: `VmdMixer` holds multiple `VmdPlayer`. Each frame: all players update, bone transforms from first match returned. Morph weights summed across players (clamped 0-1).
+**Multi-track**: `VmdMixer::addVmd()` returns a track ID. Each track independently controlled via `play(trackId)`, `pause(trackId)`, `stop(trackId)`, `setFrame(trackId, frame)`. Use `playAll()` / `pauseAll()` / `stopAll()` for batch control.
 
 **Interpolation**: Bezier curve interpolation for bone position/rotation. Linear interpolation for morph weights.
+
+**Callbacks**: `play(trackId, onEnd)` accepts `std::function<void(int)>` — invoked when VMD reaches end (non-looping). Default loop is off; re-play via `stopAll()` + `playAll()`.
 
 ## VPD Pose
 *File: `mmd/anim/VpdLoader.h/.cpp`*

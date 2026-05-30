@@ -21,6 +21,8 @@ void Model::load(const std::filesystem::path& pmxPath) {
     mRenderer.loadModel(mPmx, pmxPath.parent_path());
     mPhysics.build(mPmx, mRenderer.modelScale());
 
+    mVmdMixer = std::make_unique<VmdMixer>();
+
     mRenderer.useSkinning = true;
     mRenderer.setupSkinning(mPmx);
 
@@ -32,21 +34,73 @@ void Model::load(const std::filesystem::path& pmxPath) {
     mMorphCtl.setModel(mPmx);
 }
 
-void Model::loadVpd(const std::filesystem::path& vpdPath) {
-    mVpdPath = vpdPath;
-    if (!vpdPath.empty() && std::filesystem::exists(vpdPath)) {
-        mVpdPoses = VpdLoader::load(vpdPath);
-        mVpdApplied = true;
-        MMD_INFO("MODEL", "VPD: %zu poses", mVpdPoses.size());
-        mRenderer.setupSkinning(mPmx, vpdPath);
+int Model::loadVpd(const std::filesystem::path& vpdPath) {
+    if (!std::filesystem::exists(vpdPath))
+        return -1;
+    auto poses = VpdLoader::load(vpdPath);
+    int id = mVpdNextId++;
+    MMD_INFO("MODEL", "VPD loaded [id=%d]: %zu poses (%s)", id, poses.size(),
+             reinterpret_cast<const char*>(vpdPath.filename().u8string().c_str()));
+    mVpdPoses.push_back({id, std::move(poses)});
+    return id;
+}
+
+void Model::applyVpd(int vpdId) {
+    MMD_INFO("MODEL", "VPD apply [id=%d]", vpdId);
+    for (auto& [id, poses] : mVpdPoses) {
+        if (id == vpdId) {
+            mActiveVpdId = vpdId;
+            mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, poses);
+            if (mPhysics.enabled)
+                mPhysics.resetPhysics(mPoseWorld);
+            syncBoneTexture();
+            return;
+        }
     }
-    else {
-        mVpdPoses.clear();
-        mRenderer.setupSkinning(mPmx);
+}
+
+void Model::resetPose() {
+    if (mVmdMixer->playing()) {
+        MMD_INFO("MODEL", "Cannot reset pose while VMD is playing");
+        return;
     }
-    mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, mVpdPoses);
-    mPhysics.resetPhysics(mPoseWorld);
-    mPhysics.getBoneTransforms(mPoseWorld);
+    mClearVmd = true;
+    MMD_INFO("MODEL", "Pose reset to bind pose");
+    mActiveVpdId = -1;
+    mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx);
+    if (mPhysics.enabled)
+        mPhysics.resetPhysics(mPoseWorld);
+    syncBoneTexture();
+}
+
+void Model::syncVpdPose() {
+    if (mVmdMixer->playing()) {
+        MMD_INFO("MODEL", "Cannot sync VPD pose while VMD is playing");
+        return;
+    }
+    mClearVmd = true;
+    if (mActiveVpdId >= 0) {
+        for (auto& [id, poses] : mVpdPoses)
+            if (id == mActiveVpdId) {
+                MMD_INFO("MODEL", "VPD pose sync [id=%d]", id);
+                mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, poses);
+                syncBoneTexture();
+                return;
+            }
+    }
+    MMD_INFO("MODEL", "VPD pose sync: no active VPD, using bind pose");
+    mPoseWorld = mBindPoseWorld;
+    syncBoneTexture();
+}
+
+void Model::removeVpd(int vpdId) {
+    mVpdPoses.erase(std::remove_if(mVpdPoses.begin(), mVpdPoses.end(),
+                                   [vpdId](auto& p) {
+                                       return p.first == vpdId;
+                                   }),
+                    mVpdPoses.end());
+    if (mActiveVpdId == vpdId)
+        resetPose();
 }
 
 // Per-frame update pipeline:
@@ -56,8 +110,7 @@ void Model::loadVpd(const std::filesystem::path& vpdPath) {
 //   4. GPU sync:  pack pose world matrices into bone texture for vertex shader skinning
 void Model::update(float dt) {
     // --- VMD animation ---
-    if (mVmdMixer) {
-        mVmdMixer->update(dt);
+    if (mVmdMixer->update(dt) || !mClearVmd) {
         // Collect per-bone transforms from all VMD layers
         std::unordered_map<std::string, std::pair<std::array<float, 3>, std::array<float, 4>>> vmdT;
         for (const auto& bone : mPmx.bones) {
@@ -67,10 +120,17 @@ void Model::update(float dt) {
                 vmdT[bone.name] = {pos, rot};
         }
         if (!vmdT.empty()) {
-            if (mVpdApplied && !mVpdPoses.empty())
-                mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, mVpdPoses, vmdT);
-            else
+            if (mActiveVpdId >= 0) {
+                for (auto& [id, poses] : mVpdPoses) {
+                    if (id == mActiveVpdId) {
+                        mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, poses, vmdT);
+                        break;
+                    }
+                }
+            }
+            else {
                 mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, {}, vmdT);
+            }
         }
         // Collect morph weights from VMD
         std::unordered_map<std::string, float> vmdMorphs;
@@ -92,8 +152,16 @@ void Model::update(float dt) {
         // Write physics results back into pose world matrices
         mPhysics.getBoneTransforms(mPoseWorld);
         // Recompute child bones that inherit physics-deformed parents
-        BoneSkinning::recomputeAfterPhysicsBones(mPmx, mVpdPoses,
-                                                 mPoseWorld);
+        {
+            VpdPoseMap emptyVpd;
+            VpdPoseMap* activeVpd = &emptyVpd;
+            for (auto& [id, poses] : mVpdPoses)
+                if (id == mActiveVpdId) {
+                    activeVpd = &poses;
+                    break;
+                }
+            BoneSkinning::recomputeAfterPhysicsBones(mPmx, *activeVpd, mPoseWorld);
+        }
     }
 
     // --- Idle animation ---
@@ -188,50 +256,69 @@ void Model::enablePhysics(bool on) {
 
 // --- VMD ---
 
-void Model::loadVmd(const std::filesystem::path& path) {
+int Model::loadVmd(const std::filesystem::path& path) {
     if (!std::filesystem::exists(path))
-        return;
+        return -1;
     auto anim = VmdAnimation::load(path);
-    MMD_INFO("MODEL", "VMD: %s (max frame: %d)", anim.modelName.c_str(), anim.maxFrame);
-    mOwnedAnimations.push_back(std::move(anim));
-    if (!mVmdMixer) {
-        mVmdMixer = std::make_unique<VmdMixer>();
-        mVmdMixer->play();
-    }
-    mVmdMixer->addVmd(&mOwnedAnimations.back());
+    std::string name = anim.modelName;
+    int maxF = anim.maxFrame;
+    mVmdAnimations.push_back(std::move(anim));
+    int id = mVmdMixer->addVmd(&mVmdAnimations.back());
+    MMD_INFO("MODEL", "VMD loaded [id=%d]: %s (maxFrame=%d) from %s", id, name.c_str(), maxF,
+             reinterpret_cast<const char*>(path.filename().u8string().c_str()));
+    return id;
 }
 
-bool Model::hasVmd() const {
-    return mVmdMixer != nullptr;
+void Model::playVmd(int trackId, std::function<void(int)> onEnd) {
+    MMD_INFO("MODEL", "VMD play [id=%d]%s", trackId, onEnd ? " with callback" : "");
+    mClearVmd = false;
+    mVmdMixer->play(trackId, std::move(onEnd));
 }
-void Model::vmdPlay() {
-    if (mVmdMixer)
-        mVmdMixer->play();
+void Model::pauseVmd(int trackId) {
+    MMD_INFO("MODEL", "VMD pause [id=%d]", trackId);
+    mVmdMixer->pause(trackId);
 }
-void Model::vmdPause() {
-    if (mVmdMixer)
-        mVmdMixer->pause();
+void Model::stopVmd(int trackId) {
+    MMD_INFO("MODEL", "VMD stop [id=%d]", trackId);
+    mVmdMixer->stop(trackId);
 }
-bool Model::vmdPlaying() const {
-    return mVmdMixer && mVmdMixer->playing();
-}
-bool Model::vmdLoop() const {
-    return mVmdMixer && mVmdMixer->loop();
-}
-void Model::setVmdLoop(bool loop) {
-    if (mVmdMixer)
-        mVmdMixer->setLoop(loop);
-}
-float Model::vmdCurrentFrame() const {
-    return mVmdMixer ? mVmdMixer->currentFrame() : 0;
-}
-float Model::vmdMaxFrame() const {
-    return mVmdMixer ? mVmdMixer->maxFrame() : 0;
+void Model::removeVmd(int trackId) {
+    MMD_INFO("MODEL", "VMD remove [id=%d]", trackId);
+    mVmdMixer->removeVmd(trackId);
 }
 
-void Model::setVmdFrame(float frame) {
-    if (mVmdMixer)
-        mVmdMixer->setFrame(frame);
+void Model::playAllVmd() {
+    MMD_INFO("MODEL", "VMD play all");
+    mClearVmd = false;
+    mVmdMixer->playAll();
+}
+void Model::pauseAllVmd() {
+    MMD_INFO("MODEL", "VMD pause all");
+    mVmdMixer->pauseAll();
+}
+void Model::stopAllVmd() {
+    MMD_INFO("MODEL", "VMD stop all");
+    mVmdMixer->stopAll();
+}
+bool Model::isVmdPlaying() const {
+    return mVmdMixer->playing();
+}
+
+int Model::vmdTrackCount() const {
+    return mVmdMixer ? mVmdMixer->trackCount() : 0;
+}
+bool Model::isVmdPlaying(int trackId) const {
+    return mVmdMixer && mVmdMixer->playing(trackId);
+}
+float Model::vmdCurrentFrame(int trackId) const {
+    return mVmdMixer ? mVmdMixer->currentFrame(trackId) : 0;
+}
+float Model::vmdMaxFrame(int trackId) const {
+    return vmdCurrentFrame(trackId);  // simplfied
+}
+
+void Model::setVmdFrame(int trackId, float frame) {
+    mVmdMixer->setFrame(trackId, frame);
 }
 
 // --- Morph iteration ---
@@ -255,17 +342,6 @@ std::vector<int> Model::interactableMorphs() const {
             result.push_back(i);
     }
     return result;
-}
-
-void Model::applyVpd(bool on) {
-    if (mVpdPoses.empty())
-        return;
-    mVpdApplied = on;
-    mPoseWorld = BoneSkinning::computePoseWorldMatrices(
-        mPmx, on ? mVpdPoses : VpdPoseMap{});
-    if (mPhysics.enabled)
-        mPhysics.resetPhysics(mPoseWorld);
-    syncBoneTexture();
 }
 
 void Model::setMorphWeight(const std::string& name, float weight) {

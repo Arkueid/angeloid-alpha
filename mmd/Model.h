@@ -26,7 +26,6 @@ public:
 
     // --- Loading ---
     void load(const std::filesystem::path& pmxPath);
-    void loadVpd(const std::filesystem::path& vpdPath);
 
     // --- Per-frame ---
     void update(float dt);
@@ -42,22 +41,32 @@ public:
     }
 
     // --- VMD animation ---
-    void loadVmd(const std::filesystem::path& path);
-    bool hasVmd() const;
-    void vmdPlay();
-    void vmdPause();
-    bool vmdPlaying() const;
-    bool vmdLoop() const;
-    void setVmdLoop(bool loop);
-    float vmdCurrentFrame() const;
-    float vmdMaxFrame() const;
-    void setVmdFrame(float frame);
+    int  loadVmd(const std::filesystem::path& path);
+    void playVmd(int trackId, std::function<void(int)> onEnd = nullptr);
+    void pauseVmd(int trackId);
+    void stopVmd(int trackId);
+    void removeVmd(int trackId);
+
+    void playAllVmd();
+    void pauseAllVmd();
+    void stopAllVmd();
+    bool isVmdPlaying() const;
+
+    int   vmdTrackCount() const;
+    bool  isVmdPlaying(int trackId) const;
+    float vmdCurrentFrame(int trackId) const;
+    float vmdMaxFrame(int trackId) const;
+    void  setVmdFrame(int trackId, float frame);
 
     // --- VPD pose ---
-    void applyVpd(bool on);
+    int  loadVpd(const std::filesystem::path& path);
+    void applyVpd(int vpdId);
+    void resetPose();         // clear VPD + VMD, back to bind pose
+    void syncVpdPose();       // recompute pose from active VPD, discarding VMD
     bool vpdApplied() const {
-        return mVpdApplied;
+        return mActiveVpdId >= 0;
     }
+    void removeVpd(int vpdId);
 
     // --- Display toggles ---
     void showModel(bool v) {
@@ -122,18 +131,19 @@ private:
     std::unique_ptr<RigidBodyRenderer> mPhysicsDebug;
     std::unique_ptr<VmdMixer> mVmdMixer;
 
-    VpdPoseMap mVpdPoses;
-    bool mVpdApplied = false;
-
-    std::deque<VmdAnimation> mOwnedAnimations;
+    std::deque<VmdAnimation> mVmdAnimations;
+    std::vector<std::pair<int, VpdPoseMap>> mVpdPoses; // (vpdId, poses)
+    int mActiveVpdId = -1;
+    int mVpdNextId = 1;
+    std::filesystem::path mVpdPath;
 
     std::vector<std::array<float, 16>> mPoseWorld;
     std::vector<std::array<float, 16>> mBindPoseWorld;
-    std::filesystem::path mVpdPath;
 
     bool mIdleEnabled = true;
     float mIdleTime = 0;
     bool mShowRigidBodies = false;
+    bool mClearVmd = false; // if true, skip VMD updates
 
     std::unordered_map<std::string, float> mSavedWeights;
 };

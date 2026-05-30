@@ -1,6 +1,7 @@
 #include "anim/VmdPlayer.h"
 
 #include "encoding/Encoding.h"
+#include "util/Log.h"
 #include "math/VecMath.h"
 
 #include <algorithm>
@@ -165,8 +166,9 @@ VmdPlayState::VmdPlayState(const VmdAnimation* anim, float fps)
     : mAnimation(anim), mFps(fps), mPlaying(anim != nullptr) {
 }
 
-void VmdPlayState::play() {
+void VmdPlayState::play(std::function<void(int)> onEnd) {
     mPlaying = true;
+    mOnEnd = std::move(onEnd);
 }
 void VmdPlayState::pause() {
     mPlaying = false;
@@ -180,9 +182,9 @@ void VmdPlayState::setFrame(float f) {
         mCurrentFrame = std::max(0.0f, std::min(f, (float)mAnimation->maxFrame));
 }
 
-void VmdPlayState::update(float deltaTime) {
+bool VmdPlayState::update(float deltaTime) {
     if (!mPlaying || !mAnimation || mAnimation->maxFrame <= 0)
-        return;
+        return false;
     mCurrentFrame += deltaTime * mFps;
 
     if (mCurrentFrame >= (float)mAnimation->maxFrame) {
@@ -192,8 +194,11 @@ void VmdPlayState::update(float deltaTime) {
         else {
             mCurrentFrame = (float)mAnimation->maxFrame;
             mPlaying = false;
+            if (mOnEnd)
+                mOnEnd(mTrackId);
         }
     }
+    return mPlaying;
 }
 
 bool VmdPlayState::getBoneTransform(const std::string& boneName, std::array<float, 3>& posOut,
@@ -299,55 +304,98 @@ float VmdPlayState::getMorphWeight(const std::string& morphName) const {
 VmdMixer::VmdMixer(float fps) : mFps(fps) {
 }
 
-void VmdMixer::addVmd(const VmdAnimation* anim) {
+int VmdMixer::addVmd(const VmdAnimation* anim) {
     if (!anim)
-        return;
-    mMaxFrame = std::max(mMaxFrame, (float)anim->maxFrame);
+        return -1;
+    int id = mNextId++;
     mPlayStates.emplace_back(anim, mFps);
+    mPlayStates.back().mTrackId = id;
+    return id;
+}
+
+void VmdMixer::removeVmd(int trackId) {
+    mPlayStates.erase(
+        std::remove_if(mPlayStates.begin(), mPlayStates.end(),
+                       [trackId](const VmdPlayState& p) { return p.mTrackId == trackId; }),
+        mPlayStates.end());
 }
 
 void VmdMixer::clear() {
     mPlayStates.clear();
-    mMaxFrame = 0;
 }
 
-void VmdMixer::play() {
-    mPlaying = true;
+void VmdMixer::play(int trackId, std::function<void(int)> onEnd) {
+    for (auto& p : mPlayStates)
+        if (p.mTrackId == trackId) {
+            p.play(std::move(onEnd));
+            return;
+        }
+}
+
+void VmdMixer::pause(int trackId) {
+    for (auto& p : mPlayStates)
+        if (p.mTrackId == trackId) {
+            p.pause();
+            return;
+        }
+}
+
+void VmdMixer::stop(int trackId) {
+    for (auto& p : mPlayStates)
+        if (p.mTrackId == trackId) {
+            p.stop();
+            return;
+        }
+}
+
+void VmdMixer::playAll() {
     for (auto& p : mPlayStates)
         p.play();
 }
-
-void VmdMixer::pause() {
-    mPlaying = false;
+void VmdMixer::pauseAll() {
     for (auto& p : mPlayStates)
         p.pause();
 }
-
-void VmdMixer::stop() {
-    mPlaying = false;
+void VmdMixer::stopAll() {
     for (auto& p : mPlayStates)
         p.stop();
 }
 
-void VmdMixer::update(float deltaTime) {
-    if (!mPlaying)
-        return;
+bool VmdMixer::update(float deltaTime) {
+    bool updated = false;
     for (auto& p : mPlayStates) {
-        p.setLoop(mLoop);
-        p.update(deltaTime);
+        updated |= p.update(deltaTime);
     }
-    // When all players finish and looping, reset all
-    if (mLoop) {
-        bool allDone = true;
-        for (auto& p : mPlayStates)
-            if (p.animation() && p.currentFrame() < p.animation()->maxFrame) {
-                allDone = false;
-                break;
-            }
-        if (allDone)
-            for (auto& p : mPlayStates)
-                p.setFrame(0);
-    }
+    return updated;
+}
+
+float VmdMixer::currentFrame(int trackId) const {
+    for (auto& p : mPlayStates)
+        if (p.mTrackId == trackId)
+            return p.currentFrame();
+    return 0;
+}
+
+bool VmdMixer::playing(int trackId) const {
+    for (auto& p : mPlayStates)
+        if (p.mTrackId == trackId)
+            return p.playing();
+    return false;
+}
+
+bool VmdMixer::playing() const {
+    for (const auto& p : mPlayStates)
+        if (p.playing())
+            return true;
+    return false;
+}
+
+void VmdMixer::setFrame(int trackId, float frame) {
+    for (auto& p : mPlayStates)
+        if (p.mTrackId == trackId) {
+            p.setFrame(frame);
+            return;
+        }
 }
 
 // Blend multiple VMD layers: positions are summed (additive layering),
@@ -395,13 +443,3 @@ float VmdMixer::getMorphWeight(const std::string& morphName) const {
     return has ? std::max(0.0f, std::min(1.0f, sum)) : 0;
 }
 
-void VmdMixer::setLoop(bool loop) {
-    mLoop = loop;
-    for (auto& p : mPlayStates)
-        p.setLoop(loop);
-}
-
-void VmdMixer::setFrame(float frame) {
-    for (auto& p : mPlayStates)
-        p.setFrame(frame);
-}

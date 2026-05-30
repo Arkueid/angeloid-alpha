@@ -2,6 +2,7 @@
 
 #include <array>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -51,11 +52,11 @@ class VmdPlayState {
 public:
     explicit VmdPlayState(const VmdAnimation* anim = nullptr, float fps = 30.0f);
 
-    void play();
+    void play(std::function<void(int)> onEnd = nullptr);
     void pause();
     void stop();
 
-    void update(float deltaTime);
+    bool update(float deltaTime);
 
     bool getBoneTransform(const std::string& boneName, std::array<float, 3>& posOut,
                           std::array<float, 4>& rotOut) const;
@@ -72,12 +73,6 @@ public:
         return mPlaying;
     }
 
-    bool loop() const {
-        return mLoop;
-    }
-    void setLoop(bool loop) {
-        mLoop = loop;
-    }
     void setFrame(float frame);
     void setFps(float fps) {
         mFps = fps;
@@ -88,7 +83,10 @@ private:
     float mFps = 30;
     float mCurrentFrame = 0;
     bool mPlaying = false;
-    bool mLoop = true;
+    bool mLoop = false;
+    std::function<void(int)> mOnEnd;
+    int mTrackId = -1;
+    friend class VmdMixer;
 };
 
 // Backward-compatible alias
@@ -100,39 +98,41 @@ class VmdMixer {
 public:
     explicit VmdMixer(float fps = 30.0f);
 
-    void addVmd(const VmdAnimation* anim);
+    int  addVmd(const VmdAnimation* anim);
+    void removeVmd(int trackId);
     void clear();
 
-    void play();
-    void pause();
-    void stop();
+    void play(int trackId, std::function<void(int)> onEnd = nullptr);
+    void pause(int trackId);
+    void stop(int trackId);
 
-    void update(float deltaTime);
+    void playAll();
+    void pauseAll();
+    void stopAll();
+
+    bool update(float deltaTime);
 
     bool getBoneTransform(const std::string& boneName, std::array<float, 3>& posOut,
                           std::array<float, 4>& rotOut) const;
 
     float getMorphWeight(const std::string& morphName) const;
 
+    float currentFrame(int trackId) const;
+    bool  playing(int trackId) const;
+    int   trackCount() const {
+        return (int)mPlayStates.size();
+    }
+
+    // global: first track
     float currentFrame() const {
         return mPlayStates.empty() ? 0 : mPlayStates[0].currentFrame();
     }
-    float maxFrame() const {
-        return mMaxFrame;
-    }
-    bool playing() const {
-        return mPlaying;
-    }
-    bool loop() const {
-        return mLoop;
-    }
-    void setLoop(bool loop);
-    void setFrame(float frame);
+    bool playing() const;
+
+    void setFrame(int trackId, float frame);
 
 private:
     std::vector<VmdPlayState> mPlayStates;
     float mFps = 30;
-    float mMaxFrame = 0;
-    bool mPlaying = false;
-    bool mLoop = true;
+    int mNextId = 1;
 };

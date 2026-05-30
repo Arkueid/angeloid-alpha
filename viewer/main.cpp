@@ -3,6 +3,7 @@
 #include "debug/WorldAxis.h"
 #include "render/opengl/gpu/Shader.h"
 #include "window/GlfwWindow.h"
+#include <vector>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -71,7 +72,7 @@ static const std::unordered_map<std::string, const char*> MODELS = {
 
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
-    std::system("chcp 65001 > nul");
+    SetConsoleOutputCP(CP_UTF8);
     std::vector<std::string> u8args(argc);
     for (int i = 0; i < argc; ++i) {
         int wlen = MultiByteToWideChar(CP_ACP, 0, argv[i], -1, nullptr, 0);
@@ -129,14 +130,26 @@ int main(int argc, char* argv[]) {
     mmd::Model model;
     model.load(pmxPath);
     app.setTitle("MMD PMX Viewer - " + model.modelName());
-    if (!vpdPath.empty())
-        model.loadVpd(vpdPath);
+    int activeVpdId = -1;
+    if (!vpdPath.empty()) {
+        activeVpdId = model.loadVpd(vpdPath);
+        if (activeVpdId >= 0)
+            model.applyVpd(activeVpdId);
+    }
 
     // --- VMD ---
+    std::vector<int> vmdTrackIds;
     for (auto& vp : vmdPaths) {
         if (vp.is_relative())
             vp = projRoot / vp;
-        model.loadVmd(vp);
+        int id = model.loadVmd(vp);
+        vmdTrackIds.push_back(id);
+        if (id >= 0) {
+            model.playVmd(id, [&](int id) {
+                std::cout << "VMD track " << id << " finished playing." << std::endl;
+                model.syncVpdPose();
+            });
+        }
     }
 
     WorldAxis worldAxis;
@@ -182,8 +195,13 @@ int main(int argc, char* argv[]) {
         if (key == GLFW_KEY_T && act == GLFW_PRESS)
             model.showToon(!model.showToon());
         if (key == GLFW_KEY_P && act == GLFW_PRESS) {
-            model.applyVpd(!model.vpdApplied());
-            std::cout << "VPD pose: " << (model.vpdApplied() ? "ON" : "OFF") << std::endl;
+            if (activeVpdId >= 0 && model.vpdApplied()) {
+                model.resetPose();
+                std::cout << "VPD pose: OFF" << std::endl;
+            } else if (activeVpdId >= 0) {
+                model.applyVpd(activeVpdId);
+                std::cout << "VPD pose: ON" << std::endl;
+            }
         }
         if (key == GLFW_KEY_K && act == GLFW_PRESS) {
             model.setSkinning(!model.isSkinned());
@@ -239,20 +257,29 @@ int main(int argc, char* argv[]) {
             }
         }
         if (key == GLFW_KEY_SPACE && act == GLFW_PRESS) {
-            if (model.hasVmd())
-                model.vmdPlaying() ? model.vmdPause() : model.vmdPlay();
+            if (!vmdTrackIds.empty()) {
+                if (model.isVmdPlaying())
+                    model.pauseAllVmd();
+                else
+                    model.playAllVmd();
+            }
         }
         if (key == GLFW_KEY_L && act == GLFW_PRESS) {
-            if (model.hasVmd())
-                model.setVmdLoop(!model.vmdLoop());
+            // Re-play (stop + replay first track)
+            if (!vmdTrackIds.empty()) {
+                model.stopAllVmd();
+                model.playAllVmd();
+            }
         }
         if (key == GLFW_KEY_LEFT_BRACKET && act != GLFW_RELEASE) {
-            if (model.hasVmd())
-                model.setVmdFrame(std::max(0.0f, model.vmdCurrentFrame() - 30));
+            if (!vmdTrackIds.empty())
+                for (int id : vmdTrackIds)
+                    model.setVmdFrame(id, model.vmdCurrentFrame(id) - 30);
         }
         if (key == GLFW_KEY_RIGHT_BRACKET && act != GLFW_RELEASE) {
-            if (model.hasVmd())
-                model.setVmdFrame(std::min(model.vmdMaxFrame(), model.vmdCurrentFrame() + 30));
+            if (!vmdTrackIds.empty())
+                for (int id : vmdTrackIds)
+                    model.setVmdFrame(id, model.vmdCurrentFrame(id) + 30);
         }
     };
 

@@ -69,9 +69,9 @@ cmake --build build --config Release
 | T | Toon 着色 |
 | F | 物理 Debug 信息输出 |
 | **动画控制** | |
-| Space | VMD 播放/暂停 |
-| L | VMD 循环 |
-| [ / ] | 快退/快进 30 帧 |
+| Space | VMD 播放/暂停（所有轨道） |
+| L | VMD 重新播放（停止后重播所有轨道） |
+| [ / ] | 快退/快进 30 帧（所有轨道） |
 | **姿势与表情** | |
 | P | VPD 姿势 |
 | K | GPU 蒙皮 |

@@ -69,9 +69,9 @@ Master, these keys control the program's behavior. I have memorized them.
 | T | Toon shading |
 | F | Physics debug dump |
 | **Animation** | |
-| Space | Play/Pause VMD |
-| L | Toggle VMD loop |
-| [ / ] | Step VMD ±30 frames |
+| Space | Play/Pause VMD (all tracks) |
+| L | Re-play VMD (stop then replay all tracks) |
+| [ / ] | Step VMD ±30 frames (all tracks) |
 | **Pose & Morph** | |
 | P | Toggle VPD pose |
 | K | Toggle GPU skinning |

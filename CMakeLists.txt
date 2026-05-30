@@ -7,6 +7,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Use static CRT to match Bullet's USE_MSVC_RUNTIME_LIBRARY_DLL=OFF
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+if(MSVC)
+    # glew.h redefines APIENTRY (from windows.h); u8string char8_t vs printf %s
+    add_compile_options(/wd4005 /wd4477)
+endif()
+
 option(ENABLE_STACKTRACE "Enable crash stack trace via backward-cpp" ON)
 if(ENABLE_STACKTRACE)
     add_subdirectory(thirdparty/backward-cpp)
