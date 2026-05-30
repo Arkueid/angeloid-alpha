@@ -42,6 +42,7 @@ struct BulletBody {
     // Affects getBoneTransforms(): cloth-like bodies contribute physics rotation
     // but use bone-driven position to avoid cloth snapping.
     bool clothLike = false;
+    bool skipBoneFeedback = false;  // sphere + >=3 joints: star topology noise
     std::string name;
 };
 

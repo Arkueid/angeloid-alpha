@@ -100,6 +100,27 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale) {
     for (const auto& jt : model.joints)
         addJoint(jt);
 
+    // Mark mode-1 SPHERE bodies with >=3 joints as skipBoneFeedback.
+    // These are star-topology constraint systems (chest/buttocks) where body
+    // displacement is a solver compromise, not articulation. Grid cloth panels
+    // (boxes) and chain bodies (<=2 joints) are unaffected.
+    {
+        std::vector<int> jointCount(mBodies.size(), 0);
+        for (const auto& jt : model.joints) {
+            if (jt.rigidbody_index_a >= 0 && jt.rigidbody_index_a < (int)mBodies.size())
+                jointCount[jt.rigidbody_index_a]++;
+            if (jt.rigidbody_index_b >= 0 && jt.rigidbody_index_b < (int)mBodies.size())
+                jointCount[jt.rigidbody_index_b]++;
+        }
+        for (size_t i = 0; i < mBodies.size(); ++i) {
+            if (mBodies[i].mode == 1 &&
+                jointCount[i] >= 3 &&
+                mBodies[i].body->getCollisionShape()->getShapeType() == SPHERE_SHAPE_PROXYTYPE) {
+                mBodies[i].skipBoneFeedback = true;
+            }
+        }
+    }
+
     // Cloth detection heuristic: a body is "cloth-like" if it connects to a joint that
     // (a) has rotation springs (restorative torque) AND (b) has meaningful rotation range.
     // Cloth-like bodies use physics rotation + bone position in getBoneTransforms(),
@@ -302,7 +323,8 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb) {
     mBodies.push_back({body,        rb.bone_index, rb.index,    rb.mode,     initPos.x(),
                        initPos.y(), initPos.z(),   initRot.x(), initRot.y(), initRot.z(),
                        initRot.w(), bpx,           bpy,         bpz,         brx,
-                       bry,         brz,           brw,         false,       rb.name});
+                       bry,         brz,           brw,         false,       false,
+                       rb.name});
 }
 
 void PhysicsWorld::addJoint(const PmxJoint& jt) {
@@ -604,6 +626,12 @@ void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) co
             continue;
         if (!bb.body->isActive())
             continue;
+
+        // Star-topology spheres (chest/buttocks): skip all bone feedback.
+        // Their displacement is a constraint-solver compromise, not articulation.
+        if (bb.skipBoneFeedback)
+            continue;
+
         btTransform t = bb.body->getCenterOfMassTransform();
         btQuaternion bodyRot = t.getRotation();
 
