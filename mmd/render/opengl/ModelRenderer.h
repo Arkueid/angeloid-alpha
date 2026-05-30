@@ -45,7 +45,7 @@ struct MaterialSphere {
 };
 
 class ModelRenderer {
-   public:
+public:
     ModelRenderer();
     ~ModelRenderer();
 
@@ -80,12 +80,10 @@ class ModelRenderer {
             std::string, std::pair<std::array<float, 3>, std::array<float, 4>>>& vmdTransforms,
         const std::unordered_map<int, BoneMorphTransform>* boneMorphs = nullptr);
 
-    const Gpu::Texture* boneTexture() const
-    {
+    const Gpu::Texture* boneTexture() const {
         return mBoneTexture.get();
     }
-    int boneTextureWidth() const
-    {
+    int boneTextureWidth() const {
         return mBoneTextureWidth;
     }
 
@@ -100,46 +98,37 @@ class ModelRenderer {
     void renderMorphOutlinePass(Gpu::ShaderProgram& shader, const std::array<float, 16>& projection,
                                 const std::array<float, 16>& view, const float* modelMat = nullptr);
 
-    Gpu::VboWrapper* morphVbo() const
-    {
+    Gpu::VboWrapper* morphVbo() const {
         return mMorphVboW.get();
     }
-    Gpu::VboWrapper* uvMorphVbo() const
-    {
+    Gpu::VboWrapper* uvMorphVbo() const {
         return mUvMorphVboW.get();
     }
-    float modelScale() const
-    {
+    float modelScale() const {
         return mScale;
     }
-    const float* modelMatrix() const
-    {
+    const float* modelMatrix() const {
         return mModelMat.data();
     }
-    void setMaterialOverride(int idx, const MatMorphOverride& o)
-    {
+    void setMaterialOverride(int idx, const MatMorphOverride& o) {
         mMatOverride[idx] = o;
     }
-    void clearMaterialOverrides()
-    {
+    void clearMaterialOverrides() {
         mMatOverride.clear();
     }
-    const MatMorphOverride* getMaterialOverride(int idx) const
-    {
+    const MatMorphOverride* getMaterialOverride(int idx) const {
         auto it = mMatOverride.find(idx);
         return it != mMatOverride.end() ? &it->second : nullptr;
     }
-    const std::vector<MaterialBatch>& materialBatches() const
-    {
+    const std::vector<MaterialBatch>& materialBatches() const {
         return mMaterialBatches;
     }
 
-    const PmxModel* model() const
-    {
+    const PmxModel* model() const {
         return mModel;
     }
 
-   private:
+private:
     void loadTextures(const std::filesystem::path& textureDir,
                       const std::filesystem::path& toonDir);
     void buildMaterialBatches(const PmxModel& model);

@@ -11,18 +11,22 @@
 #include <iostream>
 #include <stdexcept>
 
-static std::string decodeShiftJisName(const char* raw, int maxLen)
-{
+static std::string decodeShiftJisName(const char* raw, int maxLen) {
     std::string bytes;
     for (int i = 0; i < maxLen && raw[i] != '\0'; ++i)
         bytes += raw[i];
     return Encoding::cp932ToUtf8(bytes);
 }
 
-// --- VMD Loader ---
+// --- VMD Binary Format Loader ---
+//
+// VMD (Vocaloid Motion Data) format:
+//   Header:  30-byte magic ("Vocaloid Motion Data 0002") + 20-byte model name (Shift-JIS)
+//   Bones:   uint32 count, then per-bone: 15-byte name + frame(int32) + pos(vec3) + rot(quat) + 64-byte bezier curves
+//   Morphs:  uint32 count, then per-morph: 15-byte name + frame(int32) + weight(float32)
+// All text is Shift-JIS encoded; bone/morph names are fixed 15-byte fields.
 
-VmdAnimation VmdAnimation::load(const std::filesystem::path& path)
-{
+VmdAnimation VmdAnimation::load(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open VMD: " + path.string());
@@ -100,16 +104,25 @@ VmdAnimation VmdAnimation::load(const std::filesystem::path& path)
     return anim;
 }
 
-// --- Bezier interpolation ---
+// --- Bezier interpolation (VMD curve system) ---
+//
+// VMD stores per-axis interpolation curves as 4 control points (x1,y1,x2,y2,x3,y3,x4,y4)
+// encoded as uint8 values (0-127 → 0.0-1.0). The curve maps input time t to output
+// parameter u: given a linear t between keyframes, compute the Bezier x-coordinate at t,
+// then find the corresponding y which is the warped interpolation parameter.
+//
+// The system: x = bezier(t, 0, ax, bx, 1) — maps t→x
+//             y = bezier(x, 0, ay, by, 1) — maps x→y (the actual warp)
+// Then y is used as the lerp factor for the animated value.
 
-float VmdInterp::bezier(float t, float p0, float p1, float p2, float p3)
-{
+float VmdInterp::bezier(float t, float p0, float p1, float p2, float p3) {
     float u = 1.0f - t;
     return u * u * u * p0 + 3.0f * u * u * t * p1 + 3.0f * u * t * t * p2 + t * t * t * p3;
 }
 
-static float solveBezierX(float targetX, float ax, float bx, int iterations = 16)
-{
+// Given an x-coordinate on a Bezier curve (0,ax,bx,1), binary-search for the t that produces it.
+// This inverts x = bezier(t, 0, ax, bx, 1) → t.
+static float solveBezierX(float targetX, float ax, float bx, int iterations = 16) {
     float lo = 0.0f, hi = 1.0f;
     for (int i = 0; i < iterations; ++i) {
         float mid = (lo + hi) * 0.5f;
@@ -122,8 +135,7 @@ static float solveBezierX(float targetX, float ax, float bx, int iterations = 16
     return (lo + hi) * 0.5f;
 }
 
-float VmdInterp::interpBezier(float t, const uint8_t* interp, int axis)
-{
+float VmdInterp::interpBezier(float t, const uint8_t* interp, int axis) {
     // Each axis has 16 bytes: [x1, y1] x 4 points, stored as uint8 / 127
     int idx = axis * 16;
     float ax = interp[idx + 0] / 127.0f;
@@ -138,44 +150,36 @@ float VmdInterp::interpBezier(float t, const uint8_t* interp, int axis)
     return bezier(x, 0.0f, ay, by, 1.0f);
 }
 
-float VmdInterp::lerp(float a, float b, float t)
-{
+float VmdInterp::lerp(float a, float b, float t) {
     return a + (b - a) * t;
 }
 
 std::array<float, 3> VmdInterp::lerpVec3(const std::array<float, 3>& a,
-                                         const std::array<float, 3>& b, float t)
-{
+                                         const std::array<float, 3>& b, float t) {
     return {a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t};
 }
 
 // --- VmdPlayer ---
 
 VmdPlayer::VmdPlayer(VmdAnimation anim, float fps)
-    : mAnimation(std::move(anim)), mFps(fps), mPlaying(true)
-{
+    : mAnimation(std::move(anim)), mFps(fps), mPlaying(true) {
 }
 
-void VmdPlayer::play()
-{
+void VmdPlayer::play() {
     mPlaying = true;
 }
-void VmdPlayer::pause()
-{
+void VmdPlayer::pause() {
     mPlaying = false;
 }
-void VmdPlayer::stop()
-{
+void VmdPlayer::stop() {
     mPlaying = false;
     mCurrentFrame = 0;
 }
-void VmdPlayer::setFrame(float f)
-{
+void VmdPlayer::setFrame(float f) {
     mCurrentFrame = std::max(0.0f, std::min(f, (float)mAnimation.maxFrame));
 }
 
-void VmdPlayer::update(float deltaTime)
-{
+void VmdPlayer::update(float deltaTime) {
     if (!mPlaying || mAnimation.maxFrame <= 0)
         return;
     mCurrentFrame += deltaTime * mFps;
@@ -192,8 +196,7 @@ void VmdPlayer::update(float deltaTime)
 }
 
 bool VmdPlayer::getBoneTransform(const std::string& boneName, std::array<float, 3>& posOut,
-                                 std::array<float, 4>& rotOut) const
-{
+                                 std::array<float, 4>& rotOut) const {
     auto it = mAnimation.boneKeyframes.find(boneName);
     if (it == mAnimation.boneKeyframes.end())
         return false;
@@ -257,8 +260,7 @@ bool VmdPlayer::getBoneTransform(const std::string& boneName, std::array<float, 
     return true;
 }
 
-float VmdPlayer::getMorphWeight(const std::string& morphName) const
-{
+float VmdPlayer::getMorphWeight(const std::string& morphName) const {
     auto it = mAnimation.morphKeyframes.find(morphName);
     if (it == mAnimation.morphKeyframes.end())
         return 0;
@@ -289,45 +291,38 @@ float VmdPlayer::getMorphWeight(const std::string& morphName) const
 
 // --- VmdMixer ---
 
-VmdMixer::VmdMixer(float fps) : mFps(fps)
-{
+VmdMixer::VmdMixer(float fps) : mFps(fps) {
 }
 
-void VmdMixer::addVmd(VmdAnimation anim)
-{
+void VmdMixer::addVmd(VmdAnimation anim) {
     mMaxFrame = std::max(mMaxFrame, (float)anim.maxFrame);
     mPlayers.emplace_back(std::move(anim), mFps);
 }
 
-void VmdMixer::clear()
-{
+void VmdMixer::clear() {
     mPlayers.clear();
     mMaxFrame = 0;
 }
 
-void VmdMixer::play()
-{
+void VmdMixer::play() {
     mPlaying = true;
     for (auto& p : mPlayers)
         p.play();
 }
 
-void VmdMixer::pause()
-{
+void VmdMixer::pause() {
     mPlaying = false;
     for (auto& p : mPlayers)
         p.pause();
 }
 
-void VmdMixer::stop()
-{
+void VmdMixer::stop() {
     mPlaying = false;
     for (auto& p : mPlayers)
         p.stop();
 }
 
-void VmdMixer::update(float deltaTime)
-{
+void VmdMixer::update(float deltaTime) {
     if (!mPlaying)
         return;
     for (auto& p : mPlayers) {
@@ -348,9 +343,13 @@ void VmdMixer::update(float deltaTime)
     }
 }
 
+// Blend multiple VMD layers: positions are summed (additive layering),
+// rotations are blended via quaternion slerp at 0.5 weight per layer.
+// This means the first layer's rotation dominates, and each subsequent
+// layer blends 50/50 with the accumulated result — a simple but effective
+// multi-track motion layering scheme.
 bool VmdMixer::getBoneTransform(const std::string& boneName, std::array<float, 3>& posOut,
-                                std::array<float, 4>& rotOut) const
-{
+                                std::array<float, 4>& rotOut) const {
     bool has = false;
     std::array<float, 3> pos = {0, 0, 0};
     std::array<float, 4> rot;
@@ -376,8 +375,7 @@ bool VmdMixer::getBoneTransform(const std::string& boneName, std::array<float, 3
     return true;
 }
 
-float VmdMixer::getMorphWeight(const std::string& morphName) const
-{
+float VmdMixer::getMorphWeight(const std::string& morphName) const {
     float sum = 0;
     bool has = false;
     for (const auto& p : mPlayers) {
@@ -390,15 +388,13 @@ float VmdMixer::getMorphWeight(const std::string& morphName) const
     return has ? std::max(0.0f, std::min(1.0f, sum)) : 0;
 }
 
-void VmdMixer::setLoop(bool loop)
-{
+void VmdMixer::setLoop(bool loop) {
     mLoop = loop;
     for (auto& p : mPlayers)
         p.setLoop(loop);
 }
 
-void VmdMixer::setFrame(float frame)
-{
+void VmdMixer::setFrame(float frame) {
     for (auto& p : mPlayers)
         p.setFrame(frame);
 }

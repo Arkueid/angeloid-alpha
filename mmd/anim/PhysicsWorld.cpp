@@ -10,18 +10,21 @@
 #include <string>
 
 namespace {
+// Gravity in MMD world space; modelScale division in build() normalizes for PMX-native physics
 constexpr float kGravityY = -9.8f;
+// Default Bullet solver iteration count (2× default, improves joint stability)
 constexpr int kSolverIterations = 15;
+// Substep count per stepSimulation call — trades performance for constraint accuracy
 constexpr int kSubsteps = 10;
 constexpr float kFixedTimestep = 1.0f / 240.0f;
+// Cap deltaTime to prevent explosion after frame spikes (e.g. window drag, breakpoint)
 constexpr float kMaxTimestep = 1.0f / 30.0f;
 constexpr float kSleepLinearThreshold = 0.08f;
 constexpr float kSleepAngularThreshold = 0.02f;
 constexpr float kDeactivationTime = 0.5f;
 }
 
-PhysicsWorld::PhysicsWorld()
-{
+PhysicsWorld::PhysicsWorld() {
     mCollisionCfg = std::make_unique<btDefaultCollisionConfiguration>();
     mDispatcher = std::make_unique<btCollisionDispatcher>(mCollisionCfg.get());
     mBroadphase = std::make_unique<btDbvtBroadphase>();
@@ -30,11 +33,13 @@ PhysicsWorld::PhysicsWorld()
                                                        mSolver.get(), mCollisionCfg.get());
     mWorld->setGravity(btVector3(0, kGravityY, 0));
     mWorld->getSolverInfo().m_numIterations = kSolverIterations;
-    mWorld->getSolverInfo().m_erp2 = 0.8f;  // match Bullet 2.75 default for non-contact constraints
+    // ERP2 (Error Reduction Parameter) controls Baumgarte stabilization strength.
+    // Bullet 3.x changed the default to 0.2; we restore 0.8 matching saba and Bullet 2.75
+    // — without this, joints drift visibly over time.
+    mWorld->getSolverInfo().m_erp2 = 0.8f;
 }
 
-PhysicsWorld::~PhysicsWorld()
-{
+PhysicsWorld::~PhysicsWorld() {
     for (auto& c : mConstraints)
         if (c)
             mWorld->removeConstraint(c.get());
@@ -43,8 +48,7 @@ PhysicsWorld::~PhysicsWorld()
             mWorld->removeRigidBody(b.body);
 }
 
-void PhysicsWorld::build(const PmxModel& model, float modelScale)
-{
+void PhysicsWorld::build(const PmxModel& model, float modelScale) {
     // Compute bounds
     float minX = 1e9f, minY = 1e9f, minZ = 1e9f, maxX = -1e9f, maxY = -1e9f, maxZ = -1e9f;
     for (const auto& v : model.vertices) {
@@ -96,7 +100,10 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
     for (const auto& jt : model.joints)
         addJoint(jt);
 
-    // Mark cloth-like bodies: connected to joints with rotation springs + freedom
+    // Cloth detection heuristic: a body is "cloth-like" if it connects to a joint that
+    // (a) has rotation springs (restorative torque) AND (b) has meaningful rotation range.
+    // Cloth-like bodies use physics rotation + bone position in getBoneTransforms(),
+    // preventing cloth from snapping back to bone orientation each frame.
     for (const auto& jt : model.joints) {
         bool hasRotSpring = jt.spring_constant_rotation.x != 0 ||
                             jt.spring_constant_rotation.y != 0 ||
@@ -124,8 +131,7 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale)
     MMD_INFO("PHYS", "  Cloth-like bodies:%s (%d total)", clothNames.c_str(), clothCount);
 }
 
-void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWorld)
-{
+void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWorld) {
     // Set all dynamic bodies to kinematic, align them to bone targets,
     // run one step, then switch back to dynamic. Prevents initial overlap explosion.
     for (auto& bb : mBodies) {
@@ -166,8 +172,7 @@ void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWo
     MMD_INFO("PHYS", "reset complete, bodies aligned");
 }
 
-void PhysicsWorld::debugDump() const
-{
+void PhysicsWorld::debugDump() const {
     MMD_INFO("PHYS", "=== Physics dump (scale=%.4f center=%.2f,%.2f,%.2f) ===", mModelScale,
              mCenter.x, mCenter.y, mCenter.z);
     int moved = 0, active = 0;
@@ -199,9 +204,9 @@ void PhysicsWorld::debugDump() const
     MMD_INFO("PHYS", "=== End dump ===");
 }
 
-void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
-{
-    // PMX-native positions (offset from model center)
+void PhysicsWorld::addRigidBody(const PmxRigidBody& rb) {
+    // PMX-native positions: offset from model center so physics runs near origin.
+    // This avoids floating-point precision loss with large absolute coordinates.
     float px = rb.shape_position.x - mCenter.x;
     float py = rb.shape_position.y - mMinY;
     float pz = rb.shape_position.z - mCenter.z;
@@ -296,8 +301,7 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb)
                        bry,         brz,           brw,         false,       rb.name});
 }
 
-void PhysicsWorld::addJoint(const PmxJoint& jt)
-{
+void PhysicsWorld::addJoint(const PmxJoint& jt) {
     if (jt.rigidbody_index_a < 0 || jt.rigidbody_index_b < 0)
         return;
     if (jt.rigidbody_index_a >= (int)mBodies.size() || jt.rigidbody_index_b >= (int)mBodies.size())
@@ -461,7 +465,13 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
             }
         }
 
-        // Tiered spring fallback for tight translation DOFs (applies to both type 0 and 1)
+        // Tiered spring fallback: for translation DOFs that are tightly constrained
+        // (small range) but have no explicit PMX spring, inject a strong spring to
+        // prevent drift. Type 0 joints with existing springs skip this — the PMX spring
+        // already provides the restoring force. Three tiers:
+        //   near-locked: range < 0.001 m → k=10000 (essentially rigid)
+        //   tight:       range < 0.2   m → k=2000
+        //   narrow:      range < 0.5   m → k=500
         float lo[3] = {jt.translation_limit_min.x, jt.translation_limit_min.y,
                        jt.translation_limit_min.z};
         float hi[3] = {jt.translation_limit_max.x, jt.translation_limit_max.y,
@@ -495,44 +505,56 @@ void PhysicsWorld::addJoint(const PmxJoint& jt)
     mConstraints.emplace_back(c);
 }
 
+// Compute the target position/rotation a rigid body should follow based on its linked
+// bone's current animation pose. Uses a "delta tracking" approach:
+//   1. Record the body's initial offset from the bone's bind-pose position.
+//   2. Compute the bone's rotation delta from bind → current pose.
+//   3. Apply that same delta rotation to the body's offset.
+//   4. Add the result to the bone's current pose position.
+// This way, when a bone rotates, its attached rigid body orbits around it correctly.
 void PhysicsWorld::computeBoneTarget(const BulletBody& bb,
                                      const std::vector<std::array<float, 16>>& poseWorld,
-                                     btVector3& outPos, btQuaternion& outRot) const
-{
+                                     btVector3& outPos, btQuaternion& outRot) const {
+    // Pose world = current frame bone transform
     const auto& pw = poseWorld[bb.boneIndex];
+    // Bind world = initial bone transform from PMX (pre-animation)
     const auto& bw = mBoneBindWorld[bb.boneIndex];
 
-    // Body init position in MMD world space
+    // Body initial position in model space (un-center for absolute coordinates)
     float bodyModelX = bb.initPosX + mCenter.x;
     float bodyModelY = bb.initPosY + mMinY;
     float bodyModelZ = bb.initPosZ + mCenter.z;
 
+    // Bone bind-pose position and rotation
     float bbx = bw[12], bby = bw[13], bbz = bw[14];
     btMatrix3x3 bwBasis(bw[0], bw[4], bw[8], bw[1], bw[5], bw[9], bw[2], bw[6], bw[10]);
     btQuaternion bwRot;
     bwBasis.getRotation(bwRot);
 
+    // Bone current-pose position and rotation
     float bax = pw[12], bay = pw[13], baz = pw[14];
     btMatrix3x3 pwBasis(pw[0], pw[4], pw[8], pw[1], pw[5], pw[9], pw[2], pw[6], pw[10]);
     btQuaternion pwRot;
     pwBasis.getRotation(pwRot);
 
+    // Body's offset from bone in bind pose, then rotated by bone's animation delta
     btVector3 offset(bodyModelX - bbx, bodyModelY - bby, bodyModelZ - bbz);
     btQuaternion deltaRot = pwRot * bwRot.inverse();
     btVector3 rotatedOffset = btMatrix3x3(deltaRot) * offset;
 
+    // Target = bone current position + rotated body offset
     float tgtX = bax + rotatedOffset.x();
     float tgtY = bay + rotatedOffset.y();
     float tgtZ = baz + rotatedOffset.z();
     btQuaternion bodyInitRot(bb.initRotX, bb.initRotY, bb.initRotZ, bb.initRotW);
 
-    // Output in PMX-native space (offset from center)
+    // Output in PMX-native space (center-relative, matching Bullet body positions)
     outPos = btVector3(tgtX - mCenter.x, tgtY - mMinY, tgtZ - mCenter.z);
+    // Target rotation = bone's animation delta composed with body's initial rotation
     outRot = deltaRot * bodyInitRot;
 }
 
-void PhysicsWorld::updateMode0Bodies(const std::vector<std::array<float, 16>>& poseWorld)
-{
+void PhysicsWorld::updateMode0Bodies(const std::vector<std::array<float, 16>>& poseWorld) {
     for (auto& bb : mBodies) {
         if (bb.mode != 0 || bb.boneIndex < 0 || bb.boneIndex >= (int)poseWorld.size())
             continue;
@@ -552,14 +574,18 @@ void PhysicsWorld::updateMode0Bodies(const std::vector<std::array<float, 16>>& p
     }
 }
 
-void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>>& poseWorld)
-{
+void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>>& poseWorld) {
     if (!enabled)
         return;
 
-    // Mode 2: pull toward bone-animated transform
-    // Scale forces by deltaTime so behavior is frame-rate independent
-    float dtScale = deltaTime * 60.0f;  // = 1.0 at 60fps
+    // Mode 2 (bone-align): apply corrective forces pulling the body toward the
+    // bone-animated target transform, acting as a soft constraint rather than
+    // hard teleportation. This lets physics (collisions, other joints) still
+    // influence the body while keeping it roughly aligned with the bone.
+    //
+    // dtScale normalizes forces for frame-rate independence: at 60fps it's 1.0,
+    // at 30fps it's 0.5 (half the force per step, twice as many steps).
+    float dtScale = deltaTime * 60.0f;
     for (auto& bb : mBodies) {
         if (bb.mode != 2 || bb.boneIndex < 0 || bb.boneIndex >= (int)poseWorld.size())
             continue;
@@ -570,6 +596,9 @@ void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>
         btQuaternion tgtRot;
         computeBoneTarget(bb, poseWorld, tgtPos, tgtRot);
 
+        // Position correction: PD controller (proportional + derivative)
+        //   force = (posError * kP - velocity * kD) * dtScale
+        // kP=50 provides strong pull; kD=15 adds damping to prevent oscillation
         btTransform cur = bb.body->getCenterOfMassTransform();
         btVector3 posErr = tgtPos - cur.getOrigin();
         float errLen = posErr.length();
@@ -578,6 +607,9 @@ void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>
             bb.body->applyCentralForce((posErr * 50.0f - bb.body->getLinearVelocity() * 15.0f) *
                                        dtScale);
         }
+        // Rotation correction: compute quaternion difference, convert to axis-angle,
+        // then set angular velocity toward the target. The 0.85 damping factor prevents
+        // overshoot and oscillation in the rotation correction.
         btQuaternion curRot = cur.getRotation();
         btQuaternion diff = curRot.inverse() * tgtRot;
         if (diff.w() < 0)
@@ -592,13 +624,17 @@ void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>
         }
     }
 
+    // Cap deltaTime to prevent physics explosion on frame spikes
     mWorld->stepSimulation(std::min(deltaTime, kMaxTimestep), kSubsteps, kFixedTimestep);
 
     // debugTrackCloth();
 }
 
-void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) const
-{
+// Write physics simulation results back to bone world matrices.
+// For each active dynamic body, compute how far it moved from its initial pose,
+// then apply that same displacement to the linked bone's bind-world transform.
+// This is the feedback path: physics → bone animation.
+void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) const {
     for (const auto& bb : mBodies) {
         if (bb.boneIndex < 0 || bb.boneIndex >= (int)out.size())
             continue;
@@ -608,23 +644,25 @@ void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) co
         btVector3 bodyPos = t.getOrigin();
         btQuaternion bodyRot = t.getRotation();
 
-        // Body displacement from its initial pose
+        // Body's delta from its initial configuration
         btQuaternion bodyInitRot(bb.initRotX, bb.initRotY, bb.initRotZ, bb.initRotW);
         btQuaternion bodyDeltaRot = bodyRot * bodyInitRot.inverse();
         btVector3 bodyInitPos(bb.initPosX, bb.initPosY, bb.initPosZ);
         btVector3 disp = bodyPos - bodyInitPos;
 
-        // Apply displacement to bone's bind-world position
+        // Apply the same displacement to the bone's bind-world position/rotation
         btVector3 boneInitPos(bb.bonePosX, bb.bonePosY, bb.bonePosZ);
         btQuaternion boneInitRot(bb.boneRotX, bb.boneRotY, bb.boneRotZ, bb.boneRotW);
         btVector3 boneNewPos = boneInitPos + disp;
         btQuaternion boneNewRot = bodyDeltaRot * boneInitRot;
 
+        // Convert back to model space and write as column-major 4x4 matrix
         float tx = boneNewPos.x() + mCenter.x;
         float ty = boneNewPos.y() + mMinY;
         float tz = boneNewPos.z() + mCenter.z;
         auto& m = out[bb.boneIndex];
         const btQuaternion& r = boneNewRot;
+        // Quaternion to rotation matrix (column-major)
         m[0] = 1 - 2 * (r.y() * r.y() + r.z() * r.z());
         m[4] = 2 * (r.x() * r.y() - r.z() * r.w());
         m[8] = 2 * (r.x() * r.z() + r.y() * r.w());
@@ -644,8 +682,7 @@ void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) co
     }
 }
 
-void PhysicsWorld::debugTrackCloth() const
-{
+void PhysicsWorld::debugTrackCloth() const {
     static int fc = 0;
     if (fc % 60 == 0) {
         for (const auto& bb : mBodies) {

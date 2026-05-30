@@ -8,8 +8,7 @@ namespace Gpu {
 
 struct VboWrapper {
     GLuint vboId = 0;
-    explicit VboWrapper(GLuint id) : vboId(id)
-    {
+    explicit VboWrapper(GLuint id) : vboId(id) {
     }
     void write(const void* data, size_t bytes) const;
 };

@@ -6,8 +6,7 @@
 // 6 floats per vertex: px,py,pz, cr,cg,cb
 static const int sStride = 6;
 
-WorldAxis::WorldAxis()
-{
+WorldAxis::WorldAxis() {
     // --- Axis lines (X=red, Y=green, Z=blue) ---
     const float axisLen = 5.0f;
     float axisVerts[] = {
@@ -29,7 +28,9 @@ WorldAxis::WorldAxis()
     mAxisVao.vertexCount = sizeof(axisVerts) / (sStride * sizeof(float));
     Gpu::Vao::unbind();
 
-    // --- Ground grid (XZ plane, Y=0) ---
+    // Ground grid on the XZ plane (Y=0), rendered as intersecting lines.
+    // The grid is axis-aligned and renders without depth test so it's always visible
+    // behind the model, providing spatial reference for the viewer.
     const float gridSize = 50.0f;
     const int gridDivs = 25;
     const float step = gridSize / gridDivs;
@@ -66,8 +67,7 @@ WorldAxis::WorldAxis()
 }
 
 void WorldAxis::render(const Gpu::ShaderProgram& shader, const std::array<float, 16>& projection,
-                       const std::array<float, 16>& view) const
-{
+                       const std::array<float, 16>& view) const {
     float identity[] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
 
     shader.use();

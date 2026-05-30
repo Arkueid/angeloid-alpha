@@ -6,8 +6,7 @@
 #include <windows.h>
 #endif
 
-std::string Encoding::utf16leToUtf8(const uint16_t* data, size_t count)
-{
+std::string Encoding::utf16leToUtf8(const uint16_t* data, size_t count) {
     std::string result;
     result.reserve(count);
     for (size_t i = 0; i < count; ++i) {
@@ -41,8 +40,7 @@ std::string Encoding::utf16leToUtf8(const uint16_t* data, size_t count)
     return result;
 }
 
-std::string Encoding::cp932ToUtf8(const std::string& raw)
-{
+std::string Encoding::cp932ToUtf8(const std::string& raw) {
 #ifdef _WIN32
     int wideLen = MultiByteToWideChar(932, 0, raw.data(), (int)raw.size(), nullptr, 0);
     if (wideLen <= 0)
@@ -62,8 +60,7 @@ std::string Encoding::cp932ToUtf8(const std::string& raw)
 #endif
 }
 
-bool Encoding::isValidUtf8(const std::string& s)
-{
+bool Encoding::isValidUtf8(const std::string& s) {
     for (size_t i = 0; i < s.size(); ++i) {
         uint8_t c = (uint8_t)s[i];
         if (c < 0x80)

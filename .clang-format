@@ -8,11 +8,12 @@ TabWidth: 4
 UseTab: Never
 IndentCaseLabels: false
 IndentAccessModifiers: false
+AccessModifierOffset: -4
 
-# Braces — Allman for functions, attach for everything else
+# Braces — K&R style (attach for everything)
 BreakBeforeBraces: Custom
 BraceWrapping:
-  AfterFunction: true
+  AfterFunction: false
   AfterClass: false
   AfterStruct: false
   AfterEnum: false

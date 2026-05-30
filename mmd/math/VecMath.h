@@ -18,8 +18,7 @@ struct Quat {
 };
 
 inline std::array<float, 4> quatSlerp(const std::array<float, 4>& qa,
-                                      const std::array<float, 4>& qb, float t)
-{
+                                      const std::array<float, 4>& qb, float t) {
     if (t <= 0)
         return qa;
     if (t >= 1)

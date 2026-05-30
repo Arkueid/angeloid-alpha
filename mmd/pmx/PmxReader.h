@@ -11,23 +11,19 @@
 
 // --- BinaryReader: low-level PMX binary reading ---
 class BinaryReader {
-   public:
+public:
     explicit BinaryReader(const std::filesystem::path& path);
 
-    bool isEnd() const
-    {
+    bool isEnd() const {
         return mPos >= mSize;
     }
-    void seek(size_t pos)
-    {
+    void seek(size_t pos) {
         mPos = pos;
     }
-    size_t position() const
-    {
+    size_t position() const {
         return mPos;
     }
-    size_t size() const
-    {
+    size_t size() const {
         return mSize;
     }
 
@@ -50,10 +46,9 @@ class BinaryReader {
     std::string readText(uint8_t textEncoding);
     void readBytes(void* dst, size_t len);
 
-   private:
+private:
     template <typename T>
-    T readVal()
-    {
+    T readVal() {
         T val;
         std::memcpy(&val, &mData[mPos], sizeof(T));
         mPos += sizeof(T);

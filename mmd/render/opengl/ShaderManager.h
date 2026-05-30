@@ -9,19 +9,18 @@
 #include <unordered_map>
 
 class ShaderManager {
-   public:
+public:
     explicit ShaderManager(const std::filesystem::path& shaderDir);
     ~ShaderManager() = default;
 
     Gpu::ShaderProgram* get(const std::string& name);
-    Gpu::Texture* gradientTexture()
-    {
+    Gpu::Texture* gradientTexture() {
         return mGradientTexture.get();
     }
 
     void setOutlineThickness(float thickness);
 
-   private:
+private:
     void createMainShader();
     void createAxisShader();
     void createRigidbodyShader();

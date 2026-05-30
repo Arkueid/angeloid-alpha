@@ -9,8 +9,7 @@
 
 // --- BinaryReader ---
 
-BinaryReader::BinaryReader(const std::filesystem::path& path)
-{
+BinaryReader::BinaryReader(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open file: " + path.string());
@@ -23,43 +22,34 @@ BinaryReader::BinaryReader(const std::filesystem::path& path)
     mPos = 0;
 }
 
-void BinaryReader::readBytes(void* dst, size_t len)
-{
+void BinaryReader::readBytes(void* dst, size_t len) {
     std::memcpy(dst, &mData[mPos], len);
     mPos += len;
 }
 
-int8_t BinaryReader::readS8()
-{
+int8_t BinaryReader::readS8() {
     return readVal<int8_t>();
 }
-uint8_t BinaryReader::readU8()
-{
+uint8_t BinaryReader::readU8() {
     return readVal<uint8_t>();
 }
-int16_t BinaryReader::readS16()
-{
+int16_t BinaryReader::readS16() {
     return readVal<int16_t>();
 }
-uint16_t BinaryReader::readU16()
-{
+uint16_t BinaryReader::readU16() {
     return readVal<uint16_t>();
 }
-int32_t BinaryReader::readS32()
-{
+int32_t BinaryReader::readS32() {
     return readVal<int32_t>();
 }
-uint32_t BinaryReader::readU32()
-{
+uint32_t BinaryReader::readU32() {
     return readVal<uint32_t>();
 }
-float BinaryReader::readF32()
-{
+float BinaryReader::readF32() {
     return readVal<float>();
 }
 
-int32_t BinaryReader::readIndex(uint8_t size)
-{
+int32_t BinaryReader::readIndex(uint8_t size) {
     if (size == 1)
         return readS8();
     if (size == 2)
@@ -67,8 +57,10 @@ int32_t BinaryReader::readIndex(uint8_t size)
     return readS32();
 }
 
-uint32_t BinaryReader::readVertexIndex(uint8_t size)
-{
+// PMX vertex indices use a peculiar encoding: unsigned for 1-byte and 2-byte sizes,
+// but signed for 4-byte. This matches the official MMD PMX spec — vertex indices are
+// always non-negative but the 4-byte variant reuses the signed readIndex path.
+uint32_t BinaryReader::readVertexIndex(uint8_t size) {
     if (size <= 2) {
         if (size == 1)
             return readU8();
@@ -77,25 +69,20 @@ uint32_t BinaryReader::readVertexIndex(uint8_t size)
     return readS32();
 }
 
-Vec2 BinaryReader::readVec2()
-{
+Vec2 BinaryReader::readVec2() {
     return {readF32(), readF32()};
 }
-Vec3 BinaryReader::readVec3()
-{
+Vec3 BinaryReader::readVec3() {
     return {readF32(), readF32(), readF32()};
 }
-Vec4 BinaryReader::readVec4()
-{
+Vec4 BinaryReader::readVec4() {
     return {readF32(), readF32(), readF32(), readF32()};
 }
-Quat BinaryReader::readQuat()
-{
+Quat BinaryReader::readQuat() {
     return {readF32(), readF32(), readF32(), readF32()};
 }
 
-std::string BinaryReader::readText(uint8_t textEncoding)
-{
+std::string BinaryReader::readText(uint8_t textEncoding) {
     int32_t len = readS32();
     if (len <= 0)
         return {};
@@ -114,8 +101,7 @@ std::string BinaryReader::readText(uint8_t textEncoding)
 }
 
 // --- Bone deform reader ---
-static BoneDeform readDeform(BinaryReader& r, uint8_t boneIndexSize)
-{
+static BoneDeform readDeform(BinaryReader& r, uint8_t boneIndexSize) {
     uint8_t deformType = r.readU8();
     if (deformType == 0) {
         return Bdef1{r.readIndex(boneIndexSize)};
@@ -145,8 +131,7 @@ static BoneDeform readDeform(BinaryReader& r, uint8_t boneIndexSize)
 }
 
 // --- PMX Parser ---
-PmxModel PmxReader::load(const std::filesystem::path& path)
-{
+PmxModel PmxReader::load(const std::filesystem::path& path) {
     BinaryReader r(path);
     PmxModel model;
 

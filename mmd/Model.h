@@ -21,7 +21,7 @@
 namespace mmd {
 
 class Model {
-   public:
+public:
     Model() = default;
 
     // --- Loading ---
@@ -35,12 +35,10 @@ class Model {
 
     // --- Physics ---
     void enablePhysics(bool on);
-    bool physicsEnabled() const
-    {
+    bool physicsEnabled() const {
         return mPhysics.enabled;
     }
-    void showRigidBodies(bool v)
-    {
+    void showRigidBodies(bool v) {
         mShowRigidBodies = v;
     }
 
@@ -58,42 +56,33 @@ class Model {
 
     // --- VPD pose ---
     void applyVpd(bool on);
-    bool vpdApplied() const
-    {
+    bool vpdApplied() const {
         return mVpdApplied;
     }
 
     // --- Display toggles ---
-    void showModel(bool v)
-    {
+    void showModel(bool v) {
         mRenderer.showModel = v;
     }
-    void showOutline(bool v)
-    {
+    void showOutline(bool v) {
         mRenderer.showOutline = v;
     }
-    void showToon(bool v)
-    {
+    void showToon(bool v) {
         mRenderer.showToon = v;
     }
-    bool showModel() const
-    {
+    bool showModel() const {
         return mRenderer.showModel;
     }
-    bool showOutline() const
-    {
+    bool showOutline() const {
         return mRenderer.showOutline;
     }
-    bool showToon() const
-    {
+    bool showToon() const {
         return mRenderer.showToon;
     }
-    bool isSkinned() const
-    {
+    bool isSkinned() const {
         return mRenderer.useSkinning;
     }
-    void setSkinning(bool on)
-    {
+    void setSkinning(bool on) {
         mRenderer.useSkinning = on;
     }
 
@@ -101,8 +90,7 @@ class Model {
     void setMorphWeight(const std::string& name, float weight);
     void clearMorphs();
     void setMorphWeights(const std::unordered_map<std::string, float>& weights);
-    void setIdleBlink(bool on)
-    {
+    void setIdleBlink(bool on) {
         mIdleEnabled = on;
     }
     int morphCount() const;
@@ -110,24 +98,20 @@ class Model {
     std::string morphName(int index) const;
 
     // --- Accessors ---
-    const std::string& modelName() const
-    {
+    const std::string& modelName() const {
         return mData.name;
     }
-    const PmxModel& data() const
-    {
+    const PmxModel& data() const {
         return mData;
     }
-    float modelScale() const
-    {
+    float modelScale() const {
         return mRenderer.modelScale();
     }
-    const float* modelMatrix() const
-    {
+    const float* modelMatrix() const {
         return mRenderer.modelMatrix();
     }
 
-   private:
+private:
     void syncBoneTexture();
     void syncMorphOffsets();
 

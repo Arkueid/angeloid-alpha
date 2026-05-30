@@ -70,8 +70,7 @@ struct PmxMaterial {
     std::string comment;
     int32_t vertex_count = 0;
 
-    bool hasFlag(uint8_t mask) const
-    {
+    bool hasFlag(uint8_t mask) const {
         return (flag & mask) != 0;
     }
 };
@@ -131,8 +130,7 @@ struct PmxBone {
     // Index in the bones array (set after loading)
     int index = -1;
 
-    bool hasFlag(uint16_t mask) const
-    {
+    bool hasFlag(uint16_t mask) const {
         return (flag & mask) != 0;
     }
 };
@@ -272,28 +270,22 @@ struct PmxModel {
     std::vector<PmxRigidBody> rigidbodies;
     std::vector<PmxJoint> joints;
 
-    int vertexCount() const
-    {
+    int vertexCount() const {
         return (int)vertices.size();
     }
-    int faceCount() const
-    {
+    int faceCount() const {
         return (int)indices.size() / 3;
     }
-    int textureCount() const
-    {
+    int textureCount() const {
         return (int)textures.size();
     }
-    int materialCount() const
-    {
+    int materialCount() const {
         return (int)materials.size();
     }
-    int boneCount() const
-    {
+    int boneCount() const {
         return (int)bones.size();
     }
-    int morphCount() const
-    {
+    int morphCount() const {
         return (int)morphs.size();
     }
 };

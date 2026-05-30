@@ -15,8 +15,7 @@ namespace fs = std::filesystem;
 
 // --- Helpers ---
 
-static void buildInterleavedVao(Gpu::Vao& vao, GLuint sharedVbo, GLuint sharedEbo, int indexCount)
-{
+static void buildInterleavedVao(Gpu::Vao& vao, GLuint sharedVbo, GLuint sharedEbo, int indexCount) {
     vao.bind();
 
     glBindBuffer(GL_ARRAY_BUFFER, sharedVbo);
@@ -35,8 +34,7 @@ static void buildInterleavedVao(Gpu::Vao& vao, GLuint sharedVbo, GLuint sharedEb
 
 // --- ModelRenderer ---
 
-ModelRenderer::ModelRenderer()
-{
+ModelRenderer::ModelRenderer() {
     // 1x1 white dummy texture
     uint8_t white[] = {255, 255, 255, 255};
     mDummyTexture = std::make_unique<Gpu::Texture>(1, 1, 4, white);
@@ -44,8 +42,7 @@ ModelRenderer::ModelRenderer()
     mDummyTexture->setWrap(false, false);
 }
 
-ModelRenderer::~ModelRenderer()
-{
+ModelRenderer::~ModelRenderer() {
     mModelVao.ebo = 0;
     mToonVao.ebo = 0;
     mOutlineVao.ebo = 0;
@@ -56,8 +53,7 @@ ModelRenderer::~ModelRenderer()
 }
 
 void ModelRenderer::loadModel(const PmxModel& model, const std::filesystem::path& textureDir,
-                              const std::filesystem::path& toonDir)
-{
+                              const std::filesystem::path& toonDir) {
     mModel = &model;
 
     // Compute bounds
@@ -81,8 +77,12 @@ void ModelRenderer::loadModel(const PmxModel& model, const std::filesystem::path
     float maxSize = std::max({size.x, size.y, size.z});
     mScale = maxSize > 0 ? 2.0f / maxSize : 1.0f;
 
-    // Build model matrix: PMX space -> display space
-    // = Z-flip * scale(mScale) * translate(0, -mMinY, 0) * translate(-mCenter.x, 0, -mCenter.z)
+    // Model matrix: PMX space → OpenGL display space.
+    // Composes: scale(s) · Z-flip · translate to origin at (center.x, minY, center.z)
+    //   Z-flip converts right-handed PMX (+Z toward viewer) to left-handed OpenGL (-Z toward viewer).
+    //   Center translation normalizes the model around origin.
+    //   Scale normalizes the model to fit within ~[-1, 1] NDС.
+    // This matrix is passed to the GPU as a uniform; skinning happens in PMX space.
     float s = mScale;
     mModelMat = {s, 0, 0, 0, 0, s, 0, 0, 0, 0, -s, 0, -mCenter.x * s, -mMinY * s, mCenter.z * s, 1};
 
@@ -136,8 +136,7 @@ void ModelRenderer::loadModel(const PmxModel& model, const std::filesystem::path
 }
 
 void ModelRenderer::loadTextures(const std::filesystem::path& textureDir,
-                                 const std::filesystem::path& toonDir)
-{
+                                 const std::filesystem::path& toonDir) {
     MMD_INFO("RENDER", "Loading %d textures...", mModel->textureCount());
 
     for (size_t i = 0; i < mModel->textures.size(); ++i) {
@@ -147,9 +146,12 @@ void ModelRenderer::loadTextures(const std::filesystem::path& textureDir,
             continue;
         }
 
-        // texName is UTF-8 from PMX, may contain subdirs (e.g. "tex\foo.tga")
+        // PMX texture paths may include subdirectories (e.g. "tex\foo.tga").
+        // Try multiple resolution strategies in order:
+        //   1. Full relative path under textureDir
+        //   2. Just the filename (ignore subdirs)
+        //   3. Strip common path prefixes ("texture/", "tex/", etc.) and retry
         fs::path texRel = fs::u8path(texName);
-        // Try full relative path, then just filename, then strip prefixes
         fs::path texPath = textureDir / texRel;
         if (!fs::exists(texPath))
             texPath = textureDir / texRel.filename();
@@ -211,8 +213,7 @@ void ModelRenderer::loadTextures(const std::filesystem::path& textureDir,
     }
 }
 
-void ModelRenderer::buildMaterialBatches(const PmxModel& model)
-{
+void ModelRenderer::buildMaterialBatches(const PmxModel& model) {
     mMaterialBatches.reserve(model.materialCount());
     mMaterialColor.reserve(model.materialCount());
     mMaterialEdge.reserve(model.materialCount());
@@ -230,7 +231,9 @@ void ModelRenderer::buildMaterialBatches(const PmxModel& model)
         batch.count = mat.vertex_count;
         batch.textureIndex = mat.texture_index;
         batch.materialIndex = i;
-        batch.hasEdge = mat.hasFlag(MATERIALFLAG_SELF_SHADOW);  // 0x08 matches Python
+        // MATERIALFLAG_SELF_SHADOW (0x08) controls whether this material casts
+        // a shadow on itself — in toon rendering this means it gets an outline/edge.
+        batch.hasEdge = mat.hasFlag(MATERIALFLAG_SELF_SHADOW);
         mMaterialBatches.push_back(batch);
 
         mMaterialColor.push_back({mat.diffuse_color.x, mat.diffuse_color.y, mat.diffuse_color.z});
@@ -247,6 +250,9 @@ void ModelRenderer::buildMaterialBatches(const PmxModel& model)
         sphere.mode = mat.sphere_mode;
         mMaterialSphere.push_back(sphere);
 
+        // toon_sharing_flag != 0 means the material references a shared toon (toon01-10.bmp),
+        // where toon_texture_index is the 0-9 index into the shared toon array.
+        // Flag == 0 means a per-model toon texture referenced by texture_index.
         MaterialToon toon;
         if (mat.toon_texture_index >= 0) {
             toon.textureIndex = mat.toon_texture_index;
@@ -263,8 +269,7 @@ void ModelRenderer::buildMaterialBatches(const PmxModel& model)
 
 void ModelRenderer::renderMainPass(Gpu::ShaderProgram& shader,
                                    const std::array<float, 16>& projection,
-                                   const std::array<float, 16>& view, const float* modelMatParam)
-{
+                                   const std::array<float, 16>& view, const float* modelMatParam) {
     if (!showModel || mMaterialBatches.empty())
         return;
 
@@ -367,10 +372,15 @@ void ModelRenderer::renderMainPass(Gpu::ShaderProgram& shader,
     glDisable(GL_BLEND);
 }
 
+// Outline pass: render back faces with a slight offset along vertex normals.
+// We cull FRONT faces and draw BACK faces — the vertex shader extrudes each
+// vertex along its normal by outline_thickness in clip space, so the back faces
+// extend slightly beyond the front faces, creating a visible outline rim.
+// This is the standard "inverted hull" technique for toon outlines.
 void ModelRenderer::renderOutlinePass(Gpu::ShaderProgram& shader,
                                       const std::array<float, 16>& projection,
-                                      const std::array<float, 16>& view, const float* modelMatParam)
-{
+                                      const std::array<float, 16>& view,
+                                      const float* modelMatParam) {
     if (!showModel || !showOutline || mMaterialBatches.empty())
         return;
 
@@ -384,7 +394,7 @@ void ModelRenderer::renderOutlinePass(Gpu::ShaderProgram& shader,
     shader.setInt("tex", 0);
 
     glEnable(GL_CULL_FACE);
-    glCullFace(GL_FRONT);
+    glCullFace(GL_FRONT);  // Cull front faces → draw only back faces (the "inverted hull")
 
     for (const auto& batch : mMaterialBatches) {
         if (!batch.hasEdge)
@@ -425,8 +435,7 @@ void ModelRenderer::renderOutlinePass(Gpu::ShaderProgram& shader,
 
 // --- Skinning ---
 
-void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::path& vpdPath)
-{
+void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::path& vpdPath) {
     // Compute skinning matrices and pack to bone texture
     std::vector<float> skinMatrices;
     if (!vpdPath.empty()) {
@@ -524,8 +533,7 @@ void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::
 }
 
 void ModelRenderer::applyPhysics(const PmxModel& model,
-                                 const std::vector<std::array<float, 16>>& physicsMats)
-{
+                                 const std::vector<std::array<float, 16>>& physicsMats) {
     if (!mBoneTexture || !useSkinning)
         return;
     std::vector<float> skinMatrices = BoneSkinning::computeSkinningMatrices(model);
@@ -534,20 +542,26 @@ void ModelRenderer::applyPhysics(const PmxModel& model,
     mBoneTexture->write(data.pixels.data());
 }
 
-void ModelRenderer::updateBoneTexture(const PmxModel& model,
-                                      const std::vector<std::array<float, 16>>& poseWorld,
-                                      const std::unordered_map<int, BoneMorphTransform>* boneMorphs)
-{
+void ModelRenderer::updateBoneTexture(
+    const PmxModel& model, const std::vector<std::array<float, 16>>& poseWorld,
+    const std::unordered_map<int, BoneMorphTransform>* boneMorphs) {
     if (!mBoneTexture || !useSkinning)
         return;
 
     auto skinMatrices = BoneSkinning::computeSkinningMatrices(model, poseWorld);
 
+    // Apply bone morph transforms on top of the skinning matrix.
+    // Bone morph = local rotation + translation per-bone (e.g. from "wink" morph).
+    // The morph transform is a column-major 4x3 matrix (R | t) multiplied on the LEFT:
+    //   M' = morphMat · M
+    // This means the morph rotation/translation is applied in the bone's local space
+    // before the skinning matrix transforms to world space.
     if (boneMorphs && !boneMorphs->empty()) {
         for (const auto& [boneIdx, bm] : *boneMorphs) {
             if (boneIdx < 0 || boneIdx >= model.boneCount())
                 continue;
             float* M = &skinMatrices[boneIdx * 16];
+            // Quaternion to 3×3 rotation matrix (row-major for multiplication convenience)
             float qx = bm.rotation[0], qy = bm.rotation[1], qz = bm.rotation[2],
                   qw = bm.rotation[3];
             float x2 = qx + qx, y2 = qy + qy, z2 = qz + qz;
@@ -556,9 +570,11 @@ void ModelRenderer::updateBoneTexture(const PmxModel& model,
             float wx = qw * x2, wy = qw * y2, wz = qw * z2;
             float R[9] = {1.0f - (yy + zz), xy - wz, xz + wy, xy + wz,         1.0f - (xx + zz),
                           yz - wx,          xz - wy, yz + wx, 1.0f - (xx + yy)};
+            // Scale morph translation to match display space (PMX-native → display units)
             float tx = bm.translation[0] * mScale;
             float ty = bm.translation[1] * mScale;
             float tz = bm.translation[2] * mScale;
+            // morphMat · M (column-major 4×4), only compute upper 3 rows (row 4 is [0,0,0,1])
             float tmp[12];
             for (int col = 0; col < 3; ++col) {
                 for (int row = 0; row < 3; ++row) {
@@ -568,6 +584,7 @@ void ModelRenderer::updateBoneTexture(const PmxModel& model,
                 }
                 tmp[col * 4 + 3] = 0;
             }
+            // Translation column: R · t_M + t_morph
             for (int row = 0; row < 3; ++row) {
                 tmp[12 + row] = R[row * 3 + 0] * M[12] + R[row * 3 + 1] * M[13] +
                                 R[row * 3 + 2] * M[14] +
@@ -588,8 +605,7 @@ void ModelRenderer::updateBoneTexture(
     const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses,
     const std::unordered_map<std::string, std::pair<std::array<float, 3>, std::array<float, 4>>>&
         vmdTransforms,
-    const std::unordered_map<int, BoneMorphTransform>* boneMorphs)
-{
+    const std::unordered_map<int, BoneMorphTransform>* boneMorphs) {
     if (!mBoneTexture || !useSkinning)
         return;
 
@@ -651,8 +667,7 @@ void ModelRenderer::updateBoneTexture(
 void ModelRenderer::renderSkinnedMainPass(Gpu::ShaderProgram& shader,
                                           const std::array<float, 16>& projection,
                                           const std::array<float, 16>& view,
-                                          const float* modelMatParam)
-{
+                                          const float* modelMatParam) {
     if (!showModel || !useSkinning || mMaterialBatches.empty())
         return;
 
@@ -754,8 +769,7 @@ void ModelRenderer::renderSkinnedMainPass(Gpu::ShaderProgram& shader,
 void ModelRenderer::renderSkinnedOutlinePass(Gpu::ShaderProgram& shader,
                                              const std::array<float, 16>& projection,
                                              const std::array<float, 16>& view,
-                                             const float* modelMatParam)
-{
+                                             const float* modelMatParam) {
     if (!showModel || !showOutline || !useSkinning || mMaterialBatches.empty())
         return;
 
@@ -814,8 +828,7 @@ void ModelRenderer::renderSkinnedOutlinePass(Gpu::ShaderProgram& shader,
 void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
                                         const std::array<float, 16>& projection,
                                         const std::array<float, 16>& view,
-                                        const float* modelMatParam)
-{
+                                        const float* modelMatParam) {
     if (!showModel || !useSkinning || mMaterialBatches.empty())
         return;
 
@@ -911,8 +924,7 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
 void ModelRenderer::renderMorphOutlinePass(Gpu::ShaderProgram& shader,
                                            const std::array<float, 16>& projection,
                                            const std::array<float, 16>& view,
-                                           const float* modelMatParam)
-{
+                                           const float* modelMatParam) {
     if (!showModel || !showOutline || !useSkinning || mMaterialBatches.empty())
         return;
     const float* modelMatDefault = mModelMat.data();

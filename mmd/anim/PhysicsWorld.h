@@ -22,23 +22,35 @@ class btSequentialImpulseConstraintSolver;
 class btVector3;
 class btQuaternion;
 
+// Tracks a Bullet rigid body and its relationship to the PMX skeleton.
+// All positions/rotations stored here are in Bullet-native space (center-relative,
+// Y-offset by mMinY) — NOT model space.
 struct BulletBody {
     btRigidBody* body = nullptr;
-    int boneIndex = -1;
-    int rigidBodyIndex = -1;
-    int mode = 0;
-    // Body initial COM (Bullet space)
+    int boneIndex = -1;       // linked PMX bone index
+    int rigidBodyIndex = -1;  // PMX rigidbody index
+    int mode = 0;             // 0=kinematic, 1=dynamic, 2=bone-align
+    // Body initial center-of-mass in Bullet space (offset from model center)
     float initPosX = 0, initPosY = 0, initPosZ = 0;
     float initRotX = 0, initRotY = 0, initRotZ = 0, initRotW = 1;
-    // Bone bind world transform (Bullet space) — for delta-based bone feedback
+    // Bone's bind-pose world transform in Bullet space.
+    // Stored at build time; used in getBoneTransforms() to compute the body→bone delta
+    // and feed physics results back into the skeleton.
     float bonePosX = 0, bonePosY = 0, bonePosZ = 0;
     float boneRotX = 0, boneRotY = 0, boneRotZ = 0, boneRotW = 1;
-    bool clothLike = false;  // rotation-spring joints: use physics rotation, bone position
+    // True when connected to rotation-spring joints with freedom range.
+    // Affects getBoneTransforms(): cloth-like bodies contribute physics rotation
+    // but use bone-driven position to avoid cloth snapping.
+    bool clothLike = false;
     std::string name;
 };
 
+// Bullet Physics wrapper for PMX rigid bodies and joints.
+// Runs simulation in PMX-native space (no modelScale — gravity is scaled instead).
+// Coordinates are offset by model center so physics runs near origin for numerical stability.
+// The feedback loop: animation bones → updateMode0Bodies / step() → getBoneTransforms() → GPU.
 class PhysicsWorld {
-   public:
+public:
     PhysicsWorld();
     ~PhysicsWorld();
 
@@ -48,12 +60,10 @@ class PhysicsWorld {
     void getBoneTransforms(std::vector<std::array<float, 16>>& out) const;
 
     // For debug visualization
-    const std::vector<BulletBody>& bodies() const
-    {
+    const std::vector<BulletBody>& bodies() const {
         return mBodies;
     }
-    float modelScale() const
-    {
+    float modelScale() const {
         return mModelScale;
     }
     void debugDump() const;
@@ -65,7 +75,7 @@ class PhysicsWorld {
 
     bool enabled = true;
 
-   private:
+private:
     void addRigidBody(const PmxRigidBody& rb);
     void addJoint(const PmxJoint& jt);
     void computeBoneTarget(const BulletBody& bb,

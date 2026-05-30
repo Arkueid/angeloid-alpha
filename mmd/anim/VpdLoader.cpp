@@ -10,8 +10,7 @@
 #include <stdexcept>
 #include <string>
 
-void VpdPose::toMatrix(float out[9]) const
-{
+void VpdPose::toMatrix(float out[9]) const {
     float xx = qx * qx, yy = qy * qy, zz = qz * qz;
     float xy = qx * qy, yz = qy * qz, xz = qx * qz;
     float wx = qw * qx, wy = qw * qy, wz = qw * qz;
@@ -27,8 +26,15 @@ void VpdPose::toMatrix(float out[9]) const
     out[8] = 1.0f - 2.0f * (xx + yy);
 }
 
-std::unordered_map<std::string, VpdPose> VpdLoader::load(const std::filesystem::path& path)
-{
+// VPD (Vocaloid Pose Data) format — a text-based bone pose file.
+// Format per bone:
+//   Bone{bone_name
+//       tx,ty,tz;       // translation (comma-separated)
+//       qx,qy,qz,qw;    // rotation quaternion (comma-separated)
+//   }
+// Encoding may be Shift-JIS or UTF-8; auto-detected via isValidUtf8().
+// Comments (//...) and trailing semicolons are stripped.
+std::unordered_map<std::string, VpdPose> VpdLoader::load(const std::filesystem::path& path) {
     if (!std::filesystem::exists(path))
         throw std::runtime_error("VPD file not found: " + path.string());
 

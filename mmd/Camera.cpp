@@ -3,8 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-void Camera::reset()
-{
+void Camera::reset() {
     x = 0;
     y = 0;
     z = 10;
@@ -12,8 +11,7 @@ void Camera::reset()
     rotY = 0;
 }
 
-void Camera::update(float deltaTime, bool w, bool a, bool s, bool d, bool e, bool q)
-{
+void Camera::update(float deltaTime, bool w, bool a, bool s, bool d, bool e, bool q) {
     float dt = speed * deltaTime;
 
     float rotYRad = rotY * 3.14159265f / 180.0f;
@@ -52,13 +50,11 @@ void Camera::update(float deltaTime, bool w, bool a, bool s, bool d, bool e, boo
     }
 }
 
-void Camera::onMouseButton(bool pressed)
-{
+void Camera::onMouseButton(bool pressed) {
     mPanning = pressed;
 }
 
-void Camera::onCursorPos(double xpos, double ypos)
-{
+void Camera::onCursorPos(double xpos, double ypos) {
     if (!mPanning) {
         mLastMouseX = xpos;
         mLastMouseY = ypos;
@@ -76,8 +72,7 @@ void Camera::onCursorPos(double xpos, double ypos)
     mLastMouseY = ypos;
 }
 
-void Camera::onScroll(double yoffset)
-{
+void Camera::onScroll(double yoffset) {
     if (yoffset > 0) {
         if (speed >= 0.1f)
             speed += 0.1f;
@@ -97,8 +92,10 @@ void Camera::onScroll(double yoffset)
     speed = std::max(0.001f, std::min(20.0f, speed));
 }
 
-std::array<float, 16> Camera::viewMatrix() const
-{
+// FPS-style view matrix: first-person camera with Y-axis (yaw) then X-axis (pitch) rotation.
+// Column-major 4×4: the rotation is R_y(yaw) * R_x(pitch), and translation is -R^T * eye_pos.
+// rotY = yaw (horizontal), rotX = pitch (vertical, clamped to [-89°, 89°]).
+std::array<float, 16> Camera::viewMatrix() const {
     float cx = std::cos(rotX * 3.14159265f / 180.0f);
     float cy = std::cos(rotY * 3.14159265f / 180.0f);
     float sx = std::sin(rotX * 3.14159265f / 180.0f);
@@ -123,8 +120,7 @@ std::array<float, 16> Camera::viewMatrix() const
 }
 
 std::array<float, 16> Camera::projectionMatrix(int width, int height, float fov, float nearPlane,
-                                               float farPlane)
-{
+                                               float farPlane) {
     float aspect = (float)width / (float)height;
     float f = 1.0f / std::tan(fov * 3.14159265f / 360.0f);
     float a = -(farPlane + nearPlane) / (farPlane - nearPlane);

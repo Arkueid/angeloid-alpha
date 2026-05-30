@@ -11,8 +11,7 @@
 namespace mmd {
 
 void Model::load(const std::filesystem::path& pmxPath, const std::filesystem::path& texDir,
-                 const std::filesystem::path& toonDir, const std::filesystem::path& shaderDir)
-{
+                 const std::filesystem::path& toonDir, const std::filesystem::path& shaderDir) {
     mData = PmxReader::load(pmxPath);
     MMD_INFO("MODEL", "%s (%s)", mData.name.c_str(), mData.english_name.c_str());
     MMD_INFO("MODEL", "Vertices: %d, Faces: %d, Bones: %d", mData.vertexCount(), mData.faceCount(),
@@ -33,8 +32,7 @@ void Model::load(const std::filesystem::path& pmxPath, const std::filesystem::pa
     mMorphCtl.setModel(mData);
 }
 
-void Model::loadVpd(const std::filesystem::path& vpdPath)
-{
+void Model::loadVpd(const std::filesystem::path& vpdPath) {
     mVpdPath = vpdPath;
     if (!vpdPath.empty() && std::filesystem::exists(vpdPath)) {
         mVpdPoses = VpdLoader::load(vpdPath);
@@ -50,10 +48,16 @@ void Model::loadVpd(const std::filesystem::path& vpdPath)
     mPhysics.getBoneTransforms(mPoseWorld);
 }
 
-void Model::update(float dt)
-{
+// Per-frame update pipeline:
+//   1. VMD mixer: advance animation frames, compute bone + morph transforms
+//   2. Physics:   mode 0 bodies follow bones → step simulation → write back bone transforms
+//   3. Idle:      track idle time for auto-blink morph
+//   4. GPU sync:  pack pose world matrices into bone texture for vertex shader skinning
+void Model::update(float dt) {
+    // --- VMD animation ---
     if (mVmdMixer) {
         mVmdMixer->update(dt);
+        // Collect per-bone transforms from all VMD layers
         std::unordered_map<std::string, std::pair<std::array<float, 3>, std::array<float, 4>>> vmdT;
         for (const auto& bone : mData.bones) {
             std::array<float, 3> pos;
@@ -67,6 +71,7 @@ void Model::update(float dt)
             else
                 mPoseWorld = BoneSkinning::computePoseWorldMatrices(mData, {}, vmdT);
         }
+        // Collect morph weights from VMD
         std::unordered_map<std::string, float> vmdMorphs;
         for (const auto& m : mData.morphs) {
             float w = mVmdMixer->getMorphWeight(m.name);
@@ -77,22 +82,28 @@ void Model::update(float dt)
             mMorphCtl.setMorphWeights(vmdMorphs);
     }
 
+    // --- Physics ---
+    // Mode 0 (kinematic) bodies must follow their bones each frame before the step.
+    // When skinning is off, use bind pose as the bone reference.
     mPhysics.updateMode0Bodies(mRenderer.useSkinning ? mPoseWorld : mBindPoseWorld);
     if (mPhysics.enabled) {
         mPhysics.step(dt, mPoseWorld);
+        // Write physics results back into pose world matrices
         mPhysics.getBoneTransforms(mPoseWorld);
+        // Recompute child bones that inherit physics-deformed parents
         BoneSkinning::recomputeAfterPhysicsBones(mData, mVpdPoses, mPoseWorld);
     }
 
+    // --- Idle animation ---
     if (mIdleEnabled && (!mVmdMixer || !mVmdMixer->playing())) {
         mIdleTime += dt;
     }
 
+    // --- Upload bone matrices to GPU ---
     syncBoneTexture();
 }
 
-void Model::draw(int screenWidth, int screenHeight)
-{
+void Model::draw(int screenWidth, int screenHeight) {
     auto proj = Camera::projectionMatrix(screenWidth, screenHeight);
     auto view = Camera::instance().viewMatrix();
     float camPos[3] = {Camera::instance().x, Camera::instance().y, Camera::instance().z};
@@ -169,15 +180,13 @@ void Model::draw(int screenWidth, int screenHeight)
     }
 }
 
-void Model::enablePhysics(bool on)
-{
+void Model::enablePhysics(bool on) {
     mPhysics.enabled = on;
 }
 
 // --- VMD ---
 
-void Model::loadVmd(const std::filesystem::path& path)
-{
+void Model::loadVmd(const std::filesystem::path& path) {
     if (!std::filesystem::exists(path))
         return;
     auto anim = VmdAnimation::load(path);
@@ -189,64 +198,52 @@ void Model::loadVmd(const std::filesystem::path& path)
     mVmdMixer->addVmd(std::move(anim));
 }
 
-bool Model::hasVmd() const
-{
+bool Model::hasVmd() const {
     return mVmdMixer != nullptr;
 }
-void Model::vmdPlay()
-{
+void Model::vmdPlay() {
     if (mVmdMixer)
         mVmdMixer->play();
 }
-void Model::vmdPause()
-{
+void Model::vmdPause() {
     if (mVmdMixer)
         mVmdMixer->pause();
 }
-bool Model::vmdPlaying() const
-{
+bool Model::vmdPlaying() const {
     return mVmdMixer && mVmdMixer->playing();
 }
-bool Model::vmdLoop() const
-{
+bool Model::vmdLoop() const {
     return mVmdMixer && mVmdMixer->loop();
 }
-void Model::setVmdLoop(bool loop)
-{
+void Model::setVmdLoop(bool loop) {
     if (mVmdMixer)
         mVmdMixer->setLoop(loop);
 }
-float Model::vmdCurrentFrame() const
-{
+float Model::vmdCurrentFrame() const {
     return mVmdMixer ? mVmdMixer->currentFrame() : 0;
 }
-float Model::vmdMaxFrame() const
-{
+float Model::vmdMaxFrame() const {
     return mVmdMixer ? mVmdMixer->maxFrame() : 0;
 }
 
-void Model::setVmdFrame(float frame)
-{
+void Model::setVmdFrame(float frame) {
     if (mVmdMixer)
         mVmdMixer->setFrame(frame);
 }
 
 // --- Morph iteration ---
 
-int Model::morphCount() const
-{
+int Model::morphCount() const {
     return mData.morphCount();
 }
 
-std::string Model::morphName(int index) const
-{
+std::string Model::morphName(int index) const {
     if (index < 0 || index >= mData.morphCount())
         return {};
     return mData.morphs[index].name;
 }
 
-std::vector<int> Model::interactableMorphs() const
-{
+std::vector<int> Model::interactableMorphs() const {
     std::vector<int> result;
     for (int i = 0; i < mData.morphCount(); ++i) {
         int t = mData.morphs[i].morph_type;
@@ -257,8 +254,7 @@ std::vector<int> Model::interactableMorphs() const
     return result;
 }
 
-void Model::applyVpd(bool on)
-{
+void Model::applyVpd(bool on) {
     if (mVpdPoses.empty())
         return;
     mVpdApplied = on;
@@ -268,37 +264,34 @@ void Model::applyVpd(bool on)
     syncBoneTexture();
 }
 
-void Model::setMorphWeight(const std::string& name, float weight)
-{
+void Model::setMorphWeight(const std::string& name, float weight) {
     MMD_INFO("MORPH", "%s = %.2f", name.c_str(), weight);
     mMorphCtl.setMorphWeight(name, weight);
 }
 
-void Model::clearMorphs()
-{
+void Model::clearMorphs() {
     mMorphCtl.clearMorphs();
 }
 
-void Model::setMorphWeights(const std::unordered_map<std::string, float>& weights)
-{
+void Model::setMorphWeights(const std::unordered_map<std::string, float>& weights) {
     mMorphCtl.setMorphWeights(weights);
 }
 
-void Model::syncBoneTexture()
-{
+void Model::syncBoneTexture() {
     auto& bm = mMorphCtl.boneMorphs();
     mRenderer.updateBoneTexture(mData, mPoseWorld, bm.empty() ? nullptr : &bm);
 }
 
-void Model::syncMorphOffsets()
-{
+void Model::syncMorphOffsets() {
     bool idleActive = mIdleEnabled && (!mVmdMixer || !mVmdMixer->playing());
+    // Idle auto-blink: every 4 seconds, a 0.15s triangular blink waveform.
+    // Try multiple common morph names to handle different model naming conventions.
     if (idleActive) {
         float blinkPhase = fmodf(mIdleTime, 4.0f);
         float w = 0;
         if (blinkPhase < 0.15f) {
             float t = blinkPhase / 0.15f;
-            w = t < 0.5f ? t * 2.0f : (1.0f - t) * 2.0f;
+            w = t < 0.5f ? t * 2.0f : (1.0f - t) * 2.0f;  // Triangle wave: 0→1→0
         }
         for (auto& nm : {"blink", "blink_l", "blink_r", "まばたき", "まぶたき", "ウィンク", "ｳｨﾝｸ"})
             mMorphCtl.morphWeights()[nm] = w;

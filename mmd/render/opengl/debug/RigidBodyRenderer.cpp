@@ -7,19 +7,21 @@
 #include <btBulletDynamicsCommon.h>
 #include <cmath>
 
-// Face-based shape generators with per-vertex normals (smooth for sphere/capsule, flat for box)
-// Vertex layout: pos(3) + color(3) + normal(3) = 9 floats
+// Procedural shape generators for debug visualization of physics bodies.
+// Each shape is tessellated into triangles with per-vertex normals:
+//   Sphere:   smooth normals (radial from center)
+//   Capsule:  smooth normals on hemispheres, smooth on cylinder
+//   Box:      flat face normals
+// Vertex layout: pos(3) + color(3) + normal(3) = 9 floats per vertex
 
 static void emitTri(std::vector<float>& v, float x1, float y1, float z1, float x2, float y2,
                     float z2, float x3, float y3, float z3, float nx, float ny, float nz,
-                    const Vec3& c)
-{
+                    const Vec3& c) {
     v.insert(v.end(), {x1,  y1, z1, c.x, c.y, c.z, nx, ny,  nz,  x2,  y2, z2, c.x, c.y,
                        c.z, nx, ny, nz,  x3,  y3,  z3, c.x, c.y, c.z, nx, ny, nz});
 }
 
-static void addBox(std::vector<float>& verts, const Vec3& hs, const Vec3& c)
-{
+static void addBox(std::vector<float>& verts, const Vec3& hs, const Vec3& c) {
     float v[8][3] = {
         {-hs.x, -hs.y, -hs.z}, {hs.x, -hs.y, -hs.z}, {hs.x, hs.y, -hs.z}, {-hs.x, hs.y, -hs.z},
         {-hs.x, -hs.y, hs.z},  {hs.x, -hs.y, hs.z},  {hs.x, hs.y, hs.z},  {-hs.x, hs.y, hs.z},
@@ -38,15 +40,13 @@ static void addBox(std::vector<float>& verts, const Vec3& hs, const Vec3& c)
 }
 
 // Emit one vertex with normal = normalized position from center
-static void emitV(std::vector<float>& v, float x, float y, float z, const Vec3& c)
-{
+static void emitV(std::vector<float>& v, float x, float y, float z, const Vec3& c) {
     float len = sqrtf(x * x + y * y + z * z);
     float nx = len > 0 ? x / len : 0, ny = len > 0 ? y / len : 0, nz = len > 0 ? z / len : 1;
     v.insert(v.end(), {x, y, z, c.x, c.y, c.z, nx, ny, nz});
 }
 
-static void addSphere(std::vector<float>& verts, float r, const Vec3& c)
-{
+static void addSphere(std::vector<float>& verts, float r, const Vec3& c) {
     int slices = 12, stacks = 6;
     float pts[8][13][3];
     for (int s = 0; s <= stacks; ++s) {
@@ -72,8 +72,7 @@ static void addSphere(std::vector<float>& verts, float r, const Vec3& c)
     }
 }
 
-static void addCapsule(std::vector<float>& verts, float r, float h, const Vec3& c)
-{
+static void addCapsule(std::vector<float>& verts, float r, float h, const Vec3& c) {
     int slices = 12, hStacks = 3;
     float hh = h * 0.5f;
     float topPts[4][13][3], botPts[4][13][3];
@@ -166,8 +165,7 @@ static void addCapsule(std::vector<float>& verts, float r, float h, const Vec3& 
 // Float VBO: pos(3)+color(3)+normal(3)=9 floats stride. Separate int VBO for bone_index
 
 static void setupVao(Gpu::Vao& vao, const std::vector<float>& verts,
-                     const std::vector<int32_t>& boneIdx)
-{
+                     const std::vector<int32_t>& boneIdx) {
     if (verts.empty())
         return;
     vao.bind();
@@ -195,8 +193,7 @@ static void setupVao(Gpu::Vao& vao, const std::vector<float>& verts,
 }
 
 static void buildPass(const PmxModel& model, float cx, float my, float cz, float ms, bool forBone,
-                      Gpu::Vao& rbVao, Gpu::Vao& jtVao)
-{
+                      Gpu::Vao& rbVao, Gpu::Vao& jtVao) {
     Vec3 colors[] = {{1, 1, 0}, {1, 0.5f, 0}, {0, 1, 1}, {1, 0, 1}};
 
     // --- Rigid bodies ---
@@ -309,8 +306,7 @@ static void buildPass(const PmxModel& model, float cx, float my, float cz, float
     }
 }
 
-void RigidBodyRenderer::build(const PmxModel& model, float modelScale)
-{
+void RigidBodyRenderer::build(const PmxModel& model, float modelScale) {
     Vec3 minPos = {1e9f, 1e9f, 1e9f}, maxPos = {-1e9f, -1e9f, -1e9f};
     for (const auto& v : model.vertices) {
         minPos.x = std::min(minPos.x, v.position.x);
@@ -329,13 +325,18 @@ void RigidBodyRenderer::build(const PmxModel& model, float modelScale)
     buildPass(model, mCx, mMy, mCz, modelScale, true, mRbAnimated, mJtAnimated);
 }
 
-void RigidBodyRenderer::updateFromPhysics(const PhysicsWorld& world)
-{
+// Update debug visualization from live physics state.
+// Strategy: upload each body's world matrix to a floating-point texture,
+// then use instanced rendering in the vertex shader (sampling the texture
+// by gl_InstanceID) to transform each shape from local space to world space.
+// The VAO is rebuilt only when the body count changes.
+void RigidBodyRenderer::updateFromPhysics(const PhysicsWorld& world) {
     Vec3 colors[] = {{1, 1, 0}, {1, 0.5f, 0}, {0, 1, 1}, {1, 0, 1}};
     const auto& bodies = world.bodies();
     int nBodies = (int)bodies.size();
 
-    // Build body world matrices for texture upload
+    // Pack body world matrices into a flat array for texture upload.
+    // Each body gets a column-major 4×4 matrix (16 floats).
     std::vector<float> bodyMats(nBodies * 16, 0);
     for (int i = 0; i < nBodies; ++i) {
         if (!bodies[i].body)
@@ -431,8 +432,8 @@ void RigidBodyRenderer::updateFromPhysics(const PhysicsWorld& world)
 }
 
 void RigidBodyRenderer::render(Gpu::ShaderProgram& shader, const std::array<float, 16>& projection,
-                               const std::array<float, 16>& view, const float* modelMatParam) const
-{
+                               const std::array<float, 16>& view,
+                               const float* modelMatParam) const {
     float defMat[] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1};
     const float* mm = modelMatParam ? modelMatParam : defMat;
 

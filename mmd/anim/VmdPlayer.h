@@ -35,7 +35,7 @@ std::array<float, 3> lerpVec3(const std::array<float, 3>& a, const std::array<fl
 // --- Single VMD animation ---
 
 class VmdAnimation {
-   public:
+public:
     std::string modelName;
     std::unordered_map<std::string, std::vector<VmdBoneKeyframe>> boneKeyframes;
     std::unordered_map<std::string, std::vector<VmdMorphKeyframe>> morphKeyframes;
@@ -48,7 +48,7 @@ class VmdAnimation {
 // --- Player that advances frames and samples transforms ---
 
 class VmdPlayer {
-   public:
+public:
     explicit VmdPlayer(VmdAnimation anim, float fps = 30.0f);
 
     void play();
@@ -63,34 +63,28 @@ class VmdPlayer {
 
     float getMorphWeight(const std::string& morphName) const;
 
-    const VmdAnimation& animation() const
-    {
+    const VmdAnimation& animation() const {
         return mAnimation;
     }
-    float currentFrame() const
-    {
+    float currentFrame() const {
         return mCurrentFrame;
     }
-    bool playing() const
-    {
+    bool playing() const {
         return mPlaying;
     }
 
-    bool loop() const
-    {
+    bool loop() const {
         return mLoop;
     }
-    void setLoop(bool loop)
-    {
+    void setLoop(bool loop) {
         mLoop = loop;
     }
     void setFrame(float frame);
-    void setFps(float fps)
-    {
+    void setFps(float fps) {
         mFps = fps;
     }
 
-   private:
+private:
     VmdAnimation mAnimation;
     float mFps = 30;
     float mCurrentFrame = 0;
@@ -101,7 +95,7 @@ class VmdPlayer {
 // --- Mixer: blends multiple VMD layers ---
 
 class VmdMixer {
-   public:
+public:
     explicit VmdMixer(float fps = 30.0f);
 
     void addVmd(VmdAnimation anim);
@@ -118,26 +112,22 @@ class VmdMixer {
 
     float getMorphWeight(const std::string& morphName) const;
 
-    float currentFrame() const
-    {
+    float currentFrame() const {
         return mPlayers.empty() ? 0 : mPlayers[0].currentFrame();
     }
-    float maxFrame() const
-    {
+    float maxFrame() const {
         return mMaxFrame;
     }
-    bool playing() const
-    {
+    bool playing() const {
         return mPlaying;
     }
-    bool loop() const
-    {
+    bool loop() const {
         return mLoop;
     }
     void setLoop(bool loop);
     void setFrame(float frame);
 
-   private:
+private:
     std::vector<VmdPlayer> mPlayers;
     float mFps = 30;
     float mMaxFrame = 0;

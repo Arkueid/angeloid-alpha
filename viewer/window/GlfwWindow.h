@@ -6,32 +6,28 @@
 #include <GLFW/glfw3.h>
 
 class GlfwWindow : public IWindow {
-   public:
+public:
     GlfwWindow(int width, int height, const std::string& title);
     ~GlfwWindow() override;
 
     void run() override;
-    float deltaTime() const override
-    {
+    float deltaTime() const override {
         return mDeltaTime;
     }
-    int width() const override
-    {
+    int width() const override {
         return mWidth;
     }
-    int height() const override
-    {
+    int height() const override {
         return mHeight;
     }
     void setTitle(const std::string& title) override;
     void close() override;
 
-    GLFWwindow* glfwWindow() const
-    {
+    GLFWwindow* glfwWindow() const {
         return mWindow;
     }
 
-   private:
+private:
     static void framebufferSizeCallback(GLFWwindow* win, int w, int h);
     static void keyCallback(GLFWwindow* win, int key, int scancode, int action, int mods);
     static void mouseButtonCallback(GLFWwindow* win, int button, int action, int mods);

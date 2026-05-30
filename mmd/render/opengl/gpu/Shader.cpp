@@ -13,8 +13,7 @@ namespace Gpu {
 
 // --- Utility ---
 
-std::string ShaderProgram::readFile(const std::filesystem::path& path)
-{
+std::string ShaderProgram::readFile(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open shader: " + path.string());
@@ -24,8 +23,7 @@ std::string ShaderProgram::readFile(const std::filesystem::path& path)
     return buf.str();
 }
 
-static GLuint compileShader(GLenum type, const std::string& src)
-{
+static GLuint compileShader(GLenum type, const std::string& src) {
     GLuint shader = glCreateShader(type);
     const char* srcPtr = src.c_str();
     glShaderSource(shader, 1, &srcPtr, nullptr);
@@ -44,8 +42,7 @@ static GLuint compileShader(GLenum type, const std::string& src)
     return shader;
 }
 
-GLuint ShaderProgram::compileProgram(const std::string& vertexSrc, const std::string& fragmentSrc)
-{
+GLuint ShaderProgram::compileProgram(const std::string& vertexSrc, const std::string& fragmentSrc) {
     GLuint vs = compileShader(GL_VERTEX_SHADER, vertexSrc);
     GLuint fs = compileShader(GL_FRAGMENT_SHADER, fragmentSrc);
     if (!vs || !fs) {
@@ -79,22 +76,18 @@ GLuint ShaderProgram::compileProgram(const std::string& vertexSrc, const std::st
 // --- ShaderProgram ---
 
 ShaderProgram::ShaderProgram(const std::string& vertexSrc, const std::string& fragmentSrc)
-    : mProgramId(compileProgram(vertexSrc, fragmentSrc))
-{
+    : mProgramId(compileProgram(vertexSrc, fragmentSrc)) {
 }
 
-ShaderProgram::~ShaderProgram()
-{
+ShaderProgram::~ShaderProgram() {
     destroy();
 }
 
-ShaderProgram::ShaderProgram(ShaderProgram&& other) noexcept : mProgramId(other.mProgramId)
-{
+ShaderProgram::ShaderProgram(ShaderProgram&& other) noexcept : mProgramId(other.mProgramId) {
     other.mProgramId = 0;
 }
 
-ShaderProgram& ShaderProgram::operator=(ShaderProgram&& other) noexcept
-{
+ShaderProgram& ShaderProgram::operator=(ShaderProgram&& other) noexcept {
     if (this != &other) {
         destroy();
         mProgramId = other.mProgramId;
@@ -103,60 +96,51 @@ ShaderProgram& ShaderProgram::operator=(ShaderProgram&& other) noexcept
     return *this;
 }
 
-void ShaderProgram::use() const
-{
+void ShaderProgram::use() const {
     glUseProgram(mProgramId);
 }
 
-static GLint getLocation(GLuint program, const std::string& name)
-{
+static GLint getLocation(GLuint program, const std::string& name) {
     return glGetUniformLocation(program, name.c_str());
 }
 
-void ShaderProgram::setInt(const std::string& name, int value) const
-{
+void ShaderProgram::setInt(const std::string& name, int value) const {
     GLint loc = getLocation(mProgramId, name);
     if (loc != -1)
         glUniform1i(loc, value);
 }
 
-void ShaderProgram::setFloat(const std::string& name, float value) const
-{
+void ShaderProgram::setFloat(const std::string& name, float value) const {
     GLint loc = getLocation(mProgramId, name);
     if (loc != -1)
         glUniform1f(loc, value);
 }
 
-void ShaderProgram::setVec2(const std::string& name, float x, float y) const
-{
+void ShaderProgram::setVec2(const std::string& name, float x, float y) const {
     GLint loc = getLocation(mProgramId, name);
     if (loc != -1)
         glUniform2f(loc, x, y);
 }
 
-void ShaderProgram::setVec3(const std::string& name, float x, float y, float z) const
-{
+void ShaderProgram::setVec3(const std::string& name, float x, float y, float z) const {
     GLint loc = getLocation(mProgramId, name);
     if (loc != -1)
         glUniform3f(loc, x, y, z);
 }
 
-void ShaderProgram::setVec4(const std::string& name, float x, float y, float z, float w) const
-{
+void ShaderProgram::setVec4(const std::string& name, float x, float y, float z, float w) const {
     GLint loc = getLocation(mProgramId, name);
     if (loc != -1)
         glUniform4f(loc, x, y, z, w);
 }
 
-void ShaderProgram::setMat4(const std::string& name, const float* data) const
-{
+void ShaderProgram::setMat4(const std::string& name, const float* data) const {
     GLint loc = getLocation(mProgramId, name);
     if (loc != -1)
         glUniformMatrix4fv(loc, 1, GL_FALSE, data);
 }
 
-void ShaderProgram::destroy()
-{
+void ShaderProgram::destroy() {
     if (mProgramId) {
         glDeleteProgram(mProgramId);
         mProgramId = 0;

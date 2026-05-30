@@ -11,7 +11,7 @@
 class PhysicsWorld;
 
 class RigidBodyRenderer {
-   public:
+public:
     void build(const PmxModel& model, float modelScale = 1.0f);
     void updateFromPhysics(const PhysicsWorld& world);
 
@@ -22,7 +22,7 @@ class RigidBodyRenderer {
     bool showJoint = true;
     bool useBoneMatrices = false;
 
-   private:
+private:
     Gpu::Vao mRbStatic, mRbAnimated;
     Gpu::Vao mJtStatic, mJtAnimated;
     Gpu::Vao mRbPhysics, mJtPhysics;

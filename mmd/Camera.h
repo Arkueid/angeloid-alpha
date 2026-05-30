@@ -4,9 +4,8 @@
 #include <cmath>
 
 class Camera {
-   public:
-    static Camera& instance()
-    {
+public:
+    static Camera& instance() {
         static Camera cam;
         return cam;
     }
@@ -30,7 +29,7 @@ class Camera {
     float speed = 5.0f;
     float mouseSensitivity = 0.1f;
 
-   private:
+private:
     Camera() = default;
     bool mPanning = false;
     double mLastMouseX = 0, mLastMouseY = 0;

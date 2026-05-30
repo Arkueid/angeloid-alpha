@@ -18,8 +18,7 @@
 
 namespace fs = std::filesystem;
 
-static void printHelp()
-{
+static void printHelp() {
     std::cout << "\nFPS Camera Controls:\n"
                  "  Left mouse drag: Rotate camera view\n"
                  "  W/A/S/D: Move forward/left/backward/right\n"
@@ -67,8 +66,7 @@ static const std::unordered_map<std::string, const char*> MODELS = {
     {"卢西娅-武器2", "resources/models/卢西娅/武器2.pmx"},
 };
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
 #ifdef _WIN32
     std::system("chcp 65001 > nul");
     std::vector<std::string> u8args(argc);

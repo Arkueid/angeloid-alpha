@@ -4,8 +4,7 @@
 #include <stdexcept>
 
 GlfwWindow::GlfwWindow(int width, int height, const std::string& title)
-    : mWidth(width), mHeight(height)
-{
+    : mWidth(width), mHeight(height) {
     if (!glfwInit())
         throw std::runtime_error("Failed to initialize GLFW");
 
@@ -46,15 +45,13 @@ GlfwWindow::GlfwWindow(int width, int height, const std::string& title)
     mLastTime = static_cast<float>(glfwGetTime());
 }
 
-GlfwWindow::~GlfwWindow()
-{
+GlfwWindow::~GlfwWindow() {
     if (mWindow)
         glfwDestroyWindow(mWindow);
     glfwTerminate();
 }
 
-void GlfwWindow::run()
-{
+void GlfwWindow::run() {
     while (!glfwWindowShouldClose(mWindow)) {
         float now = static_cast<float>(glfwGetTime());
         mDeltaTime = now - mLastTime;
@@ -76,18 +73,15 @@ void GlfwWindow::run()
     }
 }
 
-void GlfwWindow::setTitle(const std::string& title)
-{
+void GlfwWindow::setTitle(const std::string& title) {
     glfwSetWindowTitle(mWindow, title.c_str());
 }
 
-void GlfwWindow::close()
-{
+void GlfwWindow::close() {
     glfwSetWindowShouldClose(mWindow, GLFW_TRUE);
 }
 
-void GlfwWindow::framebufferSizeCallback(GLFWwindow* win, int w, int h)
-{
+void GlfwWindow::framebufferSizeCallback(GLFWwindow* win, int w, int h) {
     auto* self = static_cast<GlfwWindow*>(glfwGetWindowUserPointer(win));
     self->mWidth = w;
     self->mHeight = h;
@@ -96,29 +90,25 @@ void GlfwWindow::framebufferSizeCallback(GLFWwindow* win, int w, int h)
         self->onResize(w, h);
 }
 
-void GlfwWindow::keyCallback(GLFWwindow* win, int key, int scancode, int action, int mods)
-{
+void GlfwWindow::keyCallback(GLFWwindow* win, int key, int scancode, int action, int mods) {
     auto* self = static_cast<GlfwWindow*>(glfwGetWindowUserPointer(win));
     if (self->onKey)
         self->onKey(key, scancode, action, mods);
 }
 
-void GlfwWindow::mouseButtonCallback(GLFWwindow* win, int button, int action, int mods)
-{
+void GlfwWindow::mouseButtonCallback(GLFWwindow* win, int button, int action, int mods) {
     auto* self = static_cast<GlfwWindow*>(glfwGetWindowUserPointer(win));
     if (self->onMouseButton)
         self->onMouseButton(button, action, mods);
 }
 
-void GlfwWindow::cursorPosCallback(GLFWwindow* win, double x, double y)
-{
+void GlfwWindow::cursorPosCallback(GLFWwindow* win, double x, double y) {
     auto* self = static_cast<GlfwWindow*>(glfwGetWindowUserPointer(win));
     if (self->onCursorPos)
         self->onCursorPos(x, y);
 }
 
-void GlfwWindow::scrollCallback(GLFWwindow* win, double xoffset, double yoffset)
-{
+void GlfwWindow::scrollCallback(GLFWwindow* win, double xoffset, double yoffset) {
     auto* self = static_cast<GlfwWindow*>(glfwGetWindowUserPointer(win));
     if (self->onScroll)
         self->onScroll(xoffset, yoffset);

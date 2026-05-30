@@ -6,8 +6,7 @@
 
 MorphController::MorphController() = default;
 
-void MorphController::setModel(const PmxModel& model)
-{
+void MorphController::setModel(const PmxModel& model) {
     mModel = &model;
     mPosOffsets.assign(model.vertexCount() * 3, 0);
     mUvOffsets.assign(model.vertexCount() * 2, 0);
@@ -20,30 +19,34 @@ void MorphController::setModel(const PmxModel& model)
     }
 }
 
-void MorphController::setMorphWeight(const std::string& name, float weight)
-{
+void MorphController::setMorphWeight(const std::string& name, float weight) {
     mMorphWeights[name] = weight;
     updateMorphOffsets();
 }
 
-void MorphController::setMorphWeights(const std::unordered_map<std::string, float>& weights)
-{
+void MorphController::setMorphWeights(const std::unordered_map<std::string, float>& weights) {
     mMorphWeights = weights;
     updateMorphOffsets();
 }
 
-void MorphController::clearMorphs()
-{
+void MorphController::clearMorphs() {
     mMorphWeights.clear();
     updateMorphOffsets();
 }
 
+// Recursively apply morph offsets, handling group morphs by traversing their children.
+// Each morph type accumulates into a different buffer:
+//   VERTEX → posOffsets (flat float3 per vertex)
+//   UV     → uvOffsets (flat float2 per vertex)
+//   MATERIAL → matOverrides (per-material alpha/diffuse/specular/edge)
+//   BONE   → boneMorphs (per-bone translation + slerped rotation)
+//   GROUP  → recurse into children, multiplying their values by the group's weight
+//   UV_EXT* → skipped (renderer only uses base UV channel)
 static void applyMorphRecursive(const PmxModel& model, int morphIndex, float weight,
                                 std::vector<float>& posOffsets, std::vector<float>& uvOffsets,
                                 int vertexCount,
                                 std::unordered_map<int, MatMorphOverride>& matOverrides,
-                                std::unordered_map<int, BoneMorphTransform>& boneMorphs)
-{
+                                std::unordered_map<int, BoneMorphTransform>& boneMorphs) {
     if (morphIndex < 0 || morphIndex >= model.morphCount())
         return;
     const auto& morph = model.morphs[morphIndex];
@@ -88,6 +91,7 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex, float wei
         int matCount = model.materialCount();
         for (const auto& offset : morph.offsets) {
             if (auto* m = std::get_if<MaterialMorphOffset>(&offset)) {
+                // material_index < 0 means "all materials" (global morph)
                 int idx = m->material_index;
                 int start = (idx < 0) ? 0 : idx;
                 int end = (idx < 0) ? matCount : idx + 1;
@@ -95,10 +99,11 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex, float wei
                     auto it = matOverrides.find(mi);
                     if (it == matOverrides.end()) {
                         it = matOverrides.emplace(mi, MatMorphOverride{}).first;
+                        // Seed from base material alpha so multiply-mode has the original value
                         it->second.alpha = model.materials[mi].alpha;
                     }
                     auto& ov = it->second;
-                    // Alpha
+                    // calc_mode 0 = multiply (blend toward target), default = additive
                     float curA = ov.alpha;
                     float na = (m->calc_mode == 0)
                                    ? curA * (m->diffuse.w * weight + (1.0f - weight))
@@ -134,9 +139,12 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex, float wei
                 if (idx < 0)
                     continue;
                 auto& bm = boneMorphs[idx];
+                // Translation is additive (weighted sum)
                 bm.translation[0] += b->position.x * weight;
                 bm.translation[1] += b->position.y * weight;
                 bm.translation[2] += b->position.z * weight;
+                // Rotation uses quaternion slerp to properly interpolate on the sphere.
+                // Accumulating multiple bone morphs: slerp from current toward each target.
                 std::array<float, 4> mr = {b->rotation.x, b->rotation.y, b->rotation.z,
                                            b->rotation.w};
                 bm.rotation = quatSlerp(bm.rotation, mr, weight);
@@ -145,8 +153,7 @@ static void applyMorphRecursive(const PmxModel& model, int morphIndex, float wei
     }
 }
 
-void MorphController::updateMorphOffsets()
-{
+void MorphController::updateMorphOffsets() {
     if (!mModel)
         return;
 
@@ -173,14 +180,12 @@ void MorphController::updateMorphOffsets()
     mLastHadActive = anyActive;
 }
 
-float MorphController::getMaterialAlpha(int materialIndex, float originalAlpha) const
-{
+float MorphController::getMaterialAlpha(int materialIndex, float originalAlpha) const {
     auto it = mMaterialOverrides.find(materialIndex);
     return it != mMaterialOverrides.end() ? it->second.alpha : originalAlpha;
 }
 
-const MatMorphOverride* MorphController::getMaterialOverride(int materialIndex) const
-{
+const MatMorphOverride* MorphController::getMaterialOverride(int materialIndex) const {
     auto it = mMaterialOverrides.find(materialIndex);
     return it != mMaterialOverrides.end() ? &it->second : nullptr;
 }

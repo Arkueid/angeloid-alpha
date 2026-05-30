@@ -6,21 +6,18 @@ namespace Gpu {
 
 // --- VboWrapper ---
 
-void VboWrapper::write(const void* data, size_t bytes) const
-{
+void VboWrapper::write(const void* data, size_t bytes) const {
     glBindBuffer(GL_ARRAY_BUFFER, vboId);
     glBufferData(GL_ARRAY_BUFFER, bytes, data, GL_DYNAMIC_DRAW);
 }
 
 // --- Vao ---
 
-Vao::Vao()
-{
+Vao::Vao() {
     glGenVertexArrays(1, &vaoId);
 }
 
-Vao::~Vao()
-{
+Vao::~Vao() {
     destroy();
 }
 
@@ -29,16 +26,14 @@ Vao::Vao(Vao&& other) noexcept
       vbos(std::move(other.vbos)),
       ebo(other.ebo),
       indexCount(other.indexCount),
-      vertexCount(other.vertexCount)
-{
+      vertexCount(other.vertexCount) {
     other.vaoId = 0;
     other.ebo = 0;
     other.indexCount = 0;
     other.vertexCount = 0;
 }
 
-Vao& Vao::operator=(Vao&& other) noexcept
-{
+Vao& Vao::operator=(Vao&& other) noexcept {
     if (this != &other) {
         destroy();
         vaoId = other.vaoId;
@@ -54,18 +49,15 @@ Vao& Vao::operator=(Vao&& other) noexcept
     return *this;
 }
 
-void Vao::bind() const
-{
+void Vao::bind() const {
     glBindVertexArray(vaoId);
 }
-void Vao::unbind()
-{
+void Vao::unbind() {
     glBindVertexArray(0);
 }
 
 GLuint Vao::addVbo(const void* data, size_t bytes, int location, int size, GLenum dtype, int stride,
-                   int offset)
-{
+                   int offset) {
     GLuint vbo;
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -83,8 +75,7 @@ GLuint Vao::addVbo(const void* data, size_t bytes, int location, int size, GLenu
     return vbo;
 }
 
-void Vao::setEbo(const void* data, size_t bytes, GLenum indexType)
-{
+void Vao::setEbo(const void* data, size_t bytes, GLenum indexType) {
     glGenBuffers(1, &ebo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, bytes, data, GL_STATIC_DRAW);
@@ -99,14 +90,12 @@ void Vao::setEbo(const void* data, size_t bytes, GLenum indexType)
     }
 }
 
-void Vao::updateVbo(int vboIndex, const void* data, size_t bytes) const
-{
+void Vao::updateVbo(int vboIndex, const void* data, size_t bytes) const {
     glBindBuffer(GL_ARRAY_BUFFER, vbos[vboIndex]);
     glBufferData(GL_ARRAY_BUFFER, bytes, data, GL_DYNAMIC_DRAW);
 }
 
-void Vao::render(GLenum mode, int count, int first) const
-{
+void Vao::render(GLenum mode, int count, int first) const {
     bind();
     if (ebo) {
         int n = count >= 0 ? count : indexCount;
@@ -119,8 +108,7 @@ void Vao::render(GLenum mode, int count, int first) const
     unbind();
 }
 
-void Vao::destroy()
-{
+void Vao::destroy() {
     if (!vbos.empty()) {
         glDeleteBuffers((GLsizei)vbos.size(), vbos.data());
         vbos.clear();
@@ -138,8 +126,7 @@ void Vao::destroy()
 // --- Gpu::Vao::create ---
 
 Vao Vao::create(const std::vector<VertexBufferDesc>& vertexBuffers, const void* indices,
-                size_t indexBytes, GLenum indexType)
-{
+                size_t indexBytes, GLenum indexType) {
     Vao vao;
     vao.bind();
     for (const auto& desc : vertexBuffers) {

@@ -2,8 +2,8 @@
 
 ## Build & Run
 ```bash
-cmake -B build -S . && cmake --build build --config Release
-./build/viewer/Release/viewer.exe -m <model-name>
+cmake --preset default && cmake --build build
+./build/viewer/viewer.exe -m <model-name>
 ```
 
 ## Project structure

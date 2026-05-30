@@ -5,8 +5,7 @@
 #include <filesystem>
 
 ShaderManager::ShaderManager(const std::filesystem::path& shaderDir)
-    : mShaderDir(shaderDir.string())
-{
+    : mShaderDir(shaderDir.string()) {
     createMainShader();
     createAxisShader();
     createRigidbodyShader();
@@ -17,15 +16,13 @@ ShaderManager::ShaderManager(const std::filesystem::path& shaderDir)
     createGradientTexture();
 }
 
-Gpu::ShaderProgram* ShaderManager::get(const std::string& name)
-{
+Gpu::ShaderProgram* ShaderManager::get(const std::string& name) {
     auto it = mPrograms.find(name);
     return it != mPrograms.end() ? it->second.get() : nullptr;
 }
 
 Gpu::ShaderProgram& ShaderManager::addProgram(const std::string& name, const std::string& vertFile,
-                                              const std::string& fragFile)
-{
+                                              const std::string& fragFile) {
     auto vertSrc = Gpu::ShaderProgram::readFile(mShaderDir + "/" + vertFile);
     auto fragSrc = Gpu::ShaderProgram::readFile(mShaderDir + "/" + fragFile);
     auto prog = std::make_unique<Gpu::ShaderProgram>(vertSrc, fragSrc);
@@ -34,8 +31,7 @@ Gpu::ShaderProgram& ShaderManager::addProgram(const std::string& name, const std
     return ref;
 }
 
-void ShaderManager::createMainShader()
-{
+void ShaderManager::createMainShader() {
     auto& p = addProgram("main", "main.vert", "main.frag");
     p.use();
     p.setVec3("light_dir", 0.0f, 0.5f, -1.0f);
@@ -45,18 +41,15 @@ void ShaderManager::createMainShader()
     p.setVec3("material_color", 1.0f, 1.0f, 1.0f);
 }
 
-void ShaderManager::createAxisShader()
-{
+void ShaderManager::createAxisShader() {
     addProgram("axis", "axis.vert", "axis.frag");
 }
 
-void ShaderManager::createRigidbodyShader()
-{
+void ShaderManager::createRigidbodyShader() {
     addProgram("rigidbody", "rigidbody.vert", "rigidbody.frag");
 }
 
-void ShaderManager::createOutlineShader()
-{
+void ShaderManager::createOutlineShader() {
     auto& p = addProgram("outline", "outline.vert", "outline.frag");
     p.use();
     p.setVec4("outline_color", 0.0f, 0.0f, 0.0f, 1.0f);
@@ -74,8 +67,7 @@ void ShaderManager::createOutlineShader()
     ps.setFloat("alpha", 1.0f);
 }
 
-void ShaderManager::createToonShader()
-{
+void ShaderManager::createToonShader() {
     auto& p = addProgram("toon", "toon.vert", "toon.frag");
     p.use();
     p.setVec3("light_dir", 0.0f, 0.5f, -1.0f);
@@ -93,8 +85,7 @@ void ShaderManager::createToonShader()
     p.setInt("sphere_mode", 0);
 }
 
-void ShaderManager::createSkinnedShader()
-{
+void ShaderManager::createSkinnedShader() {
     auto& p = addProgram("skinned", "skinned.vert", "toon.frag");
     p.use();
     p.setVec3("light_dir", 0.0f, 0.5f, -1.0f);
@@ -118,8 +109,7 @@ void ShaderManager::createSkinnedShader()
     pn.setVec3("material_color", 1.0f, 1.0f, 1.0f);
 }
 
-void ShaderManager::createMorphShader()
-{
+void ShaderManager::createMorphShader() {
     auto& p = addProgram("morph", "skinned_morph.vert", "toon.frag");
     p.use();
     p.setVec3("light_dir", 0.0f, 0.5f, -1.0f);
@@ -157,9 +147,10 @@ void ShaderManager::createMorphShader()
     po.setFloat("alpha", 1.0f);
 }
 
-void ShaderManager::createGradientTexture()
-{
-    // 4-level gray gradient: dark → light
+void ShaderManager::createGradientTexture() {
+    // 4-level gray gradient used by the toon fragment shader for cel-shading ramp.
+    // The shader computes N·L dot product and uses it as a UV coordinate into this
+    // 1D gradient texture, producing the discrete shadow bands characteristic of toon rendering.
     uint8_t gradient[] = {
         60, 60, 60, 120, 120, 120, 180, 180, 180, 220, 220, 220,
     };
@@ -168,8 +159,7 @@ void ShaderManager::createGradientTexture()
     mGradientTexture->setWrap(false, false);
 }
 
-void ShaderManager::setOutlineThickness(float thickness)
-{
+void ShaderManager::setOutlineThickness(float thickness) {
     auto* outline = get("outline");
     if (outline) {
         outline->use();

@@ -8,7 +8,7 @@
 namespace Gpu {
 
 class ShaderProgram {
-   public:
+public:
     ShaderProgram() = default;
     ShaderProgram(const std::string& vertexSrc, const std::string& fragmentSrc);
     ~ShaderProgram();
@@ -17,12 +17,10 @@ class ShaderProgram {
     ShaderProgram(ShaderProgram&&) noexcept;
     ShaderProgram& operator=(ShaderProgram&&) noexcept;
 
-    bool isValid() const
-    {
+    bool isValid() const {
         return mProgramId != 0;
     }
-    GLuint id() const
-    {
+    GLuint id() const {
         return mProgramId;
     }
 
@@ -40,7 +38,7 @@ class ShaderProgram {
     static std::string readFile(const std::filesystem::path& path);
     static GLuint compileProgram(const std::string& vertexSrc, const std::string& fragmentSrc);
 
-   private:
+private:
     GLuint mProgramId = 0;
 };
 
