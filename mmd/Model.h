@@ -8,11 +8,11 @@
 #include "anim/VpdLoader.h"
 #include "pmx/PmxModel.h"
 #include "render/opengl/ModelRenderer.h"
-#include "render/opengl/ShaderManager.h"
 #include "render/opengl/debug/RigidBodyRenderer.h"
 
 #include <array>
 #include <filesystem>
+#include <deque>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -25,8 +25,7 @@ public:
     Model() = default;
 
     // --- Loading ---
-    void load(const std::filesystem::path& pmxPath, const std::filesystem::path& texDir,
-              const std::filesystem::path& toonDir, const std::filesystem::path& shaderDir);
+    void load(const std::filesystem::path& pmxPath);
     void loadVpd(const std::filesystem::path& vpdPath);
 
     // --- Per-frame ---
@@ -88,6 +87,7 @@ public:
 
     // --- Morphs ---
     void setMorphWeight(const std::string& name, float weight);
+    float savedMorphWeight(const std::string& name) const;
     void clearMorphs();
     void setMorphWeights(const std::unordered_map<std::string, float>& weights);
     void setIdleBlink(bool on) {
@@ -99,10 +99,10 @@ public:
 
     // --- Accessors ---
     const std::string& modelName() const {
-        return mData.name;
+        return mPmx.name;
     }
     const PmxModel& data() const {
-        return mData;
+        return mPmx;
     }
     float modelScale() const {
         return mRenderer.modelScale();
@@ -115,16 +115,17 @@ private:
     void syncBoneTexture();
     void syncMorphOffsets();
 
-    PmxModel mData;
+    PmxModel mPmx;
     ModelRenderer mRenderer;
     PhysicsWorld mPhysics;
     MorphController mMorphCtl;
-    std::unique_ptr<ShaderManager> mShaders;
     std::unique_ptr<RigidBodyRenderer> mPhysicsDebug;
     std::unique_ptr<VmdMixer> mVmdMixer;
 
-    std::unordered_map<std::string, VpdPose> mVpdPoses;
+    VpdPoseMap mVpdPoses;
     bool mVpdApplied = false;
+
+    std::deque<VmdAnimation> mOwnedAnimations;
 
     std::vector<std::array<float, 16>> mPoseWorld;
     std::vector<std::array<float, 16>> mBindPoseWorld;
@@ -133,6 +134,8 @@ private:
     bool mIdleEnabled = true;
     float mIdleTime = 0;
     bool mShowRigidBodies = false;
+
+    std::unordered_map<std::string, float> mSavedWeights;
 };
 
 }  // namespace mmd

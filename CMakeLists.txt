@@ -7,5 +7,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Use static CRT to match Bullet's USE_MSVC_RUNTIME_LIBRARY_DLL=OFF
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+option(ENABLE_STACKTRACE "Enable crash stack trace via backward-cpp" ON)
+if(ENABLE_STACKTRACE)
+    add_subdirectory(thirdparty/backward-cpp)
+endif()
+
 add_subdirectory(mmd)
 add_subdirectory(viewer)

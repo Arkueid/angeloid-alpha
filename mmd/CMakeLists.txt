@@ -16,10 +16,12 @@ set(MMD_SOURCES
     render/opengl/gpu/Texture.cpp
     render/opengl/gpu/Shader.cpp
     render/opengl/ModelRenderer.cpp
+    render/opengl/RenderContext.cpp
     render/opengl/debug/RigidBodyRenderer.cpp
     render/opengl/ShaderManager.cpp
     render/opengl/StbImage.cpp
     Camera.cpp
+    MMD.cpp
     Model.cpp
 )
 
@@ -36,3 +38,8 @@ target_link_libraries(mmd PUBLIC
     glfw glad
     BulletDynamics BulletCollision LinearMath
 )
+
+if(ENABLE_STACKTRACE)
+    target_link_libraries(mmd PUBLIC Backward::Backward)
+    target_compile_definitions(mmd PUBLIC MMD_ENABLE_STACKTRACE)
+endif()

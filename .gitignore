@@ -44,5 +44,8 @@ Thumbs.db
 
 *.json
 
+# Local scripts (env-specific paths)
+build.bat
+
 # Private docs
 docs/angeloid-alpha-plan.md

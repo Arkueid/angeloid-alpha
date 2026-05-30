@@ -1,10 +1,22 @@
 # Project: MMD PMX Viewer (angeloid-alpha)
 
 ## Build & Run
+
+MSVC compiler requires `vcvars64.bat` sourced first. Use the helper script:
+
+```bat
+build.bat                           # default: RelWithDebInfo
+build.bat -DENABLE_STACKTRACE=ON   # with crash stack trace (requires thirdparty/backward-cpp)
+```
+
+Or manually (must run from VS Developer Command Prompt / after vcvars):
 ```bash
-cmake --preset default && cmake --build build
+cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -B build
+cmake --build build
 ./build/viewer/viewer.exe -m <model-name>
 ```
+
+- `ENABLE_STACKTRACE` option: includes backward-cpp submodule for crash stack traces (printed to stderr, includes file/line/function)
 
 ## Project structure
 - `mmd/` — computation + rendering library
@@ -47,6 +59,12 @@ cmake --preset default && cmake --build build
 - Free functions → class static methods preferred
 - No exceptions / try-catch in main flow (validate before use)
 - No comments for obvious code; only comment non-obvious WHY
+
+## Docs
+- `docs/INDEX.md` — entry point indexing all domain knowledge files
+- `docs/ARCHITECTURE.md` — refactoring plan and design rationale
+- `docs/reference/` — MMD format reference materials (PMX spec, joint constraints)
+- Before any non-trivial change, check relevant docs for context
 
 ## Git
 - Commit messages: concise summary line, bullet details

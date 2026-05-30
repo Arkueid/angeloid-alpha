@@ -1,6 +1,12 @@
 [submodule "thirdparty/glfw"]
 	path = thirdparty/glfw
 	url = https://github.com/glfw/glfw.git
+	shallow = true
 [submodule "thirdparty/bullet"]
 	path = thirdparty/bullet
 	url = https://github.com/bulletphysics/bullet3.git
+	shallow = true
+[submodule "thirdparty/backward-cpp"]
+	path = thirdparty/backward-cpp
+	url = https://github.com/bombela/backward-cpp.git
+	shallow = true
