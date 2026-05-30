@@ -176,9 +176,7 @@ void Model::draw(int screenWidth, int screenHeight) {
                 mPhysicsDebug->updateFromPhysics(mPhysics);
                 glEnable(GL_DEPTH_TEST);
                 glDepthFunc(GL_LEQUAL);
-                glLineWidth(2.0f);
                 mPhysicsDebug->render(*s, proj, view, mRenderer.modelMatrix());
-                glLineWidth(1.0f);
             }
         }
     }
@@ -265,7 +263,8 @@ void Model::applyVpd(bool on) {
     mVpdApplied = on;
     mPoseWorld = BoneSkinning::computePoseWorldMatrices(
         mPmx, on ? mVpdPoses : VpdPoseMap{});
-    mPhysics.resetPhysics(mPoseWorld);
+    if (mPhysics.enabled)
+        mPhysics.resetPhysics(mPoseWorld);
     syncBoneTexture();
 }
 

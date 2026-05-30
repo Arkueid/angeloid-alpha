@@ -132,31 +132,36 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale) {
 }
 
 void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWorld) {
-    // Set all dynamic bodies to kinematic, align them to bone targets,
-    // run one step, then switch back to dynamic. Prevents initial overlap explosion.
+    // Reset all bodies to their PMX-defined initial positions and rotations,
+    // then run one simulation step to resolve overlaps. This matches saba's
+    // ResetPhysics: bodies go to initPos/initRot, NOT bone-computed targets.
+    // Bone pose changes (VPD, VMD animation) do NOT affect body positions during
+    // reset — dynamic bodies settle via joints connecting them to mode-0 bodies
+    // during subsequent frames. Using computeBoneTarget here would apply bone
+    // rotation deltas to body offsets, causing bodies to orbit wildly when
+    // bones have large VPD rotations (e.g. 左腕 54° → pf_L_* chain displaced).
+
+    // Phase 1: align to init positions, make kinematic
     for (auto& bb : mBodies) {
         if (bb.mode == 0 || bb.boneIndex < 0 || bb.boneIndex >= (int)poseWorld.size())
             continue;
         if (bb.boneIndex >= (int)mBoneBindWorld.size())
             continue;
 
-        // Make kinematic and align to bone
         bb.body->setCollisionFlags(bb.body->getCollisionFlags() |
                                    btCollisionObject::CF_KINEMATIC_OBJECT);
-        btVector3 tgtPos;
-        btQuaternion tgtRot;
-        computeBoneTarget(bb, poseWorld, tgtPos, tgtRot);
         btTransform cur;
         cur.setIdentity();
-        cur.setOrigin(tgtPos);
-        cur.setRotation(tgtRot);
+        cur.setOrigin(btVector3(bb.initPosX, bb.initPosY, bb.initPosZ));
+        cur.setRotation(btQuaternion(bb.initRotX, bb.initRotY, bb.initRotZ, bb.initRotW));
         bb.body->getMotionState()->setWorldTransform(cur);
         bb.body->setCenterOfMassTransform(cur);
     }
 
+    // Phase 2: run one step to resolve initial overlaps
     mWorld->stepSimulation(1.0f / 60.0f, 2, 1.0f / 120.0f);
 
-    // Clear forces and switch back to dynamic
+    // Phase 3: clear forces, switch back to dynamic
     for (auto& bb : mBodies) {
         if (bb.mode == 0)
             continue;
@@ -165,7 +170,6 @@ void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWo
         bb.body->clearForces();
         bb.body->setLinearVelocity(btVector3(0, 0, 0));
         bb.body->setAngularVelocity(btVector3(0, 0, 0));
-        // Sync motion state to current body transform
         bb.body->getMotionState()->setWorldTransform(bb.body->getCenterOfMassTransform());
     }
 
@@ -578,51 +582,11 @@ void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>
     if (!enabled)
         return;
 
-    // Mode 2 (bone-align): apply corrective forces pulling the body toward the
-    // bone-animated target transform, acting as a soft constraint rather than
-    // hard teleportation. This lets physics (collisions, other joints) still
-    // influence the body while keeping it roughly aligned with the bone.
-    //
-    // dtScale normalizes forces for frame-rate independence: at 60fps it's 1.0,
-    // at 30fps it's 0.5 (half the force per step, twice as many steps).
-    float dtScale = deltaTime * 60.0f;
-    for (auto& bb : mBodies) {
-        if (bb.mode != 2 || bb.boneIndex < 0 || bb.boneIndex >= (int)poseWorld.size())
-            continue;
-        if (bb.boneIndex >= (int)mBoneBindWorld.size())
-            continue;
-
-        btVector3 tgtPos;
-        btQuaternion tgtRot;
-        computeBoneTarget(bb, poseWorld, tgtPos, tgtRot);
-
-        // Position correction: PD controller (proportional + derivative)
-        //   force = (posError * kP - velocity * kD) * dtScale
-        // kP=50 provides strong pull; kD=15 adds damping to prevent oscillation
-        btTransform cur = bb.body->getCenterOfMassTransform();
-        btVector3 posErr = tgtPos - cur.getOrigin();
-        float errLen = posErr.length();
-        if (errLen > 0.005f) {
-            bb.body->activate(true);
-            bb.body->applyCentralForce((posErr * 50.0f - bb.body->getLinearVelocity() * 15.0f) *
-                                       dtScale);
-        }
-        // Rotation correction: compute quaternion difference, convert to axis-angle,
-        // then set angular velocity toward the target. The 0.85 damping factor prevents
-        // overshoot and oscillation in the rotation correction.
-        btQuaternion curRot = cur.getRotation();
-        btQuaternion diff = curRot.inverse() * tgtRot;
-        if (diff.w() < 0)
-            diff = btQuaternion(-diff.x(), -diff.y(), -diff.z(), -diff.w());
-        float axLen = sqrtf(diff.x() * diff.x() + diff.y() * diff.y() + diff.z() * diff.z());
-        if (axLen > 0.001f) {
-            bb.body->activate(true);
-            float angle = 2.0f * atan2f(axLen, diff.w());
-            btVector3 axis(diff.x() / axLen, diff.y() / axLen, diff.z() / axLen);
-            bb.body->setAngularVelocity(bb.body->getAngularVelocity() * powf(0.85f, dtScale) +
-                                        axis * angle * 10.0f * dtScale);
-        }
-    }
+    // Mode 2 (bone-align) bodies run as standard Bullet dynamic bodies — no
+    // corrective forces. Joints connecting them to mode-0 bodies constrain their
+    // position. The alignment happens in getBoneTransforms(): only physics ROTATION
+    // feeds back to the bone; bone POSITION stays at the animation target.
+    // This matches saba's DynamicAndBoneMergeMotionState approach.
 
     // Cap deltaTime to prevent physics explosion on frame spikes
     mWorld->stepSimulation(std::min(deltaTime, kMaxTimestep), kSubsteps, kFixedTimestep);
@@ -641,28 +605,40 @@ void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) co
         if (!bb.body->isActive())
             continue;
         btTransform t = bb.body->getCenterOfMassTransform();
-        btVector3 bodyPos = t.getOrigin();
         btQuaternion bodyRot = t.getRotation();
 
-        // Body's delta from its initial configuration
+        // Body's rotation delta from its initial configuration
         btQuaternion bodyInitRot(bb.initRotX, bb.initRotY, bb.initRotZ, bb.initRotW);
         btQuaternion bodyDeltaRot = bodyRot * bodyInitRot.inverse();
-        btVector3 bodyInitPos(bb.initPosX, bb.initPosY, bb.initPosZ);
-        btVector3 disp = bodyPos - bodyInitPos;
 
-        // Apply the same displacement to the bone's bind-world position/rotation
-        btVector3 boneInitPos(bb.bonePosX, bb.bonePosY, bb.bonePosZ);
+        // Apply rotation delta to the bone's bind-world rotation
         btQuaternion boneInitRot(bb.boneRotX, bb.boneRotY, bb.boneRotZ, bb.boneRotW);
-        btVector3 boneNewPos = boneInitPos + disp;
         btQuaternion boneNewRot = bodyDeltaRot * boneInitRot;
 
-        // Convert back to model space and write as column-major 4x4 matrix
-        float tx = boneNewPos.x() + mCenter.x;
-        float ty = boneNewPos.y() + mMinY;
-        float tz = boneNewPos.z() + mCenter.z;
+        // Mode 2 (bone-align): keep the bone's animated position, only feed back
+        // physics rotation. This matches saba's approach — the bone position is
+        // driven by animation, not pulled by physics (prevents skirt sag).
+        // Mode 0/1: full displacement from init (position + rotation).
+        float tx, ty, tz;
+        if (bb.mode == 2) {
+            // Bone position from animation (already in model space in out[])
+            tx = out[bb.boneIndex][12];
+            ty = out[bb.boneIndex][13];
+            tz = out[bb.boneIndex][14];
+        } else {
+            btVector3 bodyPos = t.getOrigin();
+            btVector3 bodyInitPos(bb.initPosX, bb.initPosY, bb.initPosZ);
+            btVector3 disp = bodyPos - bodyInitPos;
+            btVector3 boneInitPos(bb.bonePosX, bb.bonePosY, bb.bonePosZ);
+            btVector3 boneNewPos = boneInitPos + disp;
+            tx = boneNewPos.x() + mCenter.x;
+            ty = boneNewPos.y() + mMinY;
+            tz = boneNewPos.z() + mCenter.z;
+        }
+
+        // Write as column-major 4x4 matrix
         auto& m = out[bb.boneIndex];
         const btQuaternion& r = boneNewRot;
-        // Quaternion to rotation matrix (column-major)
         m[0] = 1 - 2 * (r.y() * r.y() + r.z() * r.z());
         m[4] = 2 * (r.x() * r.y() - r.z() * r.w());
         m[8] = 2 * (r.x() * r.z() + r.y() * r.w());

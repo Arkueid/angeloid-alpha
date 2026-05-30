@@ -202,7 +202,13 @@ static void buildPass(const PmxModel& model, float cx, float my, float cz, float
 
     for (size_t i = 0; i < model.rigidbodies.size(); ++i) {
         const auto& rb = model.rigidbodies[i];
-        Vec3 c = colors[i % 4];
+        // Color by mode: green=static(0), orange=dynamic(1), blue=bone-align(2)
+        Vec3 c;
+        switch (rb.mode) {
+        case 0: c = {0.0f, 1.0f, 0.0f}; break;   // bright green: kinematic
+        case 2: c = {0.2f, 0.6f, 1.0f}; break;   // bright blue: bone-align
+        default: c = {1.0f, 0.5f, 0.0f}; break;  // bright orange: dynamic
+        }
         float kx = rb.shape_size.x, ky = rb.shape_size.y, kz = rb.shape_size.z;
 
         std::vector<float> v;
@@ -331,7 +337,6 @@ void RigidBodyRenderer::build(const PmxModel& model, float modelScale) {
 // by gl_InstanceID) to transform each shape from local space to world space.
 // The VAO is rebuilt only when the body count changes.
 void RigidBodyRenderer::updateFromPhysics(const PhysicsWorld& world) {
-    Vec3 colors[] = {{1, 1, 0}, {1, 0.5f, 0}, {0, 1, 1}, {1, 0, 1}};
     const auto& bodies = world.bodies();
     int nBodies = (int)bodies.size();
 
@@ -396,7 +401,13 @@ void RigidBodyRenderer::updateFromPhysics(const PhysicsWorld& world) {
             const auto& bb = bodies[i];
             if (!bb.body)
                 continue;
-            Vec3 c = colors[i % 4];
+            // Color by mode: green=static(0), orange=dynamic(1), blue=bone-align(2)
+            Vec3 c;
+            switch (bb.mode) {
+            case 0: c = {0.0f, 1.0f, 0.0f}; break;
+            case 2: c = {0.2f, 0.6f, 1.0f}; break;
+            default: c = {1.0f, 0.5f, 0.0f}; break;
+            }
 
             btCollisionShape* shape = bb.body->getCollisionShape();
             int shapeType = shape->getShapeType();
@@ -441,7 +452,6 @@ void RigidBodyRenderer::render(Gpu::ShaderProgram& shader, const std::array<floa
     shader.setMat4("projection", projection.data());
     shader.setMat4("view", view.data());
     shader.setMat4("model", mm);
-    shader.setVec3("light_dir", 0, 0.5f, 1.0f);
 
     bool hasPhysics = (mRbPhysics.vertexCount > 0);
     const Gpu::Vao& rb = hasPhysics ? mRbPhysics : (useBoneMatrices ? mRbAnimated : mRbStatic);
@@ -453,7 +463,9 @@ void RigidBodyRenderer::render(Gpu::ShaderProgram& shader, const std::array<floa
             mBodyTex->bind(1);  // GL_TEXTURE1
             shader.setInt("body_texture", 1);
         }
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         rb.render(GL_TRIANGLES);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
     if (showJoint && jt.vertexCount > 0)
         jt.render(GL_LINES);
