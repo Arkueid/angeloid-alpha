@@ -15,6 +15,7 @@ struct SkinningVertexData {
     std::vector<float> uvs;
     std::vector<int32_t> boneIndices;
     std::vector<float> boneWeights;
+    std::vector<float> edgeFactors;
 };
 
 struct VpdPose;

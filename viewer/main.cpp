@@ -1,3 +1,4 @@
+#include "MMD.h"
 #include "Model.h"
 #include "debug/WorldAxis.h"
 #include "render/opengl/gpu/Shader.h"
@@ -64,6 +65,8 @@ static const std::unordered_map<std::string, const char*> MODELS = {
     {"卢西娅-摘帽", "resources/models/卢西娅/卢西娅_摘帽.pmx"},
     {"卢西娅-武器1", "resources/models/卢西娅/武器1.pmx"},
     {"卢西娅-武器2", "resources/models/卢西娅/武器2.pmx"},
+    {"伊里伽尔", "resources/models/伊里伽尔/伊里伽尔.pmx"},
+    {"伊里伽尔-redhat", "resources/models/伊里伽尔-redhat/童话式复古.pmx"},
 };
 
 int main(int argc, char* argv[]) {
@@ -111,14 +114,20 @@ int main(int argc, char* argv[]) {
         pmxPath = projRoot / pmxPath;
     if (vpdPath.is_relative())
         vpdPath = projRoot / vpdPath;
-    fs::path texDir = pmxPath.parent_path();
-
     // --- Window ---
     GlfwWindow app(1280, 720, "MMD PMX Viewer");
 
+    // --- Init mmd module ---
+    mmd::InitArgs args;
+    args.shaderDir = projRoot / "resources/shaders";
+    args.toonDir = projRoot / "resources/toon";
+    args.blinkMorphs = {"blink", "blink_l", "blink_r",
+                        "まばたき", "まぶたき", "ウィンク", "ｳｨﾝｸ"};
+    mmd::init(std::move(args));
+
     // --- Load model ---
     mmd::Model model;
-    model.load(pmxPath, texDir, projRoot / "resources/toon", projRoot / "resources/shaders");
+    model.load(pmxPath);
     app.setTitle("MMD PMX Viewer - " + model.modelName());
     if (!vpdPath.empty())
         model.loadVpd(vpdPath);
@@ -140,7 +149,6 @@ int main(int argc, char* argv[]) {
     // Morph state
     int morphIndex = -1;
     float morphWeight = 0.0f;
-    std::unordered_map<std::string, float> savedWeights;
     auto morphList = model.interactableMorphs();
 
     // Input
@@ -201,7 +209,7 @@ int main(int argc, char* argv[]) {
                 idx = (idx - 1 + (int)morphList.size()) % (int)morphList.size();
                 morphIndex = morphList[idx];
                 std::string name = model.morphName(morphIndex);
-                morphWeight = savedWeights.count(name) ? savedWeights[name] : 0.0f;
+                morphWeight = model.savedMorphWeight(name);
                 model.setMorphWeight(name, morphWeight);
             }
         }
@@ -212,7 +220,7 @@ int main(int argc, char* argv[]) {
                 idx = (idx + 1) % (int)morphList.size();
                 morphIndex = morphList[idx];
                 std::string name = model.morphName(morphIndex);
-                morphWeight = savedWeights.count(name) ? savedWeights[name] : 0.0f;
+                morphWeight = model.savedMorphWeight(name);
                 model.setMorphWeight(name, morphWeight);
             }
         }
@@ -220,7 +228,6 @@ int main(int argc, char* argv[]) {
             if (morphIndex >= 0 && morphIndex < model.morphCount()) {
                 morphWeight = std::min(1.0f, morphWeight + 0.1f);
                 auto name = model.morphName(morphIndex);
-                savedWeights[name] = morphWeight;
                 model.setMorphWeight(name, morphWeight);
             }
         }
@@ -228,7 +235,6 @@ int main(int argc, char* argv[]) {
             if (morphIndex >= 0 && morphIndex < model.morphCount()) {
                 morphWeight = std::max(0.0f, morphWeight - 0.1f);
                 auto name = model.morphName(morphIndex);
-                savedWeights[name] = morphWeight;
                 model.setMorphWeight(name, morphWeight);
             }
         }
@@ -293,5 +299,6 @@ int main(int argc, char* argv[]) {
 
     app.run();
     glFinish();
+    mmd::dispose();
     return 0;
 }

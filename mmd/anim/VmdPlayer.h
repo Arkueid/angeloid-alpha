@@ -45,11 +45,11 @@ public:
     static VmdAnimation load(const std::filesystem::path& path);
 };
 
-// --- Player that advances frames and samples transforms ---
+// --- VmdPlayState: per-track playback state referencing shared animation data ---
 
-class VmdPlayer {
+class VmdPlayState {
 public:
-    explicit VmdPlayer(VmdAnimation anim, float fps = 30.0f);
+    explicit VmdPlayState(const VmdAnimation* anim = nullptr, float fps = 30.0f);
 
     void play();
     void pause();
@@ -57,13 +57,12 @@ public:
 
     void update(float deltaTime);
 
-    // Returns (position vec3, rotation quat) or nullptr-equivalent via bool
     bool getBoneTransform(const std::string& boneName, std::array<float, 3>& posOut,
                           std::array<float, 4>& rotOut) const;
 
     float getMorphWeight(const std::string& morphName) const;
 
-    const VmdAnimation& animation() const {
+    const VmdAnimation* animation() const {
         return mAnimation;
     }
     float currentFrame() const {
@@ -85,12 +84,15 @@ public:
     }
 
 private:
-    VmdAnimation mAnimation;
+    const VmdAnimation* mAnimation = nullptr;
     float mFps = 30;
     float mCurrentFrame = 0;
     bool mPlaying = false;
     bool mLoop = true;
 };
+
+// Backward-compatible alias
+using VmdPlayer = VmdPlayState;
 
 // --- Mixer: blends multiple VMD layers ---
 
@@ -98,7 +100,7 @@ class VmdMixer {
 public:
     explicit VmdMixer(float fps = 30.0f);
 
-    void addVmd(VmdAnimation anim);
+    void addVmd(const VmdAnimation* anim);
     void clear();
 
     void play();
@@ -113,7 +115,7 @@ public:
     float getMorphWeight(const std::string& morphName) const;
 
     float currentFrame() const {
-        return mPlayers.empty() ? 0 : mPlayers[0].currentFrame();
+        return mPlayStates.empty() ? 0 : mPlayStates[0].currentFrame();
     }
     float maxFrame() const {
         return mMaxFrame;
@@ -128,7 +130,7 @@ public:
     void setFrame(float frame);
 
 private:
-    std::vector<VmdPlayer> mPlayers;
+    std::vector<VmdPlayState> mPlayStates;
     float mFps = 30;
     float mMaxFrame = 0;
     bool mPlaying = false;

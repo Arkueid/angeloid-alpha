@@ -11,7 +11,9 @@ struct VpdPose {
     void toMatrix(float out[9]) const;
 };
 
+using VpdPoseMap = std::unordered_map<std::string, VpdPose>;
+
 class VpdLoader {
 public:
-    static std::unordered_map<std::string, VpdPose> load(const std::filesystem::path& path);
+    static VpdPoseMap load(const std::filesystem::path& path);
 };

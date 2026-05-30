@@ -3,8 +3,11 @@
 #include "anim/BoneSkinning.h"
 #include "anim/VpdLoader.h"
 #include "render/opengl/BoneTextureUtil.h"
+#include "render/opengl/RenderContext.h"
 #include "render/opengl/gpu/Shader.h"
 #include "util/Log.h"
+
+#include <cstring>
 
 #include <GL/glew.h>
 #include <algorithm>
@@ -20,11 +23,13 @@ static void buildInterleavedVao(Gpu::Vao& vao, GLuint sharedVbo, GLuint sharedEb
 
     glBindBuffer(GL_ARRAY_BUFFER, sharedVbo);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(8 * sizeof(float)));
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sharedEbo);
     vao.ebo = sharedEbo;
@@ -52,8 +57,7 @@ ModelRenderer::~ModelRenderer() {
         glDeleteBuffers(1, &mStaticEbo);
 }
 
-void ModelRenderer::loadModel(const PmxModel& model, const std::filesystem::path& textureDir,
-                              const std::filesystem::path& toonDir) {
+void ModelRenderer::loadModel(const PmxModel& model, const std::filesystem::path& textureDir) {
     mModel = &model;
 
     // Compute bounds
@@ -93,10 +97,11 @@ void ModelRenderer::loadModel(const PmxModel& model, const std::filesystem::path
 
     // Build interleaved vertex data (PMX raw coordinates)
     mVertices.clear();
-    mVertices.reserve(model.vertexCount() * 8);
+    mVertices.reserve(model.vertexCount() * 9);
     for (const auto& v : model.vertices) {
+        // interleaved: [px,py,pz, nx,ny,nz, u,v, edge_factor]
         mVertices.insert(mVertices.end(), {v.position.x, v.position.y, v.position.z, v.normal.x,
-                                           v.normal.y, v.normal.z, v.uv.x, v.uv.y});
+                                           v.normal.y, v.normal.z, v.uv.x, v.uv.y, v.edge_factor});
     }
 
     // Copy indices
@@ -129,14 +134,13 @@ void ModelRenderer::loadModel(const PmxModel& model, const std::filesystem::path
     buildInterleavedVao(mOutlineVao, mStaticVbo, mStaticEbo, (int)mIndices.size());
 
     // Load textures
-    loadTextures(textureDir, toonDir);
+    loadTextures(textureDir);
 
     // Build material batches
     buildMaterialBatches(model);
 }
 
-void ModelRenderer::loadTextures(const std::filesystem::path& textureDir,
-                                 const std::filesystem::path& toonDir) {
+void ModelRenderer::loadTextures(const std::filesystem::path& textureDir) {
     MMD_INFO("RENDER", "Loading %d textures...", mModel->textureCount());
 
     for (size_t i = 0; i < mModel->textures.size(); ++i) {
@@ -193,24 +197,6 @@ void ModelRenderer::loadTextures(const std::filesystem::path& textureDir,
         }
     }
 
-    // Load shared toon textures (toon01.bmp ~ toon10.bmp)
-    mSharedToons.resize(10);
-    if (!toonDir.empty()) {
-        for (int ti = 1; ti <= 10; ++ti) {
-            char buf[32];
-            snprintf(buf, sizeof(buf), "toon%02d.bmp", ti);
-            fs::path toonPath = fs::path(toonDir) / buf;
-            int w, h, comp;
-            uint8_t* data = stbi_load(toonPath.string().c_str(), &w, &h, &comp, 4);
-            if (data) {
-                auto tex = std::make_unique<Gpu::Texture>(w, h, 4, data);
-                tex->setFilter(GL_LINEAR, GL_LINEAR);
-                tex->setWrap(true, true);
-                mSharedToons[ti - 1] = std::move(tex);
-                stbi_image_free(data);
-            }
-        }
-    }
 }
 
 void ModelRenderer::buildMaterialBatches(const PmxModel& model) {
@@ -231,9 +217,7 @@ void ModelRenderer::buildMaterialBatches(const PmxModel& model) {
         batch.count = mat.vertex_count;
         batch.textureIndex = mat.texture_index;
         batch.materialIndex = i;
-        // MATERIALFLAG_SELF_SHADOW (0x08) controls whether this material casts
-        // a shadow on itself — in toon rendering this means it gets an outline/edge.
-        batch.hasEdge = mat.hasFlag(MATERIALFLAG_SELF_SHADOW);
+        batch.hasEdge = mat.hasFlag(MATERIALFLAG_DRAW_EDGE);
         mMaterialBatches.push_back(batch);
 
         mMaterialColor.push_back({mat.diffuse_color.x, mat.diffuse_color.y, mat.diffuse_color.z});
@@ -339,12 +323,12 @@ void ModelRenderer::renderMainPass(Gpu::ShaderProgram& shader,
         const auto& toon = mMaterialToon[batch.materialIndex];
         if (toon.sharingFlag != 0) {
             int si = toon.textureIndex;
-            if (si >= 0 && si < (int)mSharedToons.size() && mSharedToons[si]) {
-                mSharedToons[si]->bind(4);
+            if (auto* t = mmd::RenderContext::instance().sharedToon(si)) {
+                t->bind(4);
                 shader.setInt("has_toon", 1);
             }
-            else if (mSharedToons[0]) {
-                mSharedToons[0]->bind(4);
+            else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
+                t->bind(4);
                 shader.setInt("has_toon", 1);
             }
             else {
@@ -356,8 +340,8 @@ void ModelRenderer::renderMainPass(Gpu::ShaderProgram& shader,
             mTextures[toon.textureIndex]->bind(4);
             shader.setInt("has_toon", 1);
         }
-        else if (mSharedToons[0]) {
-            mSharedToons[0]->bind(4);
+        else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
+            t->bind(4);
             shader.setInt("has_toon", 1);
         }
         else {
@@ -473,6 +457,7 @@ void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::
         {2, skinData.uvs.data(), skinData.uvs.size() * sizeof(float), 2, GL_FLOAT},
         {3, skinData.boneIndices.data(), skinData.boneIndices.size() * sizeof(int32_t), 4, GL_INT},
         {4, skinData.boneWeights.data(), skinData.boneWeights.size() * sizeof(float), 4, GL_FLOAT},
+        {5, skinData.edgeFactors.data(), skinData.edgeFactors.size() * sizeof(float), 1, GL_FLOAT},
     };
 
     // Use the same index data as static VAOs
@@ -481,13 +466,14 @@ void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::
     mSkinnedOutlineVao =
         Gpu::Vao::create(descs, mIndices.data(), mIndices.size() * sizeof(int32_t));
 
-    // --- Morph VAOs (skinned + morph_offset + uv_morph_offset VBOs) ---
+    // --- Morph VAOs (skinned + morph_offset + uv_morph_offset + edge_factor VBOs) ---
     std::vector<Gpu::VertexBufferDesc> morphDescs = {
         {0, skinData.positions.data(), skinData.positions.size() * sizeof(float), 3, GL_FLOAT},
         {1, skinData.normals.data(), skinData.normals.size() * sizeof(float), 3, GL_FLOAT},
         {2, skinData.uvs.data(), skinData.uvs.size() * sizeof(float), 2, GL_FLOAT},
         {3, skinData.boneIndices.data(), skinData.boneIndices.size() * sizeof(int32_t), 4, GL_INT},
         {4, skinData.boneWeights.data(), skinData.boneWeights.size() * sizeof(float), 4, GL_FLOAT},
+        {7, skinData.edgeFactors.data(), skinData.edgeFactors.size() * sizeof(float), 1, GL_FLOAT},
     };
 
     int vc3 = (int)skinData.positions.size();
@@ -735,12 +721,12 @@ void ModelRenderer::renderSkinnedMainPass(Gpu::ShaderProgram& shader,
         const auto& toon = mMaterialToon[batch.materialIndex];
         if (toon.sharingFlag != 0) {
             int si = toon.textureIndex;
-            if (si >= 0 && si < (int)mSharedToons.size() && mSharedToons[si]) {
-                mSharedToons[si]->bind(4);
+            if (auto* t = mmd::RenderContext::instance().sharedToon(si)) {
+                t->bind(4);
                 shader.setInt("has_toon", 1);
             }
-            else if (mSharedToons[0]) {
-                mSharedToons[0]->bind(4);
+            else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
+                t->bind(4);
                 shader.setInt("has_toon", 1);
             }
             else {
@@ -752,8 +738,8 @@ void ModelRenderer::renderSkinnedMainPass(Gpu::ShaderProgram& shader,
             mTextures[toon.textureIndex]->bind(4);
             shader.setInt("has_toon", 1);
         }
-        else if (mSharedToons[0]) {
-            mSharedToons[0]->bind(4);
+        else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
+            t->bind(4);
             shader.setInt("has_toon", 1);
         }
         else {
@@ -890,12 +876,12 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
         const auto& toon = mMaterialToon[batch.materialIndex];
         if (toon.sharingFlag != 0) {
             int si = toon.textureIndex;
-            if (si >= 0 && si < (int)mSharedToons.size() && mSharedToons[si]) {
-                mSharedToons[si]->bind(4);
+            if (auto* t = mmd::RenderContext::instance().sharedToon(si)) {
+                t->bind(4);
                 shader.setInt("has_toon", 1);
             }
-            else if (mSharedToons[0]) {
-                mSharedToons[0]->bind(4);
+            else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
+                t->bind(4);
                 shader.setInt("has_toon", 1);
             }
             else {
@@ -907,8 +893,8 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
             mTextures[toon.textureIndex]->bind(4);
             shader.setInt("has_toon", 1);
         }
-        else if (mSharedToons[0]) {
-            mSharedToons[0]->bind(4);
+        else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
+            t->bind(4);
             shader.setInt("has_toon", 1);
         }
         else {

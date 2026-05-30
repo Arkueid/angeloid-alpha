@@ -49,8 +49,7 @@ public:
     ModelRenderer();
     ~ModelRenderer();
 
-    void loadModel(const PmxModel& model, const std::filesystem::path& textureDir,
-                   const std::filesystem::path& toonDir);
+    void loadModel(const PmxModel& model, const std::filesystem::path& textureDir);
 
     void setupSkinning(const PmxModel& model, const std::filesystem::path& vpdPath = {});
 
@@ -129,14 +128,13 @@ public:
     }
 
 private:
-    void loadTextures(const std::filesystem::path& textureDir,
-                      const std::filesystem::path& toonDir);
+    void loadTextures(const std::filesystem::path& textureDir);
     void buildMaterialBatches(const PmxModel& model);
 
     const PmxModel* mModel = nullptr;
 
     // Vertex data
-    std::vector<float> mVertices;  // interleaved: [px,py,pz, nx,ny,nz, u,v] x N
+    std::vector<float> mVertices;  // interleaved: [px,py,pz, nx,ny,nz, u,v, edge] x N
     std::vector<int32_t> mIndices;
 
     // VAOs
@@ -147,7 +145,6 @@ private:
     // Textures
     std::vector<std::unique_ptr<Gpu::Texture>> mTextures;
     std::unique_ptr<Gpu::Texture> mDummyTexture;
-    std::vector<std::unique_ptr<Gpu::Texture>> mSharedToons;  // toon01-10.bmp
     GLuint mStaticVbo = 0;
     GLuint mStaticEbo = 0;
 

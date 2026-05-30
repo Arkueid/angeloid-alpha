@@ -64,6 +64,7 @@ SkinningVertexData BoneSkinning::extractSkinningData(const PmxModel& model) {
     result.uvs.reserve(n * 2);
     result.boneIndices.reserve(n * 4);
     result.boneWeights.reserve(n * 4);
+    result.edgeFactors.reserve(n);
 
     for (const auto& v : model.vertices) {
         result.positions.insert(result.positions.end(), {v.position.x, v.position.y, v.position.z});
@@ -75,6 +76,7 @@ SkinningVertexData BoneSkinning::extractSkinningData(const PmxModel& model) {
         extractDeform(v.deform, idx, wt);
         result.boneIndices.insert(result.boneIndices.end(), idx, idx + 4);
         result.boneWeights.insert(result.boneWeights.end(), wt, wt + 4);
+        result.edgeFactors.push_back(v.edge_factor);
     }
     return result;
 }

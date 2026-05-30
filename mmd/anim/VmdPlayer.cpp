@@ -159,46 +159,49 @@ std::array<float, 3> VmdInterp::lerpVec3(const std::array<float, 3>& a,
     return {a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t};
 }
 
-// --- VmdPlayer ---
+// --- VmdPlayState ---
 
-VmdPlayer::VmdPlayer(VmdAnimation anim, float fps)
-    : mAnimation(std::move(anim)), mFps(fps), mPlaying(true) {
+VmdPlayState::VmdPlayState(const VmdAnimation* anim, float fps)
+    : mAnimation(anim), mFps(fps), mPlaying(anim != nullptr) {
 }
 
-void VmdPlayer::play() {
+void VmdPlayState::play() {
     mPlaying = true;
 }
-void VmdPlayer::pause() {
+void VmdPlayState::pause() {
     mPlaying = false;
 }
-void VmdPlayer::stop() {
+void VmdPlayState::stop() {
     mPlaying = false;
     mCurrentFrame = 0;
 }
-void VmdPlayer::setFrame(float f) {
-    mCurrentFrame = std::max(0.0f, std::min(f, (float)mAnimation.maxFrame));
+void VmdPlayState::setFrame(float f) {
+    if (mAnimation)
+        mCurrentFrame = std::max(0.0f, std::min(f, (float)mAnimation->maxFrame));
 }
 
-void VmdPlayer::update(float deltaTime) {
-    if (!mPlaying || mAnimation.maxFrame <= 0)
+void VmdPlayState::update(float deltaTime) {
+    if (!mPlaying || !mAnimation || mAnimation->maxFrame <= 0)
         return;
     mCurrentFrame += deltaTime * mFps;
 
-    if (mCurrentFrame >= (float)mAnimation.maxFrame) {
+    if (mCurrentFrame >= (float)mAnimation->maxFrame) {
         if (mLoop) {
             mCurrentFrame = 0;
         }
         else {
-            mCurrentFrame = (float)mAnimation.maxFrame;
+            mCurrentFrame = (float)mAnimation->maxFrame;
             mPlaying = false;
         }
     }
 }
 
-bool VmdPlayer::getBoneTransform(const std::string& boneName, std::array<float, 3>& posOut,
-                                 std::array<float, 4>& rotOut) const {
-    auto it = mAnimation.boneKeyframes.find(boneName);
-    if (it == mAnimation.boneKeyframes.end())
+bool VmdPlayState::getBoneTransform(const std::string& boneName, std::array<float, 3>& posOut,
+                                    std::array<float, 4>& rotOut) const {
+    if (!mAnimation)
+        return false;
+    auto it = mAnimation->boneKeyframes.find(boneName);
+    if (it == mAnimation->boneKeyframes.end())
         return false;
 
     const auto& kfs = it->second;
@@ -260,9 +263,11 @@ bool VmdPlayer::getBoneTransform(const std::string& boneName, std::array<float, 
     return true;
 }
 
-float VmdPlayer::getMorphWeight(const std::string& morphName) const {
-    auto it = mAnimation.morphKeyframes.find(morphName);
-    if (it == mAnimation.morphKeyframes.end())
+float VmdPlayState::getMorphWeight(const std::string& morphName) const {
+    if (!mAnimation)
+        return 0;
+    auto it = mAnimation->morphKeyframes.find(morphName);
+    if (it == mAnimation->morphKeyframes.end())
         return 0;
 
     const auto& kfs = it->second;
@@ -294,51 +299,53 @@ float VmdPlayer::getMorphWeight(const std::string& morphName) const {
 VmdMixer::VmdMixer(float fps) : mFps(fps) {
 }
 
-void VmdMixer::addVmd(VmdAnimation anim) {
-    mMaxFrame = std::max(mMaxFrame, (float)anim.maxFrame);
-    mPlayers.emplace_back(std::move(anim), mFps);
+void VmdMixer::addVmd(const VmdAnimation* anim) {
+    if (!anim)
+        return;
+    mMaxFrame = std::max(mMaxFrame, (float)anim->maxFrame);
+    mPlayStates.emplace_back(anim, mFps);
 }
 
 void VmdMixer::clear() {
-    mPlayers.clear();
+    mPlayStates.clear();
     mMaxFrame = 0;
 }
 
 void VmdMixer::play() {
     mPlaying = true;
-    for (auto& p : mPlayers)
+    for (auto& p : mPlayStates)
         p.play();
 }
 
 void VmdMixer::pause() {
     mPlaying = false;
-    for (auto& p : mPlayers)
+    for (auto& p : mPlayStates)
         p.pause();
 }
 
 void VmdMixer::stop() {
     mPlaying = false;
-    for (auto& p : mPlayers)
+    for (auto& p : mPlayStates)
         p.stop();
 }
 
 void VmdMixer::update(float deltaTime) {
     if (!mPlaying)
         return;
-    for (auto& p : mPlayers) {
+    for (auto& p : mPlayStates) {
         p.setLoop(mLoop);
         p.update(deltaTime);
     }
     // When all players finish and looping, reset all
     if (mLoop) {
         bool allDone = true;
-        for (auto& p : mPlayers)
-            if (p.currentFrame() < p.animation().maxFrame) {
+        for (auto& p : mPlayStates)
+            if (p.animation() && p.currentFrame() < p.animation()->maxFrame) {
                 allDone = false;
                 break;
             }
         if (allDone)
-            for (auto& p : mPlayers)
+            for (auto& p : mPlayStates)
                 p.setFrame(0);
     }
 }
@@ -354,7 +361,7 @@ bool VmdMixer::getBoneTransform(const std::string& boneName, std::array<float, 3
     std::array<float, 3> pos = {0, 0, 0};
     std::array<float, 4> rot;
 
-    for (const auto& p : mPlayers) {
+    for (const auto& p : mPlayStates) {
         std::array<float, 3> pp;
         std::array<float, 4> pr;
         if (p.getBoneTransform(boneName, pp, pr)) {
@@ -378,7 +385,7 @@ bool VmdMixer::getBoneTransform(const std::string& boneName, std::array<float, 3
 float VmdMixer::getMorphWeight(const std::string& morphName) const {
     float sum = 0;
     bool has = false;
-    for (const auto& p : mPlayers) {
+    for (const auto& p : mPlayStates) {
         float w = p.getMorphWeight(morphName);
         if (w != 0) {
             sum += w;
@@ -390,11 +397,11 @@ float VmdMixer::getMorphWeight(const std::string& morphName) const {
 
 void VmdMixer::setLoop(bool loop) {
     mLoop = loop;
-    for (auto& p : mPlayers)
+    for (auto& p : mPlayStates)
         p.setLoop(loop);
 }
 
 void VmdMixer::setFrame(float frame) {
-    for (auto& p : mPlayers)
+    for (auto& p : mPlayStates)
         p.setFrame(frame);
 }
