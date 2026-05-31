@@ -1,0 +1,79 @@
+name: Linux 📦
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+    branches: [ linux-workflow, build-all ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build-n-publish:
+    name: Build📦 for Linux
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    strategy:
+      matrix:
+        python-version: [ '3.10', '3.11', '3.12', '3.13', '3.14' ]
+        architecture: [ 'x64' ]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install OpenGL dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            mesa-common-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: ${{ matrix.architecture }}
+
+      - name: Install build deps
+        run: |
+          python -m pip install --upgrade setuptools
+          python -m pip install wheel
+
+      - name: Build a binary wheel
+        run: |
+          python setup.py bdist_wheel
+
+      - name: Verify wheel
+        run: |
+          pip install dist/*.whl
+          python -c "
+          from angeloid import _angeloid
+          print('_angeloid module loaded successfully')
+          print(dir(_angeloid))
+          "
+
+      - name: Install twine
+        run: python -m pip install twine
+
+      - name: Publish distribution to PyPI
+        if: ${{ matrix.python-version == '3.13' }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        run: twine upload dist/*.whl --skip-existing
+
+      - name: Upload Wheel to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.whl

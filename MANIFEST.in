@@ -1,0 +1,22 @@
+# Project build files
+include CMakeLists.txt
+include setup.py
+include pyproject.toml
+include README.md
+include README_EN.md
+include LICENSE
+
+# mmd library sources
+recursive-include mmd *
+
+# wrapper sources
+recursive-include wrapper *
+
+# thirdparty
+recursive-include thirdparty *
+
+# Python package
+recursive-include package *.py
+recursive-include package *.pyi
+recursive-include package *.pyd
+recursive-include package *.so

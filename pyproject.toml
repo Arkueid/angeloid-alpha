@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+requires-python = ">=3.10"
+dynamic = ["version"]
+name = "angeloid"
+dependencies = []
+authors = [
+    { name = "Arkueid", email = "thetardis@qq.com" }
+]
+description = "MMD PMX Viewer library with Python bindings"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["MMD", "PMX", "PMD", "VMD", "MikuMikuDance"]
+
+[project.urls]
+Homepage = "https://github.com/Arkueid/angeloid-alpha"
+Repository = "https://github.com/Arkueid/angeloid-alpha"
