@@ -6,6 +6,15 @@
 
 Angeloid Alpha is an MMD PMX model renderer with a C++20 core and Python bindings. Features GPU skeletal skinning, VMD animation playback, and Bullet physics simulation.
 
+<p align="center">
+    <img title="Windows" src="https://github.com/Arkueid/angeloid-alpha/actions/workflows/build-windows.yml/badge.svg">
+    <img title="macOS" src="https://github.com/Arkueid/angeloid-alpha/actions/workflows/build-macos.yml/badge.svg">
+    <img title="Linux" src="https://github.com/Arkueid/angeloid-alpha/actions/workflows/build-linux.yml/badge.svg">
+    <br>
+    <img title="Release" src="https://img.shields.io/github/v/release/Arkueid/angeloid-alpha">
+    <img title="Python" src="https://img.shields.io/badge/python-3.10+-blue">
+</p>
+
 ![preview](./docs/assets/preview.gif)
 
 ## Quick Start

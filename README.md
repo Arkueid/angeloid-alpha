@@ -6,6 +6,15 @@
 
 Angeloid Alpha 是一个 MMD PMX 模型渲染器，C++20 核心 + Python 绑定。支持 GPU 骨骼蒙皮、VMD 动画、Bullet 物理仿真。
 
+<p align="center">
+    <img title="Windows" src="https://github.com/Arkueid/angeloid-alpha/actions/workflows/build-windows.yml/badge.svg">
+    <img title="macOS" src="https://github.com/Arkueid/angeloid-alpha/actions/workflows/build-macos.yml/badge.svg">
+    <img title="Linux" src="https://github.com/Arkueid/angeloid-alpha/actions/workflows/build-linux.yml/badge.svg">
+    <br>
+    <img title="Release" src="https://img.shields.io/github/v/release/Arkueid/angeloid-alpha">
+    <img title="Python" src="https://img.shields.io/badge/python-3.10+-blue">
+</p>
+
 ![preview](./docs/assets/preview.gif)
 
 ## 快速开始
