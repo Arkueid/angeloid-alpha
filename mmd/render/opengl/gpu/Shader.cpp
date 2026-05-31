@@ -6,7 +6,6 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <stdexcept>
 #include <vector>
 
 namespace Gpu {
@@ -16,7 +15,8 @@ namespace Gpu {
 std::string ShaderProgram::readFile(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
-        throw std::runtime_error("Failed to open shader: " + path.string());
+        MMD_ERROR("SHADER", "Failed to open shader: %s", path.string().c_str());
+        return {};
     }
     std::stringstream buf;
     buf << file.rdbuf();

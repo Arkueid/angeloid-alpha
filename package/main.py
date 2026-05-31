@@ -33,7 +33,7 @@ MODELS = {
     "卢西娅-武器2": "resources/models/卢西娅/武器2.pmx",
     "伊里伽尔": "resources/models/伊里伽尔/伊里伽尔.pmx",
     "伊里伽尔-redhat": "resources/models/伊里伽尔-redhat/童话式复古.pmx",
-    "姵儿": "resources/models/姵儿/姵儿.pmx",
+    "姵儿": "resources/models/姵儿/椛暗式-姵儿ver1.2.pmx",
     "艾尔莎": "resources/models/艾尔莎/莎小姐.pmx",
 }
 

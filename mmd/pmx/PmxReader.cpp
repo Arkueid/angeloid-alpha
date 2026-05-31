@@ -1,6 +1,7 @@
 #include "pmx/PmxReader.h"
 
 #include "encoding/Encoding.h"
+#include "util/Log.h"
 
 #include <cstring>
 #include <filesystem>
@@ -12,7 +13,8 @@
 BinaryReader::BinaryReader(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
-        throw std::runtime_error("Failed to open file: " + path.string());
+        MMD_ERROR("PMX", "Failed to open file: %s", path.string().c_str());
+        return;
     }
 
     mSize = file.tellg();
@@ -127,7 +129,8 @@ static BoneDeform readDeform(BinaryReader& r, uint8_t boneIndexSize) {
                     r.readVec3(),
                     r.readVec3()};
     }
-    throw std::runtime_error("Unknown deform type: " + std::to_string(deformType));
+    MMD_ERROR("PMX", "Unknown deform type: %d", (int)deformType);
+    return Bdef1{0};
 }
 
 // --- PMX Parser ---
@@ -135,22 +138,23 @@ PmxModel PmxReader::load(const std::filesystem::path& path) {
     BinaryReader r(path);
     PmxModel model;
 
-    // Header
     char sig[4];
     r.readBytes(sig, 4);
     if (std::memcmp(sig, "PMX ", 4) != 0) {
-        throw std::runtime_error("Invalid PMX signature");
+        MMD_ERROR("PMX", "Invalid PMX signature");
+        return {};
     }
 
     model.version = r.readF32();
     if (model.version != 2.0f && model.version != 2.1f) {
-        throw std::runtime_error("Unsupported PMX version: " + std::to_string(model.version));
+        MMD_ERROR("PMX", "Unsupported PMX version: %.1f", model.version);
+        return {};
     }
 
-    // Flags
     uint8_t flagBytes = r.readU8();
     if (flagBytes != 8) {
-        throw std::runtime_error("Invalid flag length: " + std::to_string(flagBytes));
+        MMD_ERROR("PMX", "Invalid flag length: %d", (int)flagBytes);
+        return {};
     }
 
     uint8_t textEncoding = r.readU8();

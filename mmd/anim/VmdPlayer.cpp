@@ -10,7 +10,6 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <stdexcept>
 
 static std::string decodeShiftJisName(const char* raw, int maxLen) {
     std::string bytes;
@@ -30,17 +29,18 @@ static std::string decodeShiftJisName(const char* raw, int maxLen) {
 VmdAnimation VmdAnimation::load(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
-        throw std::runtime_error("Failed to open VMD: " + path.string());
+        MMD_ERROR("VMD", "Failed to open VMD: %s", path.string().c_str());
+        return {};
     }
 
     VmdAnimation anim;
 
-    // Magic (30 bytes): "Vocaloid Motion Data 0002"
     char magic[31] = {};
     file.read(magic, 30);
     std::string magicStr(magic);
     if (magicStr.find("Vocaloid Motion Data") == std::string::npos) {
-        throw std::runtime_error("Invalid VMD magic: " + path.string());
+        MMD_ERROR("VMD", "Invalid VMD magic: %s", path.string().c_str());
+        return {};
     }
 
     // Model name (20 bytes, Shift-JIS)

@@ -1,13 +1,13 @@
 #include "anim/VpdLoader.h"
 
 #include "encoding/Encoding.h"
+#include "util/Log.h"
 
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <stdexcept>
 #include <string>
 
 void VpdPose::toMatrix(float out[9]) const {
@@ -35,12 +35,16 @@ void VpdPose::toMatrix(float out[9]) const {
 // Encoding may be Shift-JIS or UTF-8; auto-detected via isValidUtf8().
 // Comments (//...) and trailing semicolons are stripped.
 std::unordered_map<std::string, VpdPose> VpdLoader::load(const std::filesystem::path& path) {
-    if (!std::filesystem::exists(path))
-        throw std::runtime_error("VPD file not found: " + path.string());
+    if (!std::filesystem::exists(path)) {
+        MMD_ERROR("VPD", "VPD file not found: %s", path.string().c_str());
+        return {};
+    }
 
     std::ifstream file(path, std::ios::binary);
-    if (!file.is_open())
-        throw std::runtime_error("Failed to open VPD: " + path.string());
+    if (!file.is_open()) {
+        MMD_ERROR("VPD", "Failed to open VPD: %s", path.string().c_str());
+        return {};
+    }
 
     std::stringstream buf;
     buf << file.rdbuf();
