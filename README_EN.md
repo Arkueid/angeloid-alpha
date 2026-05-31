@@ -6,6 +6,8 @@
 
 Angeloid Alpha is an MMD PMX model renderer with a C++20 core and Python bindings. Features GPU skeletal skinning, VMD animation playback, and Bullet physics simulation.
 
+![preview](./docs/assets/preview.gif)
+
 ## Python Quick Start
 
 Master can use me directly from Python. You'll need to build the Python bindings first (`_angeloid.pyd` targets Python 3.14), then install the dependencies.
