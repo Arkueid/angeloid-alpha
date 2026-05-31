@@ -12,8 +12,29 @@ recursive-include mmd *
 # wrapper sources
 recursive-include wrapper *
 
-# thirdparty
-recursive-include thirdparty *
+# thirdparty: bullet (only src + root cmake files, skip data/examples/docs/test/Extras)
+include thirdparty/bullet/CMakeLists.txt
+include thirdparty/bullet/BulletConfig.cmake.in
+include thirdparty/bullet/UseBullet.cmake
+include thirdparty/bullet/bullet.pc.cmake
+include thirdparty/bullet/VERSION
+recursive-include thirdparty/bullet/build3/cmake *
+recursive-include thirdparty/bullet/src *
+
+# thirdparty: glad (header + one source, tiny)
+recursive-include thirdparty/glad *
+
+# thirdparty: stb (header-only, tiny)
+recursive-include thirdparty/stb *
+
+# thirdparty: backward-cpp (tiny, needed when ENABLE_STACKTRACE=ON)
+recursive-include thirdparty/backward-cpp *
+
+# thirdparty: glfw (needed only when BUILD_VIEWER=ON)
+include thirdparty/glfw/CMakeLists.txt
+recursive-include thirdparty/glfw/src *
+recursive-include thirdparty/glfw/include *
+recursive-include thirdparty/glfw/CMake *
 
 # Python package
 recursive-include package *.py
