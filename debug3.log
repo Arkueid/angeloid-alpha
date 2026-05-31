@@ -1,0 +1,96 @@
+MMD PMX Viewer (Python)
+
+FPS Camera Controls:
+  Left mouse drag: Rotate camera view
+  W/A/S/D: Move forward/left/backward/right
+  E/Q: Move up/down
+  Mouse scroll: Adjust movement speed
+  X key: Toggle world axis display
+  B key: Toggle rigidbody & joint display
+  H key: Toggle model mesh display
+  O key: Toggle outline display
+  T key: Toggle toon shading
+  K key: Toggle GPU skinning
+  P key: Toggle VPD pose
+  R key: Reset camera to default position
+  I key: Toggle idle animation
+  < / > keys: Switch between morphs
+  Up/Down keys: Adjust morph weight
+VMD Animation Controls:
+  Space: Play/Pause VMD animation
+  L key: Toggle VMD loop
+  [ / ] keys: Step backward/forward 30 frames
+
+[angeloid] C++ port, Python 3.14.5
+[INFO][RENDER] Shaders initialized
+[INFO][RENDER] Shared toon textures loaded
+[INFO][MODEL] 鑹惧皵鑾巁灞呭鏈?(VRM)
+[INFO][MODEL] Vertices: 77387, Faces: 119923, Bones: 300
+[INFO][RENDER] Model bounds: min=(-7.8939,-0.0210,-2.0792) max=(7.8924,20.5655,4.0049)
+[INFO][RENDER] Center: (-0.0007,10.2722,0.9629) scale: 0.0972
+[INFO][RENDER] Loading 26 textures...
+[INFO][RENDER]   [0] OK: M_bang.png
+[INFO][RENDER]   [1] OK: 3.bmp
+[INFO][RENDER]   [2] OK: M_bang_line.png
+[INFO][RENDER]   [3] OK: M_bang_trans.png
+[INFO][RENDER]   [4] OK: M_bang_line_trans.png
+[INFO][RENDER]   [5] OK: M_dress.png
+[INFO][RENDER]   [6] OK: 2.bmp
+[INFO][RENDER]   [7] OK: M_headwear.png
+[INFO][RENDER]   [8] OK: M_headwear_mat.png
+[INFO][RENDER]   [9] OK: M_headwear_mat_line.png
+[INFO][RENDER]   [10] OK: M_longhair.png
+[INFO][RENDER]   [11] OK: M_longhair_line.png
+[INFO][RENDER]   [12] OK: M_longhair_mat.png
+[INFO][RENDER]   [13] OK: M_shirt.png
+[INFO][RENDER]   [14] OK: M_shoes.png
+[INFO][RENDER]   [15] OK: Mat_face.png
+[INFO][RENDER]   [16] OK: 4.png
+[INFO][RENDER]   [17] OK: M_backhair2.png
+[INFO][RENDER]   [18] OK: Mat_face_eyes_lash.png
+[INFO][RENDER]   [19] OK: Mat_face_eyes_white.png
+[INFO][RENDER]   [20] OK: Mat_face_mouth.png
+[INFO][RENDER]   [21] OK: sp2.png
+[INFO][RENDER]   [22] OK: Tex_Aiersha_Skin.png
+[INFO][RENDER]   [23] OK: M_dress_pants.png
+[INFO][RENDER]   [24] OK: M_dress_trans.png
+[INFO][RENDER]   [25] OK: M_shirt_trans.png
+[INFO][PHYS] 225 bodies (mode0/static=28 mode1/dyn=186 mode2/align=11), 197 joints
+[INFO][PHYS]   Dynamic mass bodies: 197
+[INFO][PHYS]   Cloth-like bodies: (0 total)
+[INFO][RENDER] Bone texture: 64x64 (300 bones)
+[INFO][PHYS] reset complete, bodies aligned
+[INFO][MODEL] VPD loaded [id=1]: 672 poses (鑷劧绔欏Э.vpd)
+[INFO][MODEL] VPD apply [id=1]
+[INFO][PHYS] reset complete, bodies aligned
+[INFO][MODEL] VMD loaded [id=1]: Tda寮忓垵闊炽儫銈?M銉堛儸銉?(maxFrame=602) from 鍔ㄤ綔.vmd
+[INFO][MODEL] VMD play [id=1] with callback
+[INFO][MODEL] VMD loaded [id=2]: Tda寮忓垵闊炽儫銈?M銉堛儸銉?(maxFrame=602) from 琛ㄦ儏.vmd
+[INFO][MODEL] VMD play [id=2] with callback
+[DEBUG][PHYS] frame=60 dt=0.0062 active=197/225
+[DEBUG][PHYS] frame=120 dt=0.0059 active=197/225
+[DEBUG][PHYS] frame=180 dt=0.0058 active=197/225
+[DEBUG][PHYS] frame=240 dt=0.0059 active=197/225
+[DEBUG][PHYS] frame=300 dt=0.0061 active=197/225
+[DEBUG][PHYS] frame=360 dt=0.0063 active=197/225
+[DEBUG][PHYS] frame=420 dt=0.0059 active=197/225
+[DEBUG][PHYS] frame=480 dt=0.0060 active=197/225
+[DEBUG][PHYS] frame=540 dt=0.0060 active=197/225
+[DEBUG][PHYS] frame=600 dt=0.0061 active=197/225
+[DEBUG][PHYS] frame=660 dt=0.0061 active=197/225
+[DEBUG][PHYS] frame=720 dt=0.0060 active=197/225
+[DEBUG][PHYS] frame=780 dt=0.0062 active=197/225
+[DEBUG][PHYS] frame=840 dt=0.0059 active=197/225
+[DEBUG][PHYS] frame=900 dt=0.0061 active=197/225
+[DEBUG][PHYS] frame=960 dt=0.0059 active=197/225
+[DEBUG][PHYS] frame=1020 dt=0.0056 active=197/225
+[DEBUG][PHYS] frame=1080 dt=0.0059 active=197/225
+[DEBUG][PHYS] frame=1140 dt=0.0076 active=197/225
+[DEBUG][PHYS] frame=1200 dt=0.0059 active=197/225
+[DEBUG][PHYS] frame=1260 dt=0.0062 active=197/225
+[DEBUG][PHYS] frame=1320 dt=0.0057 active=197/225
+[DEBUG][PHYS] frame=1380 dt=0.0063 active=197/225
+[DEBUG][PHYS] frame=1440 dt=0.0057 active=197/225
+[DEBUG][PHYS] frame=1500 dt=0.0058 active=197/225
+[DEBUG][PHYS] frame=1560 dt=0.0061 active=197/225
+[INFO][RENDER] GPU resources released

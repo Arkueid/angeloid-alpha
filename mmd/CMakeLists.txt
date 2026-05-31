@@ -26,6 +26,7 @@ set(MMD_SOURCES
 )
 
 add_library(mmd STATIC ${MMD_SOURCES})
+add_library(angeloid::core ALIAS mmd)
 
 target_include_directories(mmd PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -35,7 +36,7 @@ target_include_directories(mmd PUBLIC
 )
 
 target_link_libraries(mmd PUBLIC
-    glfw glad
+    glad
     BulletDynamics BulletCollision LinearMath
 )
 

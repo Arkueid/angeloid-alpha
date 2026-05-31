@@ -12,10 +12,20 @@ if(MSVC)
     add_compile_options(/wd4005 /wd4477)
 endif()
 
-option(ENABLE_STACKTRACE "Enable crash stack trace via backward-cpp" ON)
+set(ENABLE_STACKTRACE ON CACHE BOOL "Enable crash stack trace via backward-cpp" FORCE)
+set(BUILD_PYTHON_WRAPPER ON CACHE BOOL "Build Python wrapper bindings" FORCE)
+set(BUILD_VIEWER OFF CACHE BOOL "Build viewer" FORCE)
+
 if(ENABLE_STACKTRACE)
     add_subdirectory(thirdparty/backward-cpp)
 endif()
 
 add_subdirectory(mmd)
-add_subdirectory(viewer)
+
+if(BUILD_VIEWER)
+    add_subdirectory(viewer)
+endif()
+
+if(BUILD_PYTHON_WRAPPER)
+    add_subdirectory(wrapper)
+endif()

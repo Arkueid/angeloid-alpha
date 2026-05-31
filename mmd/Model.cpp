@@ -147,9 +147,7 @@ void Model::update(float dt) {
     mPhysics.updateMode0Bodies(mRenderer.useSkinning ? mPoseWorld : mBindPoseWorld);
     if (mPhysics.enabled) {
         mPhysics.step(dt, mPoseWorld);
-        // Write physics results back into pose world matrices
         mPhysics.getBoneTransforms(mPoseWorld);
-        // Recompute child bones that inherit physics-deformed parents
         {
             VpdPoseMap emptyVpd;
             VpdPoseMap* activeVpd = &emptyVpd;
@@ -159,6 +157,22 @@ void Model::update(float dt) {
                     break;
                 }
             BoneSkinning::recomputeAfterPhysicsBones(mPmx, *activeVpd, mPoseWorld);
+        }
+        
+        static int checkFrame = 0;
+        if (++checkFrame % 60 == 0) {
+            int nanCount = 0;
+            for (size_t i = 0; i < mPoseWorld.size(); i++) {
+                for (int j = 0; j < 16; j++) {
+                    if (std::isnan(mPoseWorld[i][j])) {
+                        nanCount++;
+                        break;
+                    }
+                }
+            }
+            if (nanCount > 0) {
+                MMD_ERROR("MODEL", "frame=%d NaN in %d/%d pose matrices!", checkFrame, nanCount, (int)mPoseWorld.size());
+            }
         }
     }
 

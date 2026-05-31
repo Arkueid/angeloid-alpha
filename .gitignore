@@ -31,6 +31,9 @@ debug.log
 # Model files
 # Only ignore ikaros models, keep shaders and other models
 resources/models/*
+!resources/models/姵儿
+!resources/models/艾尔莎
+
 !resources/models/.gitkeep
 resources/vpd/*
 !resources/vpd/.gitkeep

@@ -16,6 +16,9 @@ struct InitArgs {
 // Initialize mmd module (GPU resources, etc.). Must call while GL context is alive.
 void init(const InitArgs& args);
 
+// Initialize OpenGL loader (glad). Must call after GL context is created.
+void glInit();
+
 // Release all global resources (GPU then CPU). Call before GL context destroyed.
 void dispose();
 
