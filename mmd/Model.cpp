@@ -111,36 +111,34 @@ void Model::removeVpd(int vpdId) {
 void Model::update(float dt) {
     // --- VMD animation ---
     if (mVmdMixer->update(dt) || !mClearVmd) {
-        // Collect per-bone transforms from all VMD layers
-        std::unordered_map<std::string, std::pair<std::array<float, 3>, std::array<float, 4>>> vmdT;
+        mVmdBoneCache.clear();
         for (const auto& bone : mPmx.bones) {
             std::array<float, 3> pos;
             std::array<float, 4> rot;
             if (mVmdMixer->getBoneTransform(bone.name, pos, rot))
-                vmdT[bone.name] = {pos, rot};
+                mVmdBoneCache[bone.name] = {pos, rot};
         }
-        if (!vmdT.empty()) {
+        if (!mVmdBoneCache.empty()) {
             if (mActiveVpdId >= 0) {
                 for (auto& [id, poses] : mVpdPoses) {
                     if (id == mActiveVpdId) {
-                        mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, poses, vmdT);
+                        mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, poses, mVmdBoneCache);
                         break;
                     }
                 }
             }
             else {
-                mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, {}, vmdT);
+                mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, {}, mVmdBoneCache);
             }
         }
-        // Collect morph weights from VMD
-        std::unordered_map<std::string, float> vmdMorphs;
+        mVmdMorphCache.clear();
         for (const auto& m : mPmx.morphs) {
             float w = mVmdMixer->getMorphWeight(m.name);
             if (w != 0)
-                vmdMorphs[m.name] = w;
+                mVmdMorphCache[m.name] = w;
         }
-        if (!vmdMorphs.empty())
-            mMorphCtl.setMorphWeights(vmdMorphs);
+        if (!mVmdMorphCache.empty())
+            mMorphCtl.setMorphWeights(mVmdMorphCache);
     }
 
     // --- Physics ---

@@ -269,18 +269,26 @@ void ModelRenderer::renderMainPass(Gpu::ShaderProgram& shader,
     shader.setInt("sphere_tex", 3);
     shader.setInt("toon_tex", 4);
 
+    std::memset(mLastBoundTex, 0, sizeof(mLastBoundTex));
+
     Gpu::Vao& vao = showToon ? mToonVao : mModelVao;
 
     for (const auto& batch : mMaterialBatches) {
-        // Bind diffuse texture
         bool hasTex = false;
         if (batch.textureIndex >= 0 && batch.textureIndex < (int)mTextures.size() &&
             mTextures[batch.textureIndex]) {
-            mTextures[batch.textureIndex]->bind(0);
+            auto* tex = mTextures[batch.textureIndex].get();
+            if (tex->id != mLastBoundTex[0]) {
+                tex->bind(0);
+                mLastBoundTex[0] = tex->id;
+            }
             hasTex = true;
         }
         else {
-            mDummyTexture->bind(0);
+            if (mDummyTexture->id != mLastBoundTex[0]) {
+                mDummyTexture->bind(0);
+                mLastBoundTex[0] = mDummyTexture->id;
+            }
         }
         const auto& mat = mModel->materials[batch.materialIndex];
         auto* ov = getMaterialOverride(batch.materialIndex);
@@ -299,53 +307,54 @@ void ModelRenderer::renderMainPass(Gpu::ShaderProgram& shader,
         }
         shader.setFloat("alpha", ov ? ov->alpha : mat.alpha);
 
-        // Specular
         const auto& spec = mMaterialSpecular[batch.materialIndex];
         shader.setVec3("specular_color", spec.color.x, spec.color.y, spec.color.z);
         shader.setFloat("specular_factor", spec.factor);
 
-        // Ambient
         const auto& amb = mMaterialAmbient[batch.materialIndex];
         shader.setVec3("ambient_color", amb.x, amb.y, amb.z);
 
-        // Sphere
-        const auto& sphere = mMaterialSphere[batch.materialIndex];
-        if (sphere.textureIndex >= 0 && sphere.textureIndex < (int)mTextures.size() &&
-            mTextures[sphere.textureIndex]) {
-            mTextures[sphere.textureIndex]->bind(3);
-            shader.setInt("sphere_mode", sphere.mode);
-        }
-        else {
-            shader.setInt("sphere_mode", 0);
+        {
+            const auto& sphere = mMaterialSphere[batch.materialIndex];
+            if (sphere.textureIndex >= 0 && sphere.textureIndex < (int)mTextures.size() &&
+                mTextures[sphere.textureIndex]) {
+                auto* sTex = mTextures[sphere.textureIndex].get();
+                if (sTex->id != mLastBoundTex[3]) {
+                    sTex->bind(3);
+                    mLastBoundTex[3] = sTex->id;
+                }
+                shader.setInt("sphere_mode", sphere.mode);
+            }
+            else {
+                shader.setInt("sphere_mode", 0);
+            }
         }
 
-        // Toon
-        const auto& toon = mMaterialToon[batch.materialIndex];
-        if (toon.sharingFlag != 0) {
-            int si = toon.textureIndex;
-            if (auto* t = mmd::RenderContext::instance().sharedToon(si)) {
-                t->bind(4);
-                shader.setInt("has_toon", 1);
+        {
+            const auto& toon = mMaterialToon[batch.materialIndex];
+            Gpu::Texture* toonTex = nullptr;
+            if (toon.sharingFlag != 0) {
+                toonTex = mmd::RenderContext::instance().sharedToon(toon.textureIndex);
+                if (!toonTex)
+                    toonTex = mmd::RenderContext::instance().sharedToon(0);
             }
-            else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
-                t->bind(4);
+            else if (toon.textureIndex >= 0 && toon.textureIndex < (int)mTextures.size() &&
+                     mTextures[toon.textureIndex]) {
+                toonTex = mTextures[toon.textureIndex].get();
+            }
+            else {
+                toonTex = mmd::RenderContext::instance().sharedToon(0);
+            }
+            if (toonTex) {
+                if (toonTex->id != mLastBoundTex[4]) {
+                    toonTex->bind(4);
+                    mLastBoundTex[4] = toonTex->id;
+                }
                 shader.setInt("has_toon", 1);
             }
             else {
                 shader.setInt("has_toon", 0);
             }
-        }
-        else if (toon.textureIndex >= 0 && toon.textureIndex < (int)mTextures.size() &&
-                 mTextures[toon.textureIndex]) {
-            mTextures[toon.textureIndex]->bind(4);
-            shader.setInt("has_toon", 1);
-        }
-        else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
-            t->bind(4);
-            shader.setInt("has_toon", 1);
-        }
-        else {
-            shader.setInt("has_toon", 0);
         }
 
         vao.bind();

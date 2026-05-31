@@ -177,4 +177,6 @@ private:
     std::unique_ptr<Gpu::VboWrapper> mMorphVboW;
     std::unique_ptr<Gpu::VboWrapper> mUvMorphVboW;
     std::unordered_map<int, MatMorphOverride> mMatOverride;
+
+    mutable GLuint mLastBoundTex[8] = {0};
 };

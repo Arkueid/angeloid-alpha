@@ -196,6 +196,7 @@ bool VmdPlayState::update(float deltaTime) {
             mPlaying = false;
             if (mOnEnd)
                 mOnEnd(mTrackId);
+            mOnEnd = nullptr;
         }
     }
     return mPlaying;
@@ -231,15 +232,10 @@ bool VmdPlayState::getBoneTransform(const std::string& boneName, std::array<floa
         return true;
     }
 
-    // Find surrounding keyframes
-    int left = 0, right = 0;
-    for (size_t i = 0; i + 1 < kfs.size(); ++i) {
-        if (kfs[i].frame <= (int)frame && (int)frame <= kfs[i + 1].frame) {
-            left = (int)i;
-            right = (int)i + 1;
-            break;
-        }
-    }
+    auto kfIt = std::lower_bound(kfs.begin(), kfs.end(), (int)frame,
+        [](const VmdBoneKeyframe& kf, int f) { return kf.frame < f; });
+    int right = (int)(kfIt - kfs.begin());
+    int left = right - 1;
 
     const auto& kl = kfs[left];
     const auto& kr = kfs[right];
@@ -252,7 +248,6 @@ bool VmdPlayState::getBoneTransform(const std::string& boneName, std::array<floa
 
     float t = (frame - kl.frame) / diff;
 
-    // Bezier x, y, z, rotation time warping
     float tx = VmdInterp::interpBezier(t, kl.interpolation, 0);
     float ty = VmdInterp::interpBezier(t, kl.interpolation, 1);
     float tz = VmdInterp::interpBezier(t, kl.interpolation, 2);
@@ -287,16 +282,15 @@ float VmdPlayState::getMorphWeight(const std::string& morphName) const {
     if (frame >= kfs.back().frame)
         return kfs.back().weight;
 
-    for (size_t i = 0; i + 1 < kfs.size(); ++i) {
-        if (kfs[i].frame <= (int)frame && (int)frame <= kfs[i + 1].frame) {
-            float diff = (float)(kfs[i + 1].frame - kfs[i].frame);
-            if (diff == 0)
-                return kfs[i].weight;
-            float t = (frame - kfs[i].frame) / diff;
-            return VmdInterp::lerp(kfs[i].weight, kfs[i + 1].weight, t);
-        }
-    }
-    return 0;
+    auto kfIt = std::lower_bound(kfs.begin(), kfs.end(), (int)frame,
+        [](const VmdMorphKeyframe& kf, int f) { return kf.frame < f; });
+    int right = (int)(kfIt - kfs.begin());
+    int left = right - 1;
+    float diff = (float)(kfs[right].frame - kfs[left].frame);
+    if (diff == 0)
+        return kfs[left].weight;
+    float t = (frame - kfs[left].frame) / diff;
+    return VmdInterp::lerp(kfs[left].weight, kfs[right].weight, t);
 }
 
 // --- VmdMixer ---
