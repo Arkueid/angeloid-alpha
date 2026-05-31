@@ -171,6 +171,11 @@ void Model::update(float dt) {
                 MMD_ERROR("MODEL", "frame=%d NaN in %d/%d pose matrices!", checkFrame, nanCount, (int)mPoseWorld.size());
             }
         }
+        // Periodic physics analysis (press F to dump manually via debugDump instead)
+        // static int dumpFrame = 0;
+        // if (++dumpFrame % 120 == 0) {
+        //     mPhysics.debugFullDump(dumpFrame);
+        // }
     }
 
     // --- Idle animation ---

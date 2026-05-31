@@ -2,14 +2,16 @@
 
 #include "pmx/PmxModel.h"
 
+#include <btBulletDynamicsCommon.h>
+
 #include <array>
 #include <memory>
 #include <vector>
 
 // Shape size multipliers from PMX value to Bullet parameter
-inline constexpr float kSphereShapeScale = 0.9f;   // btSphereShape radius
-inline constexpr float kBoxShapeScale = 0.9f;      // btBoxShape half-extent
-inline constexpr float kCapsuleShapeScale = 0.9f;  // btCapsuleShape radius & height
+inline constexpr float kSphereShapeScale = 1.0f;   // btSphereShape radius
+inline constexpr float kBoxShapeScale = 1.0f;      // btBoxShape half-extent
+inline constexpr float kCapsuleShapeScale = 1.0f;  // btCapsuleShape radius & height
 
 class btDiscreteDynamicsWorld;
 class btRigidBody;
@@ -33,14 +35,11 @@ struct BulletBody {
     // Body initial center-of-mass in Bullet space (offset from model center)
     float initPosX = 0, initPosY = 0, initPosZ = 0;
     float initRotX = 0, initRotY = 0, initRotZ = 0, initRotW = 1;
-    // Bone's bind-pose world transform in Bullet space.
-    // Stored at build time; used in getBoneTransforms() to compute the body→bone delta
-    // and feed physics results back into the skeleton.
-    float bonePosX = 0, bonePosY = 0, bonePosZ = 0;
-    float boneRotX = 0, boneRotY = 0, boneRotZ = 0, boneRotW = 1;
+    // Precomputed: invBodyInit = inverse(initial body transform), for matrix-multiply feedback
+    btTransform invBodyInit;
+    // Precomputed: boneBindMatrix = bone's bind-pose world transform (centered)
+    btTransform boneBindMat;
     // True when connected to rotation-spring joints with freedom range.
-    // Affects getBoneTransforms(): cloth-like bodies contribute physics rotation
-    // but use bone-driven position to avoid cloth snapping.
     bool clothLike = false;
     bool skipBoneFeedback = false;  // sphere + >=3 joints: star topology noise
     std::string name;
@@ -68,6 +67,7 @@ public:
         return mModelScale;
     }
     void debugDump() const;
+    void debugFullDump(int frameNum) const;
     void debugTrackCloth() const;
 
     // Update mode 0 bodies to follow their linked bones

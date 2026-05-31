@@ -8,7 +8,8 @@ type: reference
 *File: `mmd/anim/PhysicsWorld.cpp`*
 - Gravity: `-9.8 / modelScale` (~-99, matching saba's -98). Set per-model in `build()`.
 - Solver: 15 iterations, ERP2=0.8, 10 substeps @ 240Hz, max step 1/30s
-- Shape multipliers in `PhysicsWorld.h`: `kSphereShapeScale=0.9`, `kBoxShapeScale=0.9`, `kCapsuleShapeScale=0.9`
+- Shape multipliers in `PhysicsWorld.h`: `kSphereShapeScale=1.0`, `kBoxShapeScale=1.0`, `kCapsuleShapeScale=1.0`
+  - Changed from 0.9 (2026-05-31): shapes now match PMX-defined sizes and saba's reference implementation. The 0.9x scaling caused smaller collision volumes, contributing to skirt-leg clipping in models with tight-fitting clothing.
 
 ## PMX-native Space
 All positions, shapes, joints, CCD at PMX-native scale. NO `modelScale` multiplication.
@@ -44,12 +45,27 @@ NOT called. Matches saba. Springs use constraint-frame equilibrium.
 | 2 | PMX mass | Dynamic | PID forces toward bone: `posErr*50 - vel*15` |
 
 ## Bone Feedback
+Uses full matrix multiplication to correctly handle rotation-induced translation, exactly matching saba's `ReflectGlobalTransform`:
+
 ```cpp
 // In getBoneTransforms():
-boneNewPos = boneInitPos + (bodyPos - bodyInitPos);
-boneNewRot = bodyDeltaRot * boneInitRot;
-// Convert back: tx = boneNewPos.x() + center.x (no /s)
+// boneMat = bodyCurr · inv(bodyInit) · boneBind  (matrix multiply)
+btTransform boneMat = bodyCurr * bb.invBodyInit * bb.boneBindMat;
+// Mode 1: full position + rotation
+// Mode 2: animation position + physics rotation only
 ```
+
+`BulletBody` stores two precomputed btTransform at build time:
+- `invBodyInit`: inverse of the body's initial world transform
+- `boneBindMat`: the bone's bind-pose world transform (centered)
+
+`computeBoneTarget()` (mode-0 kinematic bodies) uses the same formulation:
+`animBone · inv(bindBone) · bodyInit`
+
+**Why not vector addition?** The previous approach (`bonePos = initPos + displacement`) ignored body rotation. When gravity rotates a skirt panel, the pivot-to-COM vector rotates with it, but the simple displacement formula doesn't account for this. Verified by cross-comparison with saba: body positions matched but bone positions diverged by ~0.06 PMX units, causing ~0.06-0.07 vertex Y error at the skirt edge.
+
+Memory cost: +128 bytes per body (2 btTransform × 64 bytes). For 134 bodies ≈ 17 KB total.
+Perf cost: 3 matrix multiplies per active body per frame. ~21K float ops at 60fps. Negligible.
 
 ## Cloth-like Detection
 Bodies with rotation springs + rotation limit range ≥ 0.01 → `clothLike = true`. Used by `debugTrackCloth()` (currently disabled).

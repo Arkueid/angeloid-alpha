@@ -14,7 +14,7 @@ namespace {
 constexpr float kGravityY = -9.8f;
 // Default Bullet solver iteration count (2× default, improves joint stability)
 constexpr int kSolverIterations = 15;
-// Substep count per stepSimulation call — trades performance for constraint accuracy
+// Substep count per stepSimulation call
 constexpr int kSubsteps = 10;
 constexpr float kFixedTimestep = 1.0f / 240.0f;
 // Cap deltaTime to prevent explosion after frame spikes (e.g. window drag, breakpoint)
@@ -34,7 +34,7 @@ PhysicsWorld::PhysicsWorld() {
     mWorld->setGravity(btVector3(0, kGravityY, 0));
     mWorld->getSolverInfo().m_numIterations = kSolverIterations;
     // ERP2 (Error Reduction Parameter) controls Baumgarte stabilization strength.
-    // Bullet 3.x changed the default to 0.2; we restore 0.8 matching saba and Bullet 2.75
+    // Bullet 3.x changed the default to 0.2; we restore 0.8 matching Bullet 2.75
     // — without this, joints drift visibly over time.
     mWorld->getSolverInfo().m_erp2 = 0.8f;
 }
@@ -86,6 +86,32 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale) {
     MMD_INFO("PHYS", "%zu bodies (mode0/static=%d mode1/dyn=%d mode2/align=%d), %zu joints",
              model.rigidbodies.size(), countMode[0], countMode[1], countMode[2],
              model.joints.size());
+    MMD_INFO("PHYS", "  modelScale=%.6f  gravity=(0, %.4f, 0)  center=(%.4f,%.4f,%.4f)  minY=%.4f",
+             modelScale, kGravityY / modelScale, mCenter.x, mCenter.y, mCenter.z, mMinY);
+
+    // --- Per-body dump ---
+    const char* kShapeNames[] = {"Sphere", "Box", "Capsule"};
+    const char* kModeNames[] = {"STATIC", "DYNAMIC", "ALIGN"};
+    for (const auto& rb : model.rigidbodies) {
+        const char* shapeName =
+            (rb.shape_type >= 0 && rb.shape_type < 3) ? kShapeNames[rb.shape_type] : "?";
+        const char* modeName =
+            (rb.mode >= 0 && rb.mode < 3) ? kModeNames[rb.mode] : "?";
+        const char* boneName =
+            (rb.bone_index >= 0 && rb.bone_index < (int)model.bones.size())
+                ? model.bones[rb.bone_index].name.c_str()
+                : "(none)";
+        MMD_INFO("PHYS",
+                 "  BODY[%d] \"%s\" mode=%s shape=%s size=(%.4f,%.4f,%.4f) "
+                 "bone[%d]=\"%s\" mass=%.4f linDamp=%.3f angDamp=%.3f "
+                 "colGroup=0x%04x noColGroup=0x%04x "
+                 "pos=(%.4f,%.4f,%.4f) rot=(%.4f,%.4f,%.4f)",
+                 rb.index, rb.name.c_str(), modeName, shapeName, rb.shape_size.x, rb.shape_size.y,
+                 rb.shape_size.z, rb.bone_index, boneName, rb.mass, rb.linear_damping,
+                 rb.angular_damping, rb.collision_group, rb.no_collision_group,
+                 rb.shape_position.x, rb.shape_position.y, rb.shape_position.z,
+                 rb.shape_rotation.x, rb.shape_rotation.y, rb.shape_rotation.z);
+    }
 
     for (const auto& rb : model.rigidbodies)
         addRigidBody(rb);
@@ -96,6 +122,33 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale) {
             dynMassCount++;
     }
     MMD_INFO("PHYS", "  Dynamic mass bodies: %d", dynMassCount);
+
+    // --- Per-joint dump ---
+    for (const auto& jt : model.joints) {
+        const char* nameA =
+            (jt.rigidbody_index_a >= 0 && jt.rigidbody_index_a < (int)model.rigidbodies.size())
+                ? model.rigidbodies[jt.rigidbody_index_a].name.c_str()
+                : "?";
+        const char* nameB =
+            (jt.rigidbody_index_b >= 0 && jt.rigidbody_index_b < (int)model.rigidbodies.size())
+                ? model.rigidbodies[jt.rigidbody_index_b].name.c_str()
+                : "?";
+        MMD_INFO("PHYS",
+                 "  JOINT[%d] type=%d \"%s\"<->\"%s\" pos=(%.4f,%.4f,%.4f) "
+                 "springT=(%.1f,%.1f,%.1f) springR=(%.1f,%.1f,%.1f) "
+                 "limT=[(%.4f,%.4f) (%.4f,%.4f) (%.4f,%.4f)] "
+                 "limR=[(%.4f,%.4f) (%.4f,%.4f) (%.4f,%.4f)]",
+                 jt.index, jt.joint_type, nameA, nameB, jt.position.x, jt.position.y,
+                 jt.position.z, jt.spring_constant_translation.x, jt.spring_constant_translation.y,
+                 jt.spring_constant_translation.z, jt.spring_constant_rotation.x,
+                 jt.spring_constant_rotation.y, jt.spring_constant_rotation.z,
+                 jt.translation_limit_min.x, jt.translation_limit_max.x,
+                 jt.translation_limit_min.y, jt.translation_limit_max.y,
+                 jt.translation_limit_min.z, jt.translation_limit_max.z,
+                 jt.rotation_limit_min.x, jt.rotation_limit_max.x,
+                 jt.rotation_limit_min.y, jt.rotation_limit_max.y,
+                 jt.rotation_limit_min.z, jt.rotation_limit_max.z);
+    }
 
     for (const auto& jt : model.joints)
         addJoint(jt);
@@ -153,15 +206,6 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale) {
 }
 
 void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWorld) {
-    // Reset all bodies to their PMX-defined initial positions and rotations,
-    // then run one simulation step to resolve overlaps. This matches saba's
-    // ResetPhysics: bodies go to initPos/initRot, NOT bone-computed targets.
-    // Bone pose changes (VPD, VMD animation) do NOT affect body positions during
-    // reset — dynamic bodies settle via joints connecting them to mode-0 bodies
-    // during subsequent frames. Using computeBoneTarget here would apply bone
-    // rotation deltas to body offsets, causing bodies to orbit wildly when
-    // bones have large VPD rotations (e.g. 左腕 54° → pf_L_* chain displaced).
-
     // Phase 1: align to init positions, make kinematic
     for (auto& bb : mBodies) {
         if (bb.mode == 0 || bb.boneIndex < 0 || bb.boneIndex >= (int)poseWorld.size())
@@ -304,27 +348,27 @@ void PhysicsWorld::addRigidBody(const PmxRigidBody& rb) {
     btQuaternion initRot = t.getRotation();
     btVector3 initPos = t.getOrigin();
 
-    // Bone bind world position in PMX-native space (offset from center)
-    float bpx = 0, bpy = 0, bpz = 0, brx = 0, bry = 0, brz = 0, brw = 1;
+    // Precompute invBodyInit and boneBindMat for matrix-multiply bone feedback
+    btTransform invBodyInit = t.inverse();
+    btTransform boneBindMat;
+    boneBindMat.setIdentity();
     if (rb.bone_index >= 0 && rb.bone_index < (int)mBoneBindWorld.size()) {
         const auto& bw = mBoneBindWorld[rb.bone_index];
-        bpx = bw[12] - mCenter.x;
-        bpy = bw[13] - mMinY;
-        bpz = bw[14] - mCenter.z;
+        float bpx = bw[12] - mCenter.x;
+        float bpy = bw[13] - mMinY;
+        float bpz = bw[14] - mCenter.z;
         btMatrix3x3 bwBasis(bw[0], bw[4], bw[8], bw[1], bw[5], bw[9], bw[2], bw[6], bw[10]);
         btQuaternion bwRot;
         bwBasis.getRotation(bwRot);
-        brx = bwRot.x();
-        bry = bwRot.y();
-        brz = bwRot.z();
-        brw = bwRot.w();
+        boneBindMat.setOrigin(btVector3(bpx, bpy, bpz));
+        boneBindMat.setRotation(bwRot);
     }
 
-    mBodies.push_back({body,        rb.bone_index, rb.index,    rb.mode,     initPos.x(),
-                       initPos.y(), initPos.z(),   initRot.x(), initRot.y(), initRot.z(),
-                       initRot.w(), bpx,           bpy,         bpz,         brx,
-                       bry,         brz,           brw,         false,       false,
-                       rb.name});
+    mBodies.push_back({body, rb.bone_index, rb.index, rb.mode,
+                       initPos.x(), initPos.y(), initPos.z(),
+                       initRot.x(), initRot.y(), initRot.z(), initRot.w(),
+                       std::move(invBodyInit), std::move(boneBindMat),
+                       false, false, rb.name});
 }
 
 void PhysicsWorld::addJoint(const PmxJoint& jt) {
@@ -493,11 +537,7 @@ void PhysicsWorld::addJoint(const PmxJoint& jt) {
 
         // Tiered spring fallback: for translation DOFs that are tightly constrained
         // (small range) but have no explicit PMX spring, inject a strong spring to
-        // prevent drift. Type 0 joints with existing springs skip this — the PMX spring
-        // already provides the restoring force. Three tiers:
-        //   near-locked: range < 0.001 m → k=10000 (essentially rigid)
-        //   tight:       range < 0.2   m → k=2000
-        //   narrow:      range < 0.5   m → k=500
+        // prevent drift. Type 0 joints with existing springs skip this.
         float lo[3] = {jt.translation_limit_min.x, jt.translation_limit_min.y,
                        jt.translation_limit_min.z};
         float hi[3] = {jt.translation_limit_max.x, jt.translation_limit_max.y,
@@ -531,53 +571,37 @@ void PhysicsWorld::addJoint(const PmxJoint& jt) {
     mConstraints.emplace_back(c);
 }
 
-// Compute the target position/rotation a rigid body should follow based on its linked
-// bone's current animation pose. Uses a "delta tracking" approach:
-//   1. Record the body's initial offset from the bone's bind-pose position.
-//   2. Compute the bone's rotation delta from bind → current pose.
-//   3. Apply that same delta rotation to the body's offset.
-//   4. Add the result to the bone's current pose position.
-// This way, when a bone rotates, its attached rigid body orbits around it correctly.
+// Compute the target transform a rigid body should follow based on its linked
+// bone's current animation pose. Uses matrix multiplication matching saba:
+//   bodyTarget = animBone * inv(bindBone) * bodyInit
 void PhysicsWorld::computeBoneTarget(const BulletBody& bb,
                                      const std::vector<std::array<float, 16>>& poseWorld,
                                      btVector3& outPos, btQuaternion& outRot) const {
-    // Pose world = current frame bone transform
     const auto& pw = poseWorld[bb.boneIndex];
-    // Bind world = initial bone transform from PMX (pre-animation)
     const auto& bw = mBoneBindWorld[bb.boneIndex];
 
-    // Body initial position in model space (un-center for absolute coordinates)
-    float bodyModelX = bb.initPosX + mCenter.x;
-    float bodyModelY = bb.initPosY + mMinY;
-    float bodyModelZ = bb.initPosZ + mCenter.z;
+    // Build current animation bone transform (centered)
+    btTransform animBone;
+    animBone.setOrigin(btVector3(pw[12] - mCenter.x, pw[13] - mMinY, pw[14] - mCenter.z));
+    btMatrix3x3 pwBasis(pw[0],pw[4],pw[8], pw[1],pw[5],pw[9], pw[2],pw[6],pw[10]);
+    btQuaternion pwRot; pwBasis.getRotation(pwRot);
+    animBone.setRotation(pwRot);
 
-    // Bone bind-pose position and rotation
-    float bbx = bw[12], bby = bw[13], bbz = bw[14];
-    btMatrix3x3 bwBasis(bw[0], bw[4], bw[8], bw[1], bw[5], bw[9], bw[2], bw[6], bw[10]);
-    btQuaternion bwRot;
-    bwBasis.getRotation(bwRot);
+    // Build bind bone transform (centered)
+    btTransform bindBone;
+    bindBone.setOrigin(btVector3(bw[12] - mCenter.x, bw[13] - mMinY, bw[14] - mCenter.z));
+    btMatrix3x3 bwBasis(bw[0],bw[4],bw[8], bw[1],bw[5],bw[9], bw[2],bw[6],bw[10]);
+    btQuaternion bwRot; bwBasis.getRotation(bwRot);
+    bindBone.setRotation(bwRot);
 
-    // Bone current-pose position and rotation
-    float bax = pw[12], bay = pw[13], baz = pw[14];
-    btMatrix3x3 pwBasis(pw[0], pw[4], pw[8], pw[1], pw[5], pw[9], pw[2], pw[6], pw[10]);
-    btQuaternion pwRot;
-    pwBasis.getRotation(pwRot);
+    // bodyTarget = animBone * inv(bindBone) * bodyInit
+    btTransform bodyInit;
+    bodyInit.setOrigin(btVector3(bb.initPosX, bb.initPosY, bb.initPosZ));
+    bodyInit.setRotation(btQuaternion(bb.initRotX, bb.initRotY, bb.initRotZ, bb.initRotW));
+    btTransform bodyTarget = animBone * bindBone.inverse() * bodyInit;
 
-    // Body's offset from bone in bind pose, then rotated by bone's animation delta
-    btVector3 offset(bodyModelX - bbx, bodyModelY - bby, bodyModelZ - bbz);
-    btQuaternion deltaRot = pwRot * bwRot.inverse();
-    btVector3 rotatedOffset = btMatrix3x3(deltaRot) * offset;
-
-    // Target = bone current position + rotated body offset
-    float tgtX = bax + rotatedOffset.x();
-    float tgtY = bay + rotatedOffset.y();
-    float tgtZ = baz + rotatedOffset.z();
-    btQuaternion bodyInitRot(bb.initRotX, bb.initRotY, bb.initRotZ, bb.initRotW);
-
-    // Output in PMX-native space (center-relative, matching Bullet body positions)
-    outPos = btVector3(tgtX - mCenter.x, tgtY - mMinY, tgtZ - mCenter.z);
-    // Target rotation = bone's animation delta composed with body's initial rotation
-    outRot = deltaRot * bodyInitRot;
+    outPos = bodyTarget.getOrigin();
+    outRot = bodyTarget.getRotation();
 }
 
 void PhysicsWorld::updateMode0Bodies(const std::vector<std::array<float, 16>>& poseWorld) {
@@ -623,33 +647,19 @@ void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) co
         if (bb.skipBoneFeedback)
             continue;
 
-        btTransform t = bb.body->getCenterOfMassTransform();
-        btQuaternion bodyRot = t.getRotation();
+        btTransform bodyCurr = bb.body->getCenterOfMassTransform();
+        // boneMat = bodyCurr * invBodyInit * boneBind (matrix multiply, matches saba)
+        btTransform boneMat = bodyCurr * bb.invBodyInit * bb.boneBindMat;
+        btQuaternion boneNewRot = boneMat.getRotation();
+        btVector3 boneNewPos = boneMat.getOrigin();
 
-        // Body's rotation delta from its initial configuration
-        btQuaternion bodyInitRot(bb.initRotX, bb.initRotY, bb.initRotZ, bb.initRotW);
-        btQuaternion bodyDeltaRot = bodyRot * bodyInitRot.inverse();
-
-        // Apply rotation delta to the bone's bind-world rotation
-        btQuaternion boneInitRot(bb.boneRotX, bb.boneRotY, bb.boneRotZ, bb.boneRotW);
-        btQuaternion boneNewRot = bodyDeltaRot * boneInitRot;
-
-        // Mode 2 (bone-align): keep the bone's animated position, only feed back
-        // physics rotation. This matches saba's approach — the bone position is
-        // driven by animation, not pulled by physics (prevents skirt sag).
-        // Mode 0/1: full displacement from init (position + rotation).
         float tx, ty, tz;
         if (bb.mode == 2) {
-            // Bone position from animation (already in model space in out[])
+            // Keep animation position, only use physics rotation
             tx = out[bb.boneIndex][12];
             ty = out[bb.boneIndex][13];
             tz = out[bb.boneIndex][14];
         } else {
-            btVector3 bodyPos = t.getOrigin();
-            btVector3 bodyInitPos(bb.initPosX, bb.initPosY, bb.initPosZ);
-            btVector3 disp = bodyPos - bodyInitPos;
-            btVector3 boneInitPos(bb.bonePosX, bb.bonePosY, bb.bonePosZ);
-            btVector3 boneNewPos = boneInitPos + disp;
             tx = boneNewPos.x() + mCenter.x;
             ty = boneNewPos.y() + mMinY;
             tz = boneNewPos.z() + mCenter.z;
@@ -675,6 +685,110 @@ void PhysicsWorld::getBoneTransforms(std::vector<std::array<float, 16>>& out) co
         m[11] = 0;
         m[15] = 1;
     }
+}
+
+// Comprehensive physics analysis dump for debugging skirt/cloth sagging.
+// Called periodically (every N frames). Logs:
+//   - Bodies with significant Y displacement (sorted by droop amount)
+//   - Active vs inactive body counts
+//   - Joint spring stiffness summary for bodies with large Y displacement
+void PhysicsWorld::debugFullDump(int frameNum) const {
+    // Threshold: Y displacement below this (in PMX model space) is "significant droop"
+    // 0.03 PMX units ~ 3mm for a typical model — visually noticeable
+    constexpr float kDroopWarnThreshold = -0.03f;
+    constexpr float kDroopSevereThreshold = -0.1f;
+
+    struct BodyInfo {
+        int idx;
+        const BulletBody* bb;
+        float yNow;       // current Y in model space
+        float yInit;      // init Y in model space
+        float deltaY;     // current - init (negative = droop)
+        float disp3D;     // 3D displacement magnitude
+        bool active;
+    };
+    std::vector<BodyInfo> infos;
+    int activeCount = 0, dynamicCount = 0;
+
+    for (int i = 0; i < (int)mBodies.size(); ++i) {
+        const auto& bb = mBodies[i];
+        if (!bb.body)
+            continue;
+        if (bb.mode == 0)
+            continue; // kinematic bodies don't sag
+        dynamicCount++;
+
+        btTransform t = bb.body->getCenterOfMassTransform();
+        btVector3 p = t.getOrigin();
+        float yNow = p.y() + mMinY;
+        float yInit = bb.initPosY + mMinY;
+        float deltaY = yNow - yInit;
+        btVector3 init(bb.initPosX, bb.initPosY, bb.initPosZ);
+        float disp3D = (p - init).length();
+        bool active = bb.body->isActive();
+        if (active)
+            activeCount++;
+
+        infos.push_back({i, &bb, yNow, yInit, deltaY, disp3D, active});
+    }
+
+    // Sort by |Y displacement| descending (largest droop first)
+    std::sort(infos.begin(), infos.end(),
+              [](const BodyInfo& a, const BodyInfo& b) { return a.deltaY < b.deltaY; });
+
+    int warnCount = 0, severeCount = 0;
+    for (const auto& info : infos) {
+        if (info.deltaY < kDroopWarnThreshold)
+            warnCount++;
+        if (info.deltaY < kDroopSevereThreshold)
+            severeCount++;
+    }
+
+    MMD_INFO("PHYS", "=== Frame %d Physics Analysis ===", frameNum);
+    MMD_INFO("PHYS", "  Bodies: dynamic=%d active=%d sleeping=%d | droop>0.03=%d severe(>0.1)=%d",
+             dynamicCount, activeCount, dynamicCount - activeCount, warnCount, severeCount);
+
+    // Print top 25 displaced bodies (most negative deltaY = biggest droop)
+    int showCount = std::min(25, (int)infos.size());
+    MMD_INFO("PHYS", "  --- Top %d bodies by Y displacement ---", showCount);
+    for (int i = 0; i < showCount; ++i) {
+        const auto& info = infos[i];
+        const char* modeStr =
+            info.bb->mode == 2 ? "ALIGN" : (info.bb->mode == 1 ? "dyn" : "?");
+        const char* flag = "";
+        if (info.deltaY < kDroopSevereThreshold)
+            flag = " **SEVERE**";
+        else if (info.deltaY < kDroopWarnThreshold)
+            flag = " *droop*";
+        MMD_INFO("PHYS",
+                 "  [%2d] BODY[%d] \"%s\" mode=%s cloth=%d skipFB=%d mass=%.3f "
+                 "act=%d | Y=%.4f initY=%.4f dY=%+.4f disp3D=%.4f%s",
+                 i, info.bb->rigidBodyIndex, info.bb->name.c_str(), modeStr, info.bb->clothLike,
+                 info.bb->skipBoneFeedback, info.bb->body ? 1.0f / info.bb->body->getInvMass() : 0,
+                 info.active, info.yNow, info.yInit, info.deltaY, info.disp3D, flag);
+    }
+
+    // Also show bodies that moved UP significantly (positive Y displacement)
+    int upCount = 0;
+    for (int i = (int)infos.size() - 1; i >= 0 && upCount < 5; --i) {
+        if (infos[i].deltaY > 0.03f)
+            upCount++;
+    }
+    if (upCount > 0) {
+        MMD_INFO("PHYS", "  --- Bodies pushed UP (>0.03) ---");
+        int shown = 0;
+        for (int i = (int)infos.size() - 1; i >= 0 && shown < 10; --i) {
+            if (infos[i].deltaY <= 0.03f)
+                continue;
+            const auto& info = infos[i];
+            MMD_INFO("PHYS",
+                     "  [%2d] BODY[%d] \"%s\" mode=%d act=%d dY=%+.4f",
+                     info.idx, info.bb->rigidBodyIndex, info.bb->name.c_str(),
+                     info.bb->mode, info.active, info.deltaY);
+            shown++;
+        }
+    }
+    MMD_INFO("PHYS", "=== End Frame %d ===", frameNum);
 }
 
 void PhysicsWorld::debugTrackCloth() const {

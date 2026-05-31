@@ -54,3 +54,7 @@ build.bat
 docs/angeloid-alpha-plan.md
 
 *.log
+
+saba-master
+
+imgui.ini
