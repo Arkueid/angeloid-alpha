@@ -101,6 +101,8 @@ cmake --build build
 
 ## Docs
 - `docs/INDEX.md` — entry point indexing all domain knowledge files
+- `docs/PYTHON_API.md` — Python API reference (Model, Camera, module functions)
+- `docs/BUILD.md` — build guide (pip/CMake, C++ viewer, keyboard shortcuts, tech details)
 - `docs/ARCHITECTURE.md` — refactoring plan and design rationale
 - `docs/reference/` — MMD format reference materials (PMX spec, joint constraints)
 - Before any non-trivial change, check relevant docs for context

@@ -1,5 +1,9 @@
 # Angeloid Alpha — Docs Index
 
+## User-Facing
+- [Python API Reference](PYTHON_API.md) — Model, Camera, module functions (full API)
+- [Build Guide](BUILD.md) — pip / CMake build, C++ viewer CLI, keyboard shortcuts, tech details
+
 ## Design & Architecture
 - [Architecture Overview](architecture.md) — project structure, CMake, layers, key files, model registry
 - [Refactoring Plan](ARCHITECTURE.md) — AssetStore, RenderContext design, migration steps
