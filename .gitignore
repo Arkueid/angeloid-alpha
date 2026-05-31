@@ -52,3 +52,5 @@ build.bat
 
 # Private docs
 docs/angeloid-alpha-plan.md
+
+*.log

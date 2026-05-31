@@ -109,7 +109,6 @@ void Model::removeVpd(int vpdId) {
 //   3. Idle:      track idle time for auto-blink morph
 //   4. GPU sync:  pack pose world matrices into bone texture for vertex shader skinning
 void Model::update(float dt) {
-    // --- VMD animation ---
     if (mVmdMixer->update(dt) || !mClearVmd) {
         mVmdBoneCache.clear();
         for (const auto& bone : mPmx.bones) {
@@ -118,6 +117,7 @@ void Model::update(float dt) {
             if (mVmdMixer->getBoneTransform(bone.name, pos, rot))
                 mVmdBoneCache[bone.name] = {pos, rot};
         }
+        
         if (!mVmdBoneCache.empty()) {
             if (mActiveVpdId >= 0) {
                 for (auto& [id, poses] : mVpdPoses) {
@@ -141,9 +141,6 @@ void Model::update(float dt) {
             mMorphCtl.setMorphWeights(mVmdMorphCache);
     }
 
-    // --- Physics ---
-    // Mode 0 (kinematic) bodies must follow their bones each frame before the step.
-    // When skinning is off, use bind pose as the bone reference.
     mPhysics.updateMode0Bodies(mRenderer.useSkinning ? mPoseWorld : mBindPoseWorld);
     if (mPhysics.enabled) {
         mPhysics.step(dt, mPoseWorld);

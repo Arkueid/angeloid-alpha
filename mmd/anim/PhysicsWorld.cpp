@@ -603,17 +603,8 @@ void PhysicsWorld::updateMode0Bodies(const std::vector<std::array<float, 16>>& p
 void PhysicsWorld::step(float deltaTime, const std::vector<std::array<float, 16>>& poseWorld) {
     if (!enabled)
         return;
-
-    // Mode 2 (bone-align) bodies run as standard Bullet dynamic bodies — no
-    // corrective forces. Joints connecting them to mode-0 bodies constrain their
-    // position. The alignment happens in getBoneTransforms(): only physics ROTATION
-    // feeds back to the bone; bone POSITION stays at the animation target.
-    // This matches saba's DynamicAndBoneMergeMotionState approach.
-
-    // Cap deltaTime to prevent physics explosion on frame spikes
-    mWorld->stepSimulation(std::min(deltaTime, kMaxTimestep), kSubsteps, kFixedTimestep);
-
-    // debugTrackCloth();
+    float dt = std::min(deltaTime, kMaxTimestep);
+    mWorld->stepSimulation(dt, kSubsteps, kFixedTimestep);
 }
 
 // Write physics simulation results back to bone world matrices.

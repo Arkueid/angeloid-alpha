@@ -221,20 +221,26 @@ bool VmdPlayState::getBoneTransform(const std::string& boneName, std::array<floa
     }
 
     float frame = mCurrentFrame;
-    if (frame <= (float)kfs.front().frame) {
+    int iframe = (int)frame;
+    if (iframe <= kfs.front().frame) {
         posOut = {kfs.front().px, kfs.front().py, kfs.front().pz};
         rotOut = {kfs.front().qx, kfs.front().qy, kfs.front().qz, kfs.front().qw};
         return true;
     }
-    if (frame >= (float)kfs.back().frame) {
+    if (iframe >= kfs.back().frame) {
         posOut = {kfs.back().px, kfs.back().py, kfs.back().pz};
         rotOut = {kfs.back().qx, kfs.back().qy, kfs.back().qz, kfs.back().qw};
         return true;
     }
 
-    auto kfIt = std::lower_bound(kfs.begin(), kfs.end(), (int)frame,
+    auto kfIt = std::lower_bound(kfs.begin(), kfs.end(), iframe,
         [](const VmdBoneKeyframe& kf, int f) { return kf.frame < f; });
     int right = (int)(kfIt - kfs.begin());
+    if (right == 0) {
+        posOut = {kfs[0].px, kfs[0].py, kfs[0].pz};
+        rotOut = {kfs[0].qx, kfs[0].qy, kfs[0].qz, kfs[0].qw};
+        return true;
+    }
     int left = right - 1;
 
     const auto& kl = kfs[left];
@@ -277,14 +283,17 @@ float VmdPlayState::getMorphWeight(const std::string& morphName) const {
         return kfs[0].weight;
 
     float frame = mCurrentFrame;
-    if (frame <= kfs.front().frame)
+    int iframe = (int)frame;
+    if (iframe <= kfs.front().frame)
         return kfs.front().weight;
-    if (frame >= kfs.back().frame)
+    if (iframe >= kfs.back().frame)
         return kfs.back().weight;
 
-    auto kfIt = std::lower_bound(kfs.begin(), kfs.end(), (int)frame,
+    auto kfIt = std::lower_bound(kfs.begin(), kfs.end(), iframe,
         [](const VmdMorphKeyframe& kf, int f) { return kf.frame < f; });
     int right = (int)(kfIt - kfs.begin());
+    if (right == 0)
+        return kfs[0].weight;
     int left = right - 1;
     float diff = (float)(kfs[right].frame - kfs[left].frame);
     if (diff == 0)
@@ -401,7 +410,7 @@ bool VmdMixer::getBoneTransform(const std::string& boneName, std::array<float, 3
                                 std::array<float, 4>& rotOut) const {
     bool has = false;
     std::array<float, 3> pos = {0, 0, 0};
-    std::array<float, 4> rot;
+    std::array<float, 4> rot = {0, 0, 0, 1};
 
     for (const auto& p : mPlayStates) {
         std::array<float, 3> pp;

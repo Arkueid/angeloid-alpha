@@ -1,6 +1,7 @@
 #include "anim/BoneSkinning.h"
 
 #include "anim/VpdLoader.h"
+#include "util/Log.h"
 
 #include <array>
 #include <cmath>
@@ -98,7 +99,6 @@ static Mat4 translateMat(float x, float y, float z) {
     return m;
 }
 
-// Column-major matrix multiply: result = A * B
 static Mat4 mulMat4(const Mat4& A, const Mat4& B) {
     Mat4 r{};
     for (int col = 0; col < 4; ++col) {
