@@ -2,6 +2,21 @@
 
 ## Build & Run
 
+### Python wheel (recommended)
+
+```bash
+# Build wheel (CMake builds mmd + wrapper automatically, output in dist/)
+python setup.py bdist_wheel
+
+# Or install directly from source
+pip install .
+```
+
+- Pass `PYTHON_INSTALLATION_PATH` to CMake to override Python detection: `-DPYTHON_INSTALLATION_PATH=<path>`
+- `ENABLE_STACKTRACE` option: includes backward-cpp submodule for crash stack traces (printed to stderr, includes file/line/function)
+
+### C++ viewer (MSVC)
+
 MSVC compiler requires `vcvars64.bat` sourced first. Use the helper script:
 
 ```bat
@@ -11,12 +26,10 @@ build.bat -DENABLE_STACKTRACE=ON   # with crash stack trace (requires thirdparty
 
 Or manually (must run from VS Developer Command Prompt / after vcvars):
 ```bash
-cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -B build
+cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -B build -DBUILD_VIEWER=ON
 cmake --build build
 ./build/viewer/viewer.exe -m <model-name>
 ```
-
-- `ENABLE_STACKTRACE` option: includes backward-cpp submodule for crash stack traces (printed to stderr, includes file/line/function)
 
 ## Project structure
 - `mmd/` — computation + rendering library
@@ -28,10 +41,28 @@ cmake --build build
   - `render/opengl/` — ModelRenderer, ShaderManager, GPU wrappers
       - `gpu/` — Mesh, Texture, Shader (OpenGL primitives)
       - `debug/` — RigidBodyRenderer, WorldAxis
-- `viewer/` — thin application shell
-  - `window/` — IWindow, GlfwWindow, Camera
+- `wrapper/` — CPython bindings (pybind11-free, pure C API, SABIModule)
+  - `Wrapper.cmake` — shared CMake config; set `PYTHON_INSTALLATION_PATH` to point CMake at Python
 - `prototype/` — Python reference implementation
 - `resources/` — shared assets (models, textures, shaders, VMD, VPD)
+- `package/` — installable Python package (`angeloid`), `main.py` viewer
+
+## Python packaging
+- `setup.py` — FakeExtension + CMakeBuild pattern: `bdist_wheel` / `build_ext` / `install` hooks run cmake before packaging
+  - `run_cmake()` detects Python path (venv-aware via `pyvenv.cfg`), removes stale `CMakeCache.txt` to avoid platform mismatches
+  - Build args: `BUILD_PYTHON_WRAPPER=ON`, `BUILD_VIEWER=OFF`, `ENABLE_STACKTRACE=OFF`
+  - Windows: `-A x64`, `/m:2`; others: `-j2`
+- `pyproject.toml` — setuptools backend, `requires-python >=3.10`, zero dependencies, `__version__` from `package/angeloid/__init__.py`
+- `MANIFEST.in` — slim sdist (~2.7MB): only includes build-essential thirdparty files (bullet src/, glfw src+include+CMake)
+- Version: `package/angeloid/__init__.py` `__version__` is the single source of truth
+
+## CI/CD (GitHub Actions)
+- `.github/workflows/build-windows.yml` — windows-latest, Python 3.10–3.14 matrix, MSVC
+- `.github/workflows/build-linux.yml` — ubuntu-24.04, Python 3.10–3.14, OpenGL deps
+- `.github/workflows/build-macos.yml` — macos-latest (ARM), Python 3.11–3.14
+- Triggers: version tags `v*.*.*`, per-platform branches (`windows-workflow` etc.), `build-all`, PRs to master
+- Each workflow: checkout (recursive submodules) → `python setup.py bdist_wheel` → verify `pip install + import` → PyPI publish (only 3.13) → GitHub release upload
+- PyPI: `TWINE_USERNAME=__token__`, `TWINE_PASSWORD=${{ secrets.PYPI_PASSWORD }}`, `--skip-existing`
 
 ## Physics (Bullet)
 - Bullet Physics as git submodule at `thirdparty/bullet` (version 3.27)

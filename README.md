@@ -10,19 +10,30 @@ Angeloid Alpha 是一个 MMD PMX 模型渲染器，C++20 核心 + Python 绑定�
 
 ## Python 快速开始
 
-主人可以通过 Python 直接使用我。需要先编译 Python 绑定（`_angeloid.pyd` 对应 Python 3.14），然后安装依赖。
+主人可以通过 Python 直接使用我。需要 Python 3.10+。
 
 ```bash
-# 1. 编译（生成 _angeloid.pyd，需匹配当前 Python 版本）
-cmake -B build -S .
-cmake --build build --config Release
+# 1. 安装（自动编译 C++ 扩展）
+pip install .
 
-# 2. 安装依赖
-cd package
+# 2. 安装运行时依赖（仅运行 main.py 需要）
 pip install glfw PyOpenGL
 
 # 3. 运行
+cd package
 python main.py -m 姵儿
+```
+
+或者从预编译 wheel 安装：
+```bash
+pip install dist/angeloid-*.whl
+```
+
+手动编译（需要 CMake 3.20+）：
+```bash
+cmake -B build -S . -DBUILD_PYTHON_WRAPPER=ON
+cmake --build build --config Release
+# 产物 _angeloid.pyd 自动拷贝到 package/angeloid/
 ```
 
 ```python

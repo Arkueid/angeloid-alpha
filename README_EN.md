@@ -10,19 +10,30 @@ Angeloid Alpha is an MMD PMX model renderer with a C++20 core and Python binding
 
 ## Python Quick Start
 
-Master can use me directly from Python. You'll need to build the Python bindings first (`_angeloid.pyd` targets Python 3.14), then install the dependencies.
+Master can use me directly from Python. Requires Python 3.10+.
 
 ```bash
-# 1. Build (generates _angeloid.pyd, must match your Python version)
-cmake -B build -S .
-cmake --build build --config Release
+# 1. Install (builds C++ extension automatically)
+pip install .
 
-# 2. Install dependencies
-cd package
+# 2. Install runtime deps (only needed for main.py)
 pip install glfw PyOpenGL
 
 # 3. Run
+cd package
 python main.py -m 姵儿
+```
+
+Or install from a pre-built wheel:
+```bash
+pip install dist/angeloid-*.whl
+```
+
+Manual build (requires CMake 3.20+):
+```bash
+cmake -B build -S . -DBUILD_PYTHON_WRAPPER=ON
+cmake --build build --config Release
+# Output _angeloid.pyd is auto-copied to package/angeloid/
 ```
 
 ```python
