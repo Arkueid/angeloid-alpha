@@ -40,11 +40,7 @@ target_link_libraries(${MMD_WRAPPER_TARGET} PRIVATE
     Python3::SABIModule
 )
 
-set_target_properties(${MMD_WRAPPER_TARGET} PROPERTIES
-    OUTPUT_NAME "_angeloid"
-    PREFIX ""
-    SUFFIX ".pyd"
-)
+set_wrapper_output(${MMD_WRAPPER_TARGET} "_angeloid")
 
 if(MSVC)
     set_target_properties(${MMD_WRAPPER_TARGET} PROPERTIES
