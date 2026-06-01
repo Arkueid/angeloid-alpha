@@ -349,7 +349,7 @@ static PyObject* PyModel_ModelMatrix(PyModelObject* self, PyObject*) {
     return list;
 }
 
-static PyMethodDef PyModel_methods[] = {
+PyMethodDef PyModel_methods[] = {
     {"load", (PyCFunction)PyModel_Load, METH_VARARGS, "Load PMX model from path"},
     {"update", (PyCFunction)PyModel_Update, METH_VARARGS, "Update model with delta time"},
     {"draw", (PyCFunction)PyModel_Draw, METH_VARARGS, "Draw model with screen dimensions"},
