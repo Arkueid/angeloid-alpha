@@ -6,9 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(Wrapper.cmake)
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # Build glad (required by mmd)
 add_library(glad ${CMAKE_SOURCE_DIR}/thirdparty/glad/src/glad.c)
-set_target_properties(glad PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(glad PUBLIC ${CMAKE_SOURCE_DIR}/thirdparty/glad/include)
 
 # Build bullet (required by mmd)
@@ -21,7 +22,6 @@ set(BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
 set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_CPU_DEMOS OFF CACHE BOOL "" FORCE)
 set(BUILD_OPENGL3_DEMOS OFF CACHE BOOL "" FORCE)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_subdirectory(${CMAKE_SOURCE_DIR}/thirdparty/bullet bullet)
 
 set(MMD_WRAPPER_TARGET wrapper)

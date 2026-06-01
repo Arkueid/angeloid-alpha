@@ -26,7 +26,9 @@ set(MMD_SOURCES
 )
 
 add_library(mmd STATIC ${MMD_SOURCES})
-set_target_properties(mmd PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(BUILD_PYTHON_WRAPPER)
+    set_target_properties(mmd PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 add_library(angeloid::core ALIAS mmd)
 
 target_include_directories(mmd PUBLIC
