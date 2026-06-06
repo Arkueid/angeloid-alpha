@@ -32,6 +32,33 @@ void Model::load(const std::filesystem::path& pmxPath) {
     mPhysics.getBoneTransforms(mPoseWorld);
 
     mMorphCtl.setModel(mPmx);
+
+    // Detect head/eye/neck bones for lookAt tracking
+    mBoneChildren.clear();
+    mBoneChildren.resize(mPmx.boneCount());
+    for (int i = 0; i < mPmx.boneCount(); ++i) {
+        const auto& bone = mPmx.bones[i];
+        const auto& name = bone.name;
+        const auto& ename = bone.english_name;
+
+        if (name == reinterpret_cast<const char*>(u8"頭") || ename == "head")
+            mHeadBoneIndex = i;
+        else if (name == reinterpret_cast<const char*>(u8"首") || ename == "neck")
+            mNeckBoneIndex = i;
+        else if ((name == reinterpret_cast<const char*>(u8"左目") || ename == "left eye") &&
+                 mLeftEyeBoneIndex < 0)
+            mLeftEyeBoneIndex = i;
+        else if ((name == reinterpret_cast<const char*>(u8"右目") || ename == "right eye") &&
+                 mRightEyeBoneIndex < 0)
+            mRightEyeBoneIndex = i;
+
+        int p = bone.parent_index;
+        if (p >= 0 && p < mPmx.boneCount())
+            mBoneChildren[p].push_back(i);
+    }
+    if (mHeadBoneIndex >= 0)
+        MMD_INFO("MODEL", "LookAt bones: head=%d neck=%d leftEye=%d rightEye=%d", mHeadBoneIndex,
+                 mNeckBoneIndex, mLeftEyeBoneIndex, mRightEyeBoneIndex);
 }
 
 int Model::loadVpd(const std::filesystem::path& vpdPath) {
@@ -109,7 +136,12 @@ void Model::removeVpd(int vpdId) {
 //   3. Idle:      track idle time for auto-blink morph
 //   4. GPU sync:  pack pose world matrices into bone texture for vertex shader skinning
 void Model::update(float dt) {
-    if (mVmdMixer->update(dt) || !mClearVmd) {
+    bool vmdUpdated = mVmdMixer->update(dt);
+    if (vmdUpdated || !mClearVmd || mLookAtEnabled) {
+        static int rebuildFrame = 0;
+        ++rebuildFrame;
+        MMD_DEBUG("LOOKAT", "rebuild poseWorld frame=%d (vmd=%d clear=%d lookAt=%d)", rebuildFrame,
+                  (int)vmdUpdated, (int)!mClearVmd, (int)mLookAtEnabled);
         mVmdBoneCache.clear();
         for (const auto& bone : mPmx.bones) {
             std::array<float, 3> pos;
@@ -117,18 +149,34 @@ void Model::update(float dt) {
             if (mVmdMixer->getBoneTransform(bone.name, pos, rot))
                 mVmdBoneCache[bone.name] = {pos, rot};
         }
-        
+
         if (!mVmdBoneCache.empty()) {
             if (mActiveVpdId >= 0) {
                 for (auto& [id, poses] : mVpdPoses) {
                     if (id == mActiveVpdId) {
-                        mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, poses, mVmdBoneCache);
+                        mPoseWorld =
+                            BoneSkinning::computePoseWorldMatrices(mPmx, poses, mVmdBoneCache);
                         break;
                     }
                 }
             }
             else {
                 mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, {}, mVmdBoneCache);
+            }
+        }
+        else if (mLookAtEnabled) {
+            // Rebuild pose world from VPD-only (no VMD) so lookAt always
+            // starts from the canonical pose each frame.
+            if (mActiveVpdId >= 0) {
+                for (auto& [id, poses] : mVpdPoses) {
+                    if (id == mActiveVpdId) {
+                        mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, poses);
+                        break;
+                    }
+                }
+            }
+            else {
+                mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx);
             }
         }
         mVmdMorphCache.clear();
@@ -140,6 +188,9 @@ void Model::update(float dt) {
         if (!mVmdMorphCache.empty())
             mMorphCtl.setMorphWeights(mVmdMorphCache);
     }
+
+    if (mLookAtEnabled)
+        applyLookAt();
 
     mPhysics.updateMode0Bodies(mRenderer.useSkinning ? mPoseWorld : mBindPoseWorld);
     if (mPhysics.enabled) {
@@ -155,7 +206,7 @@ void Model::update(float dt) {
                 }
             BoneSkinning::recomputeAfterPhysicsBones(mPmx, *activeVpd, mPoseWorld);
         }
-        
+
         static int checkFrame = 0;
         if (++checkFrame % 60 == 0) {
             int nanCount = 0;
@@ -168,7 +219,8 @@ void Model::update(float dt) {
                 }
             }
             if (nanCount > 0) {
-                MMD_ERROR("MODEL", "frame=%d NaN in %d/%d pose matrices!", checkFrame, nanCount, (int)mPoseWorld.size());
+                MMD_ERROR("MODEL", "frame=%d NaN in %d/%d pose matrices!", checkFrame, nanCount,
+                          (int)mPoseWorld.size());
             }
         }
         // Periodic physics analysis (press F to dump manually via debugDump instead)
@@ -188,6 +240,12 @@ void Model::update(float dt) {
 }
 
 void Model::draw(int screenWidth, int screenHeight) {
+    glFrontFace(GL_CW);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
     auto proj = Camera::projectionMatrix(screenWidth, screenHeight);
     auto view = Camera::instance().viewMatrix();
     float camPos[3] = {Camera::instance().x, Camera::instance().y, Camera::instance().z};
@@ -256,8 +314,6 @@ void Model::draw(int screenWidth, int screenHeight) {
         if (mPhysicsDebug->showRigidBody) {
             if (auto* s = ctx.shader("rigidbody")) {
                 mPhysicsDebug->updateFromPhysics(mPhysics);
-                glEnable(GL_DEPTH_TEST);
-                glDepthFunc(GL_LEQUAL);
                 mPhysicsDebug->render(*s, proj, view, mRenderer.modelMatrix());
             }
         }
@@ -401,6 +457,118 @@ void Model::syncMorphOffsets() {
                                 mMorphCtl.positionOffsets().size() * sizeof(float));
     if (auto* uv = mRenderer.uvMorphVbo())
         uv->write(mMorphCtl.uvOffsets().data(), mMorphCtl.uvOffsets().size() * sizeof(float));
+}
+
+void Model::lookAt(int screenX, int screenY, int screenW, int screenH) {
+    mLookAtEnabled = true;
+    mLookAtScreenX = screenX;
+    mLookAtScreenY = screenY;
+    mLookAtScreenW = screenW > 0 ? screenW : 1;
+    mLookAtScreenH = screenH > 0 ? screenH : 1;
+}
+
+void Model::resetLookAt() {
+    mLookAtEnabled = false;
+}
+
+void Model::propagateToDescendants(int parentIdx, const Mat4& deltaWorld) {
+    std::vector<int> stack;
+    for (int c : mBoneChildren[parentIdx])
+        stack.push_back(c);
+    while (!stack.empty()) {
+        int child = stack.back();
+        stack.pop_back();
+        mPoseWorld[child] = mat4Mul(deltaWorld, mPoseWorld[child]);
+        for (int gc : mBoneChildren[child])
+            stack.push_back(gc);
+    }
+}
+
+void Model::applyBoneQuat(int boneIdx, const Quat& qFull, float angleScale) {
+    if (boneIdx < 0 || boneIdx >= (int)mPoseWorld.size())
+        return;
+
+    for (int j = 0; j < 16; ++j)
+        if (std::isnan(mPoseWorld[boneIdx][j]))
+            return;
+
+    float halfAngle = std::acos(std::max(-1.0f, std::min(1.0f, qFull.w)));
+    if (halfAngle < 1e-6f)
+        return;
+
+    float angle = 2.0f * halfAngle;
+    float scaledAngle = angle * angleScale;
+    if (scaledAngle < 1e-6f)
+        return;
+
+    static constexpr float kMaxAngle = 50.0f * 3.14159265f / 180.0f;
+    if (scaledAngle > kMaxAngle * 1.5f)
+        scaledAngle = kMaxAngle * 1.5f;
+
+    float sinHalf = std::sin(halfAngle);
+    float ratio = std::sin(scaledAngle * 0.5f) / sinHalf;
+    Quat q = quatNormalize(
+        {qFull.x * ratio, qFull.y * ratio, qFull.z * ratio, std::cos(scaledAngle * 0.5f)});
+
+    // Apply world-space rotation around bone's pivot
+    Mat4 R = mat4FromQuat(q);
+    Mat4 oldWorld = mPoseWorld[boneIdx];
+    Mat4 newWorld = mat4Mul(R, oldWorld);
+    newWorld[12] = oldWorld[12];
+    newWorld[13] = oldWorld[13];
+    newWorld[14] = oldWorld[14];
+    mPoseWorld[boneIdx] = newWorld;
+
+    Mat4 deltaWorld = mat4Mul(newWorld, mat4InverseAffine(oldWorld));
+    propagateToDescendants(boneIdx, deltaWorld);
+}
+
+void Model::applyLookAt() {
+    if (mHeadBoneIndex < 0 || mLookAtScreenW <= 0 || mLookAtScreenH <= 0)
+        return;
+
+    // Camera axes for world-space rotation reference
+    auto& cam = Camera::instance();
+    Vec3 camPos = {cam.x, cam.y, cam.z};
+    auto view = cam.viewMatrix();
+    Vec3 right = {view[0], view[4], view[8]};
+    Vec3 upVec = {view[1], view[5], view[9]};
+    Vec3 backward = {view[2], view[6], view[10]};
+
+    // Head world position
+    Vec3 headPosModel = mat4Translation(mPoseWorld[mHeadBoneIndex]);
+    const float* mm = mRenderer.modelMatrix();
+    Mat4 modelMat = {mm[0], mm[1], mm[2],  mm[3],  mm[4],  mm[5],  mm[6],  mm[7],
+                     mm[8], mm[9], mm[10], mm[11], mm[12], mm[13], mm[14], mm[15]};
+    Vec3 headPosWorld = mat4TransformPoint(modelMat, headPosModel);
+
+    // Project head to NDC
+    float aspect = (float)mLookAtScreenW / (float)mLookAtScreenH;
+    float tanHalfFov = std::tan(45.0f * 3.14159265f / 360.0f);
+    Vec3 headView = {vec3Dot(vec3Sub(headPosWorld, camPos), right),
+                     vec3Dot(vec3Sub(headPosWorld, camPos), upVec),
+                     vec3Dot(vec3Sub(headPosWorld, camPos), backward)}; // backward = camera -Z
+    float headViewZ = -headView.z;
+    if (headViewZ < 0.1f) headViewZ = 5.0f;
+    float headNdcX = -(headView.x / headViewZ) / (tanHalfFov * aspect); // mirror to match mouseNdcX
+    float headNdcY = (headView.y / headViewZ) / tanHalfFov;
+
+    // Mouse NDC (mirror X, same convention as headNdcX)
+    float mouseNdcX = 1.0f - (2.0f * mLookAtScreenX) / mLookAtScreenW;
+    float mouseNdcY = 1.0f - (2.0f * mLookAtScreenY) / mLookAtScreenH;
+
+    // Relative NDC = offset from head; ±1 → ±maxAngle
+    static constexpr float kMaxAngle = 50.0f * 3.14159265f / 180.0f;
+    float relNdcX = mouseNdcX - headNdcX;
+    float relNdcY = mouseNdcY - headNdcY;
+    Quat qYaw = quatFromAxisAngle(upVec, relNdcX * kMaxAngle);
+    Quat qPitch = quatFromAxisAngle(right, relNdcY * kMaxAngle);
+    Quat qFull = quatNormalize(quatMul(qPitch, qYaw));
+
+    applyBoneQuat(mNeckBoneIndex, qFull, 0.1f);
+    applyBoneQuat(mHeadBoneIndex, qFull, 1.0f);
+    applyBoneQuat(mLeftEyeBoneIndex, qFull, 0.2f);
+    applyBoneQuat(mRightEyeBoneIndex, qFull, 0.2f);
 }
 
 }  // namespace mmd

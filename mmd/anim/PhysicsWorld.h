@@ -9,9 +9,9 @@
 #include <vector>
 
 // Shape size multipliers from PMX value to Bullet parameter
-inline constexpr float kSphereShapeScale = 1.0f;   // btSphereShape radius
-inline constexpr float kBoxShapeScale = 1.0f;      // btBoxShape half-extent
-inline constexpr float kCapsuleShapeScale = 1.0f;  // btCapsuleShape radius & height
+inline constexpr float kSphereShapeScale = 0.98f;   // btSphereShape radius
+inline constexpr float kBoxShapeScale = 0.98f;      // btBoxShape half-extent
+inline constexpr float kCapsuleShapeScale = 0.98f;  // btCapsuleShape radius & height
 
 class btDiscreteDynamicsWorld;
 class btRigidBody;

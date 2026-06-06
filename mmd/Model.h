@@ -94,6 +94,10 @@ public:
         mRenderer.useSkinning = on;
     }
 
+    // --- LookAt ---
+    void lookAt(int screenX, int screenY, int screenW, int screenH);
+    void resetLookAt();
+
     // --- Morphs ---
     void setMorphWeight(const std::string& name, float weight);
     float savedMorphWeight(const std::string& name) const;
@@ -149,6 +153,21 @@ private:
 
     std::unordered_map<std::string, std::pair<std::array<float, 3>, std::array<float, 4>>> mVmdBoneCache;
     std::unordered_map<std::string, float> mVmdMorphCache;
+
+    // LookAt state
+    int mHeadBoneIndex = -1;
+    int mNeckBoneIndex = -1;
+    int mLeftEyeBoneIndex = -1;
+    int mRightEyeBoneIndex = -1;
+    std::vector<std::vector<int>> mBoneChildren;
+    bool mLookAtEnabled = false;
+    int mLookAtScreenX = 0, mLookAtScreenY = 0;
+    int mLookAtScreenW = 1, mLookAtScreenH = 1;
+
+
+    void applyLookAt();
+    void applyBoneQuat(int boneIdx, const Quat& qFull, float angleScale);
+    void propagateToDescendants(int parentIdx, const std::array<float, 16>& deltaWorld);
 };
 
 }  // namespace mmd

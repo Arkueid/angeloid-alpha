@@ -12,20 +12,9 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/glfw glfw)
 
-add_library(glad ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/glad/src/glad.c)
-target_include_directories(glad PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/glad/include)
-
 if(POLICY CMP0177)
     cmake_policy(SET CMP0177 NEW)
 endif()
-set(BUILD_BULLET2_DEMOS OFF CACHE BOOL "" FORCE)
-set(BUILD_BULLET3 OFF CACHE BOOL "" FORCE)
-set(BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
-set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
-set(BUILD_CPU_DEMOS OFF CACHE BOOL "" FORCE)
-set(BUILD_OPENGL3_DEMOS OFF CACHE BOOL "" FORCE)
-set(BUILD_BULLET2_DEMOS OFF CACHE BOOL "" FORCE)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/bullet bullet)
 
 add_executable(viewer
     main.cpp
@@ -38,7 +27,7 @@ target_include_directories(viewer PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../mmd
 )
 
-target_link_libraries(viewer PRIVATE mmd)
+target_link_libraries(viewer PRIVATE mmd glfw)
 target_compile_definitions(viewer PRIVATE
     MMD_PROJECT_ROOT="${CMAKE_SOURCE_DIR}/"
 )

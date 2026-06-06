@@ -8,22 +8,6 @@ include(Wrapper.cmake)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Build glad (required by mmd)
-add_library(glad ${CMAKE_SOURCE_DIR}/thirdparty/glad/src/glad.c)
-target_include_directories(glad PUBLIC ${CMAKE_SOURCE_DIR}/thirdparty/glad/include)
-
-# Build bullet (required by mmd)
-if(POLICY CMP0177)
-    cmake_policy(SET CMP0177 NEW)
-endif()
-set(BUILD_BULLET2_DEMOS OFF CACHE BOOL "" FORCE)
-set(BUILD_BULLET3 OFF CACHE BOOL "" FORCE)
-set(BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
-set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
-set(BUILD_CPU_DEMOS OFF CACHE BOOL "" FORCE)
-set(BUILD_OPENGL3_DEMOS OFF CACHE BOOL "" FORCE)
-add_subdirectory(${CMAKE_SOURCE_DIR}/thirdparty/bullet bullet)
-
 set(MMD_WRAPPER_TARGET wrapper)
 
 add_library(${MMD_WRAPPER_TARGET} SHARED

@@ -23,7 +23,7 @@ GlfwWindow::GlfwWindow(int width, int height, const std::string& title)
 
     glfwMakeContextCurrent(mWindow);
 
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+    if (!gladLoadGL()) {
         glfwTerminate();
         throw std::runtime_error("Failed to initialize GLAD (OpenGL loader)");
     }

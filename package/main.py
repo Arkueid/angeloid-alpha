@@ -132,20 +132,20 @@ def main():
                 model.playVmd(track_id, on_vmd_end)
     
     print_help()
-    
+
     morph_list = model.interactableMorphs()
     morph_index = -1
     morph_weight = 0.0
-    
+
     cam = Camera()
-    
+
     show_axis = True
     show_rigid = False
-    
+
     def on_mouse_button(win, button, action, mods):
         if button == glfw.MOUSE_BUTTON_LEFT:
             cam.onMouseButton(action == glfw.PRESS)
-    
+
     def on_cursor_pos(win, x, y):
         cam.onCursorPos(x, y)
     
@@ -287,8 +287,19 @@ def main():
         q = glfw.get_key(window, glfw.KEY_Q) == glfw.PRESS
         
         cam.update(dt, w, a, s, d, e, q)
+
+        # Update lookAt target before model.update (which applies the bone rotation)
+        width, height = glfw.get_framebuffer_size(window)
+        if glfw.get_input_mode(window, glfw.CURSOR) != glfw.CURSOR_DISABLED:
+            mx, my = glfw.get_cursor_pos(window)
+            ww, wh = glfw.get_window_size(window)
+            if ww > 0 and wh > 0 and 0 <= mx <= ww and 0 <= my <= wh:
+                model.lookAt(int(mx * width / ww), int(my * height / wh), width, height)
+            else:
+                model.resetLookAt()
+
         model.update(dt)
-        
+
         frame_count += 1
         fps_time += dt
         if fps_time >= 0.5:
@@ -297,13 +308,6 @@ def main():
             frame_count = 0
             fps_time = 0.0
         
-        width, height = glfw.get_framebuffer_size(window)
-        
-        gl.glFrontFace(gl.GL_CW)
-        gl.glEnable(gl.GL_DEPTH_TEST)
-        gl.glDepthFunc(gl.GL_LEQUAL)
-        gl.glEnable(gl.GL_BLEND)
-        gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
         gl.glClearColor(0.15, 0.15, 0.15, 1.0)
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         

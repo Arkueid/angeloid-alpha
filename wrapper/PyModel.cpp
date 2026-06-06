@@ -349,6 +349,19 @@ static PyObject* PyModel_ModelMatrix(PyModelObject* self, PyObject*) {
     return list;
 }
 
+static PyObject* PyModel_LookAt(PyModelObject* self, PyObject* args) {
+    int x, y, w, h;
+    if (!PyArg_ParseTuple(args, "iiii", &x, &y, &w, &h))
+        return nullptr;
+    self->model->lookAt(x, y, w, h);
+    Py_RETURN_NONE;
+}
+
+static PyObject* PyModel_ResetLookAt(PyModelObject* self, PyObject*) {
+    self->model->resetLookAt();
+    Py_RETURN_NONE;
+}
+
 PyMethodDef PyModel_methods[] = {
     {"load", (PyCFunction)PyModel_Load, METH_VARARGS, "Load PMX model from path"},
     {"update", (PyCFunction)PyModel_Update, METH_VARARGS, "Update model with delta time"},
@@ -403,6 +416,10 @@ PyMethodDef PyModel_methods[] = {
     {"modelName", (PyCFunction)PyModel_ModelName, METH_VARARGS, "Get model name"},
     {"modelScale", (PyCFunction)PyModel_ModelScale, METH_VARARGS, "Get model scale"},
     {"modelMatrix", (PyCFunction)PyModel_ModelMatrix, METH_VARARGS, "Get model matrix (16 floats)"},
+    {"lookAt", (PyCFunction)PyModel_LookAt, METH_VARARGS,
+     "Make head/eyes track screen position (x, y, screenW, screenH)"},
+    {"resetLookAt", (PyCFunction)PyModel_ResetLookAt, METH_VARARGS,
+     "Disable lookAt head/eye tracking"},
     {NULL, NULL, 0, NULL}};
 
 static PyGetSetDef PyModel_getset[] = {{NULL, NULL, NULL, NULL, NULL}};

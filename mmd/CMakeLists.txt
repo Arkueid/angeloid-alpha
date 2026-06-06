@@ -25,10 +25,24 @@ set(MMD_SOURCES
     Model.cpp
 )
 
-add_library(mmd STATIC ${MMD_SOURCES})
-if(BUILD_PYTHON_WRAPPER)
-    set_target_properties(mmd PROPERTIES POSITION_INDEPENDENT_CODE ON)
+# Build glad (required by mmd)
+add_library(glad ${CMAKE_SOURCE_DIR}/thirdparty/glad/src/glad.c)
+target_include_directories(glad PUBLIC ${CMAKE_SOURCE_DIR}/thirdparty/glad/include)
+
+# Build bullet (required by mmd)
+if(POLICY CMP0177)
+    cmake_policy(SET CMP0177 NEW)
 endif()
+set(BUILD_BULLET2_DEMOS OFF CACHE BOOL "" FORCE)
+set(BUILD_BULLET3 OFF CACHE BOOL "" FORCE)
+set(BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
+set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(BUILD_CPU_DEMOS OFF CACHE BOOL "" FORCE)
+set(BUILD_OPENGL3_DEMOS OFF CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_SOURCE_DIR}/thirdparty/bullet bullet)
+
+add_library(mmd STATIC ${MMD_SOURCES})
+set_target_properties(mmd PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(angeloid::core ALIAS mmd)
 
 target_include_directories(mmd PUBLIC
