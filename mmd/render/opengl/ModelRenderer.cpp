@@ -189,7 +189,7 @@ void ModelRenderer::loadTextures(const std::filesystem::path& textureDir) {
             stbi_image_free(data);
             auto u8name = texPath.filename().u8string();
             std::string name(u8name.begin(), u8name.end());
-            MMD_INFO("RENDER", "  [%zu] OK: %s", i, name.c_str());
+            MMD_DEBUG("RENDER", "  [%zu] OK: %s", i, name.c_str());
         }
         else {
             MMD_WARN("RENDER", "  [%zu] Not found: %s", i, texName.c_str());

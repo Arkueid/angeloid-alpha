@@ -89,7 +89,7 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale) {
     MMD_INFO("PHYS", "  modelScale=%.6f  gravity=(0, %.4f, 0)  center=(%.4f,%.4f,%.4f)  minY=%.4f",
              modelScale, kGravityY / modelScale, mCenter.x, mCenter.y, mCenter.z, mMinY);
 
-    // --- Per-body dump ---
+    // --- Per-body dump (debug only) ---
     const char* kShapeNames[] = {"Sphere", "Box", "Capsule"};
     const char* kModeNames[] = {"STATIC", "DYNAMIC", "ALIGN"};
     for (const auto& rb : model.rigidbodies) {
@@ -101,16 +101,13 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale) {
             (rb.bone_index >= 0 && rb.bone_index < (int)model.bones.size())
                 ? model.bones[rb.bone_index].name.c_str()
                 : "(none)";
-        MMD_INFO("PHYS",
-                 "  BODY[%d] \"%s\" mode=%s shape=%s size=(%.4f,%.4f,%.4f) "
-                 "bone[%d]=\"%s\" mass=%.4f linDamp=%.3f angDamp=%.3f "
-                 "colGroup=0x%04x noColGroup=0x%04x "
-                 "pos=(%.4f,%.4f,%.4f) rot=(%.4f,%.4f,%.4f)",
-                 rb.index, rb.name.c_str(), modeName, shapeName, rb.shape_size.x, rb.shape_size.y,
-                 rb.shape_size.z, rb.bone_index, boneName, rb.mass, rb.linear_damping,
-                 rb.angular_damping, rb.collision_group, rb.no_collision_group,
-                 rb.shape_position.x, rb.shape_position.y, rb.shape_position.z,
-                 rb.shape_rotation.x, rb.shape_rotation.y, rb.shape_rotation.z);
+        MMD_DEBUG("PHYS",
+                  "  BODY[%d] \"%s\" mode=%s shape=%s size=(%.4f,%.4f,%.4f) "
+                  "bone[%d]=\"%s\" mass=%.4f linDamp=%.3f angDamp=%.3f "
+                  "colGroup=0x%04x noColGroup=0x%04x",
+                  rb.index, rb.name.c_str(), modeName, shapeName, rb.shape_size.x, rb.shape_size.y,
+                  rb.shape_size.z, rb.bone_index, boneName, rb.mass, rb.linear_damping,
+                  rb.angular_damping, rb.collision_group, rb.no_collision_group);
     }
 
     for (const auto& rb : model.rigidbodies)
@@ -123,7 +120,7 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale) {
     }
     MMD_INFO("PHYS", "  Dynamic mass bodies: %d", dynMassCount);
 
-    // --- Per-joint dump ---
+    // --- Per-joint dump (debug only) ---
     for (const auto& jt : model.joints) {
         const char* nameA =
             (jt.rigidbody_index_a >= 0 && jt.rigidbody_index_a < (int)model.rigidbodies.size())
@@ -133,21 +130,10 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale) {
             (jt.rigidbody_index_b >= 0 && jt.rigidbody_index_b < (int)model.rigidbodies.size())
                 ? model.rigidbodies[jt.rigidbody_index_b].name.c_str()
                 : "?";
-        MMD_INFO("PHYS",
-                 "  JOINT[%d] type=%d \"%s\"<->\"%s\" pos=(%.4f,%.4f,%.4f) "
-                 "springT=(%.1f,%.1f,%.1f) springR=(%.1f,%.1f,%.1f) "
-                 "limT=[(%.4f,%.4f) (%.4f,%.4f) (%.4f,%.4f)] "
-                 "limR=[(%.4f,%.4f) (%.4f,%.4f) (%.4f,%.4f)]",
-                 jt.index, jt.joint_type, nameA, nameB, jt.position.x, jt.position.y,
-                 jt.position.z, jt.spring_constant_translation.x, jt.spring_constant_translation.y,
-                 jt.spring_constant_translation.z, jt.spring_constant_rotation.x,
-                 jt.spring_constant_rotation.y, jt.spring_constant_rotation.z,
-                 jt.translation_limit_min.x, jt.translation_limit_max.x,
-                 jt.translation_limit_min.y, jt.translation_limit_max.y,
-                 jt.translation_limit_min.z, jt.translation_limit_max.z,
-                 jt.rotation_limit_min.x, jt.rotation_limit_max.x,
-                 jt.rotation_limit_min.y, jt.rotation_limit_max.y,
-                 jt.rotation_limit_min.z, jt.rotation_limit_max.z);
+        MMD_DEBUG("PHYS",
+                  "  JOINT[%d] type=%d \"%s\"<->\"%s\" pos=(%.4f,%.4f,%.4f)",
+                  jt.index, jt.joint_type, nameA, nameB, jt.position.x, jt.position.y,
+                  jt.position.z);
     }
 
     for (const auto& jt : model.joints)
@@ -242,8 +228,8 @@ void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWo
 }
 
 void PhysicsWorld::debugDump() const {
-    MMD_INFO("PHYS", "=== Physics dump (scale=%.4f center=%.2f,%.2f,%.2f) ===", mModelScale,
-             mCenter.x, mCenter.y, mCenter.z);
+    MMD_DEBUG("PHYS", "=== Physics dump (scale=%.4f center=%.2f,%.2f,%.2f) ===", mModelScale,
+              mCenter.x, mCenter.y, mCenter.z);
     int moved = 0, active = 0;
     for (size_t i = 0; i < mBodies.size(); ++i) {
         const auto& bb = mBodies[i];
@@ -261,16 +247,16 @@ void PhysicsWorld::debugDump() const {
             float ix = init.x() + mCenter.x, iy = init.y() + mMinY, iz = init.z() + mCenter.z;
             const char* modeStr = bb.mode == 0 ? "STATIC" : (bb.mode == 1 ? "dyn" : "ALIGN");
             float mass = bb.body->getInvMass() > 0 ? 1.0f / bb.body->getInvMass() : 0;
-            MMD_INFO("PHYS",
-                     "  [%zu] %s %s bone=%d dMMD=%.4f active=%d mass=%.3f now=(%.2f,%.2f,%.2f) "
-                     "init=(%.2f,%.2f,%.2f)",
-                     i, modeStr, bb.name.c_str(), bb.boneIndex, disp, bb.body->isActive() ? 1 : 0,
-                     mass, mx, my, mz, ix, iy, iz);
+            MMD_DEBUG("PHYS",
+                      "  [%zu] %s %s bone=%d dMMD=%.4f active=%d mass=%.3f now=(%.2f,%.2f,%.2f) "
+                      "init=(%.2f,%.2f,%.2f)",
+                      i, modeStr, bb.name.c_str(), bb.boneIndex, disp, bb.body->isActive() ? 1 : 0,
+                      mass, mx, my, mz, ix, iy, iz);
         }
     }
-    MMD_INFO("PHYS", "  Bodies displaced>0.02mmd: %d  active: %d  total: %zu", moved, active,
-             mBodies.size());
-    MMD_INFO("PHYS", "=== End dump ===");
+    MMD_DEBUG("PHYS", "  Bodies displaced>0.02mmd: %d  active: %d  total: %zu", moved, active,
+              mBodies.size());
+    MMD_DEBUG("PHYS", "=== End dump ===");
 }
 
 void PhysicsWorld::addRigidBody(const PmxRigidBody& rb) {
@@ -744,13 +730,13 @@ void PhysicsWorld::debugFullDump(int frameNum) const {
             severeCount++;
     }
 
-    MMD_INFO("PHYS", "=== Frame %d Physics Analysis ===", frameNum);
-    MMD_INFO("PHYS", "  Bodies: dynamic=%d active=%d sleeping=%d | droop>0.03=%d severe(>0.1)=%d",
-             dynamicCount, activeCount, dynamicCount - activeCount, warnCount, severeCount);
+    MMD_DEBUG("PHYS", "=== Frame %d Physics Analysis ===", frameNum);
+    MMD_DEBUG("PHYS", "  Bodies: dynamic=%d active=%d sleeping=%d | droop>0.03=%d severe(>0.1)=%d",
+              dynamicCount, activeCount, dynamicCount - activeCount, warnCount, severeCount);
 
     // Print top 25 displaced bodies (most negative deltaY = biggest droop)
     int showCount = std::min(25, (int)infos.size());
-    MMD_INFO("PHYS", "  --- Top %d bodies by Y displacement ---", showCount);
+    MMD_DEBUG("PHYS", "  --- Top %d bodies by Y displacement ---", showCount);
     for (int i = 0; i < showCount; ++i) {
         const auto& info = infos[i];
         const char* modeStr =
@@ -760,12 +746,12 @@ void PhysicsWorld::debugFullDump(int frameNum) const {
             flag = " **SEVERE**";
         else if (info.deltaY < kDroopWarnThreshold)
             flag = " *droop*";
-        MMD_INFO("PHYS",
-                 "  [%2d] BODY[%d] \"%s\" mode=%s cloth=%d skipFB=%d mass=%.3f "
-                 "act=%d | Y=%.4f initY=%.4f dY=%+.4f disp3D=%.4f%s",
-                 i, info.bb->rigidBodyIndex, info.bb->name.c_str(), modeStr, info.bb->clothLike,
-                 info.bb->skipBoneFeedback, info.bb->body ? 1.0f / info.bb->body->getInvMass() : 0,
-                 info.active, info.yNow, info.yInit, info.deltaY, info.disp3D, flag);
+        MMD_DEBUG("PHYS",
+                  "  [%2d] BODY[%d] \"%s\" mode=%s cloth=%d skipFB=%d mass=%.3f "
+                  "act=%d | Y=%.4f initY=%.4f dY=%+.4f disp3D=%.4f%s",
+                  i, info.bb->rigidBodyIndex, info.bb->name.c_str(), modeStr, info.bb->clothLike,
+                  info.bb->skipBoneFeedback, info.bb->body ? 1.0f / info.bb->body->getInvMass() : 0,
+                  info.active, info.yNow, info.yInit, info.deltaY, info.disp3D, flag);
     }
 
     // Also show bodies that moved UP significantly (positive Y displacement)
@@ -775,20 +761,20 @@ void PhysicsWorld::debugFullDump(int frameNum) const {
             upCount++;
     }
     if (upCount > 0) {
-        MMD_INFO("PHYS", "  --- Bodies pushed UP (>0.03) ---");
+        MMD_DEBUG("PHYS", "  --- Bodies pushed UP (>0.03) ---");
         int shown = 0;
         for (int i = (int)infos.size() - 1; i >= 0 && shown < 10; --i) {
             if (infos[i].deltaY <= 0.03f)
                 continue;
             const auto& info = infos[i];
-            MMD_INFO("PHYS",
-                     "  [%2d] BODY[%d] \"%s\" mode=%d act=%d dY=%+.4f",
-                     info.idx, info.bb->rigidBodyIndex, info.bb->name.c_str(),
-                     info.bb->mode, info.active, info.deltaY);
+            MMD_DEBUG("PHYS",
+                      "  [%2d] BODY[%d] \"%s\" mode=%d act=%d dY=%+.4f",
+                      info.idx, info.bb->rigidBodyIndex, info.bb->name.c_str(),
+                      info.bb->mode, info.active, info.deltaY);
             shown++;
         }
     }
-    MMD_INFO("PHYS", "=== End Frame %d ===", frameNum);
+    MMD_DEBUG("PHYS", "=== End Frame %d ===", frameNum);
 }
 
 void PhysicsWorld::debugTrackCloth() const {
