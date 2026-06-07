@@ -188,7 +188,8 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale) {
             clothNames += " [" + std::to_string(b.rigidBodyIndex) + "]" + b.name;
         }
     }
-    MMD_INFO("PHYS", "  Cloth-like bodies:%s (%d total)", clothNames.c_str(), clothCount);
+    MMD_INFO("PHYS", "  Cloth-like bodies: %d", clothCount);
+    MMD_DEBUG("PHYS", "    %s", clothNames.c_str());
 }
 
 void PhysicsWorld::resetPhysics(const std::vector<std::array<float, 16>>& poseWorld) {
