@@ -248,7 +248,8 @@ void Model::draw(int screenWidth, int screenHeight) {
 
     auto proj = Camera::projectionMatrix(screenWidth, screenHeight);
     auto view = Camera::instance().viewMatrix();
-    float camPos[3] = {Camera::instance().x, Camera::instance().y, Camera::instance().z};
+    float camPos[3];
+    Camera::instance().getEyePosition(camPos[0], camPos[1], camPos[2]);
 
     auto& ctx = RenderContext::instance();
 
@@ -529,7 +530,8 @@ void Model::applyLookAt() {
 
     // Camera axes for world-space rotation reference
     auto& cam = Camera::instance();
-    Vec3 camPos = {cam.x, cam.y, cam.z};
+    Vec3 camPos;
+    cam.getEyePosition(camPos.x, camPos.y, camPos.z);
     auto view = cam.viewMatrix();
     Vec3 right = {view[0], view[4], view[8]};
     Vec3 upVec = {view[1], view[5], view[9]};
@@ -553,12 +555,17 @@ void Model::applyLookAt() {
     float headNdcX = -(headView.x / headViewZ) / (tanHalfFov * aspect); // mirror to match mouseNdcX
     float headNdcY = (headView.y / headViewZ) / tanHalfFov;
 
-    // Mouse NDC (mirror X, same convention as headNdcX)
+    // Mouse NDC — Orbit mode derives target from camera eye position
     float mouseNdcX = 1.0f - (2.0f * mLookAtScreenX) / mLookAtScreenW;
     float mouseNdcY = 1.0f - (2.0f * mLookAtScreenY) / mLookAtScreenH;
 
     // Relative NDC = offset from head; ±1 → ±maxAngle
     static constexpr float kMaxAngle = 50.0f * 3.14159265f / 180.0f;
+
+    if (cam.mode() == CameraMode::Orbit)
+        return; // Orbit mode: skip lookAt
+
+    // FPS mode: NDC-based mouse tracking
     float relNdcX = mouseNdcX - headNdcX;
     float relNdcY = mouseNdcY - headNdcY;
     Quat qYaw = quatFromAxisAngle(upVec, relNdcX * kMaxAngle);

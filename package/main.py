@@ -41,6 +41,9 @@ PROJ_ROOT = Path(__file__).parent.parent
 
 def print_help():
     print("""
+Camera Controls:
+  M key: Toggle between FPS and Orbit camera mode
+
 FPS Camera Controls:
   Left mouse drag: Rotate camera view
   W/A/S/D: Move forward/left/backward/right
@@ -55,6 +58,11 @@ FPS Camera Controls:
   P key: Toggle VPD pose
   R key: Reset camera to default position
   I key: Toggle idle animation
+Orbit Camera Controls:
+  Left mouse drag: Orbit around target
+  Scroll: Dolly (zoom in/out)
+  Middle mouse drag / Shift+Left: Pan (move target)
+  R key: Reset camera
   < / > keys: Switch between morphs
   Up/Down keys: Adjust morph weight
 VMD Animation Controls:
@@ -143,8 +151,7 @@ def main():
     show_rigid = False
 
     def on_mouse_button(win, button, action, mods):
-        if button == glfw.MOUSE_BUTTON_LEFT:
-            cam.onMouseButton(action == glfw.PRESS)
+        cam.onMouseButton(button, action, mods)
 
     def on_cursor_pos(win, x, y):
         cam.onCursorPos(x, y)
@@ -187,6 +194,10 @@ def main():
             model.enablePhysics(not model.physicsEnabled())
             print(f"Physics: {'ON' if model.physicsEnabled() else 'OFF'}")
         
+        if key == glfw.KEY_M and action == glfw.PRESS:
+            cam.toggleMode()
+            print(f"Camera mode: {'FPS' if cam.mode == 0 else 'Orbit'}")
+
         if key == glfw.KEY_R and action == glfw.PRESS:
             cam.reset()
             print("Camera reset")
@@ -286,11 +297,12 @@ def main():
         e = glfw.get_key(window, glfw.KEY_E) == glfw.PRESS
         q = glfw.get_key(window, glfw.KEY_Q) == glfw.PRESS
         
-        cam.update(dt, w, a, s, d, e, q)
+        if cam.mode == 0:  # FPS
+            cam.update(dt, w, a, s, d, e, q)
 
         # Update lookAt target before model.update (which applies the bone rotation)
         width, height = glfw.get_framebuffer_size(window)
-        if glfw.get_input_mode(window, glfw.CURSOR) != glfw.CURSOR_DISABLED:
+        if cam.mode == 0 and glfw.get_input_mode(window, glfw.CURSOR) != glfw.CURSOR_DISABLED:
             mx, my = glfw.get_cursor_pos(window)
             ww, wh = glfw.get_window_size(window)
             if ww > 0 and wh > 0 and 0 <= mx <= ww and 0 <= my <= wh:

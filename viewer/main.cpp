@@ -21,7 +21,9 @@
 namespace fs = std::filesystem;
 
 static void printHelp() {
-    std::cout << "\nFPS Camera Controls:\n"
+    std::cout << "\nCamera Controls:\n"
+                 "  M key: Toggle between FPS and Orbit camera mode\n"
+                 "\nFPS Camera Controls:\n"
                  "  Left mouse drag: Rotate camera view\n"
                  "  W/A/S/D: Move forward/left/backward/right\n"
                  "  E/Q: Move up/down\n"
@@ -35,6 +37,11 @@ static void printHelp() {
                  "  K key: Toggle GPU skinning\n"
                  "  P key: Toggle VPD pose\n"
                  "  R key: Reset camera to default position\n"
+                 "Orbit Camera Controls:\n"
+                 "  Left mouse drag: Orbit around target\n"
+                 "  Scroll: Dolly (zoom in/out)\n"
+                 "  Middle mouse drag / Shift+Left: Pan (move target)\n"
+                 "  R key: Reset camera\n"
                  "  I key: Toggle idle animation\n"
                  "  < / > keys: Switch between morphs\n"
                  "  Up/Down keys: Adjust morph weight\n"
@@ -168,9 +175,8 @@ int main(int argc, char* argv[]) {
 
     // Input
     auto& cam = Camera::instance();
-    app.onMouseButton = [&cam](int b, int a, int) {
-        if (b == GLFW_MOUSE_BUTTON_LEFT)
-            cam.onMouseButton(a == GLFW_PRESS);
+    app.onMouseButton = [&cam](int b, int a, int m) {
+        cam.onMouseButton(b, a, m);
     };
     app.onCursorPos = [&cam](double x, double y) {
         cam.onCursorPos(x, y);
@@ -212,6 +218,10 @@ int main(int argc, char* argv[]) {
         if (key == GLFW_KEY_Y && act == GLFW_PRESS) {
             model.enablePhysics(!model.physicsEnabled());
             std::cout << "Physics: " << (model.physicsEnabled() ? "ON" : "OFF") << std::endl;
+        }
+        if (key == GLFW_KEY_M && act == GLFW_PRESS) {
+            cam.toggleMode();
+            std::cout << "Camera mode: " << (cam.mode() == CameraMode::FPS ? "FPS" : "Orbit") << std::endl;
         }
         if (key == GLFW_KEY_R && act == GLFW_PRESS)
             cam.reset();
@@ -288,11 +298,13 @@ int main(int argc, char* argv[]) {
     // Update
     app.onUpdate = [&](float dt) {
         auto* win = app.glfwWindow();
-        cam.update(
-            dt, glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS,
-            glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS, glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS,
-            glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS, glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS,
-            glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS);
+        if (cam.mode() == CameraMode::FPS) {
+            cam.update(
+                dt, glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS,
+                glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS, glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS,
+                glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS, glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS,
+                glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS);
+        }
         model.update(dt);
 
         static int fc = 0;

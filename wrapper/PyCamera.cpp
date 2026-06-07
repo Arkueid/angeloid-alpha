@@ -17,6 +17,11 @@ void PyCamera_dealloc(PyCameraObject* self) {
     PyObject_Free(self);
 }
 
+static PyObject* PyCamera_ToggleMode(PyCameraObject* self, PyObject*) {
+    self->cam->toggleMode();
+    Py_RETURN_NONE;
+}
+
 static PyObject* PyCamera_Reset(PyCameraObject* self, PyObject*) {
     self->cam->reset();
     Py_RETURN_NONE;
@@ -31,6 +36,14 @@ static PyObject* PyCamera_Update(PyCameraObject* self, PyObject* args) {
 }
 
 static PyObject* PyCamera_OnMouseButton(PyCameraObject* self, PyObject* args) {
+    // Try (int button, int action, int mods) first for multi-button support
+    int button, action, mods;
+    if (PyArg_ParseTuple(args, "iii", &button, &action, &mods)) {
+        self->cam->onMouseButton(button, action, mods);
+        Py_RETURN_NONE;
+    }
+    PyErr_Clear();
+    // Fall back to (bool) for backward compat
     int pressed;
     if (!PyArg_ParseTuple(args, "p", &pressed)) return nullptr;
     self->cam->onMouseButton(pressed != 0);
@@ -132,6 +145,86 @@ static int PyCamera_SetSpeed(PyCameraObject* self, PyObject* value, void*) {
     return 0;
 }
 
+static PyObject* PyCamera_GetMode(PyCameraObject* self, void*) {
+    return PyLong_FromLong((long)self->cam->mode());
+}
+
+static int PyCamera_SetMode(PyCameraObject* self, PyObject* value, void*) {
+    if (!PyLong_Check(value)) return -1;
+    self->cam->setMode((CameraMode)PyLong_AsLong(value));
+    return 0;
+}
+
+static PyObject* PyCamera_GetTargetX(PyCameraObject* self, void*) {
+    return PyFloat_FromDouble(self->cam->targetX);
+}
+
+static int PyCamera_SetTargetX(PyCameraObject* self, PyObject* value, void*) {
+    if (!PyFloat_Check(value)) return -1;
+    self->cam->targetX = (float)PyFloat_AsDouble(value);
+    return 0;
+}
+
+static PyObject* PyCamera_GetTargetY(PyCameraObject* self, void*) {
+    return PyFloat_FromDouble(self->cam->targetY);
+}
+
+static int PyCamera_SetTargetY(PyCameraObject* self, PyObject* value, void*) {
+    if (!PyFloat_Check(value)) return -1;
+    self->cam->targetY = (float)PyFloat_AsDouble(value);
+    return 0;
+}
+
+static PyObject* PyCamera_GetTargetZ(PyCameraObject* self, void*) {
+    return PyFloat_FromDouble(self->cam->targetZ);
+}
+
+static int PyCamera_SetTargetZ(PyCameraObject* self, PyObject* value, void*) {
+    if (!PyFloat_Check(value)) return -1;
+    self->cam->targetZ = (float)PyFloat_AsDouble(value);
+    return 0;
+}
+
+static PyObject* PyCamera_GetOrbitDistance(PyCameraObject* self, void*) {
+    return PyFloat_FromDouble(self->cam->orbitDistance);
+}
+
+static int PyCamera_SetOrbitDistance(PyCameraObject* self, PyObject* value, void*) {
+    if (!PyFloat_Check(value)) return -1;
+    self->cam->orbitDistance = (float)PyFloat_AsDouble(value);
+    return 0;
+}
+
+static PyObject* PyCamera_GetOrbitLatitude(PyCameraObject* self, void*) {
+    return PyFloat_FromDouble(self->cam->orbitLatitude);
+}
+
+static int PyCamera_SetOrbitLatitude(PyCameraObject* self, PyObject* value, void*) {
+    if (!PyFloat_Check(value)) return -1;
+    self->cam->orbitLatitude = (float)PyFloat_AsDouble(value);
+    return 0;
+}
+
+static PyObject* PyCamera_GetOrbitLongitude(PyCameraObject* self, void*) {
+    return PyFloat_FromDouble(self->cam->orbitLongitude);
+}
+
+static int PyCamera_SetOrbitLongitude(PyCameraObject* self, PyObject* value, void*) {
+    if (!PyFloat_Check(value)) return -1;
+    self->cam->orbitLongitude = (float)PyFloat_AsDouble(value);
+    return 0;
+}
+
+static PyObject* PyCamera_GetOrbitFov(PyCameraObject* self, void*) {
+    return PyFloat_FromDouble(self->cam->orbitFov);
+}
+
+static int PyCamera_SetOrbitFov(PyCameraObject* self, PyObject* value, void*) {
+    if (!PyFloat_Check(value)) return -1;
+    self->cam->orbitFov = (float)PyFloat_AsDouble(value);
+    return 0;
+}
+
 static PyGetSetDef PyCamera_getset[] = {
     {"x", (getter)PyCamera_GetX, (setter)PyCamera_SetX, nullptr},
     {"y", (getter)PyCamera_GetY, (setter)PyCamera_SetY, nullptr},
@@ -139,6 +232,14 @@ static PyGetSetDef PyCamera_getset[] = {
     {"rotX", (getter)PyCamera_GetRotX, (setter)PyCamera_SetRotX, nullptr},
     {"rotY", (getter)PyCamera_GetRotY, (setter)PyCamera_SetRotY, nullptr},
     {"speed", (getter)PyCamera_GetSpeed, (setter)PyCamera_SetSpeed, nullptr},
+    {"mode", (getter)PyCamera_GetMode, (setter)PyCamera_SetMode, nullptr},
+    {"targetX", (getter)PyCamera_GetTargetX, (setter)PyCamera_SetTargetX, nullptr},
+    {"targetY", (getter)PyCamera_GetTargetY, (setter)PyCamera_SetTargetY, nullptr},
+    {"targetZ", (getter)PyCamera_GetTargetZ, (setter)PyCamera_SetTargetZ, nullptr},
+    {"orbitDistance", (getter)PyCamera_GetOrbitDistance, (setter)PyCamera_SetOrbitDistance, nullptr},
+    {"orbitLatitude", (getter)PyCamera_GetOrbitLatitude, (setter)PyCamera_SetOrbitLatitude, nullptr},
+    {"orbitLongitude", (getter)PyCamera_GetOrbitLongitude, (setter)PyCamera_SetOrbitLongitude, nullptr},
+    {"orbitFov", (getter)PyCamera_GetOrbitFov, (setter)PyCamera_SetOrbitFov, nullptr},
     {nullptr}
 };
 
@@ -150,6 +251,7 @@ PyMethodDef PyCamera_methods[] = {
     {"onScroll", (PyCFunction)PyCamera_OnScroll, METH_VARARGS, "Handle scroll event"},
     {"viewMatrix", (PyCFunction)PyCamera_ViewMatrix, METH_NOARGS, "Get 4x4 view matrix (column-major)"},
     {"projectionMatrix", (PyCFunction)PyCamera_ProjectionMatrix, METH_VARARGS | METH_STATIC, "Get 4x4 projection matrix (column-major)"},
+    {"toggleMode", (PyCFunction)PyCamera_ToggleMode, METH_NOARGS, "Toggle between FPS and Orbit camera mode"},
     {nullptr}
 };
 
