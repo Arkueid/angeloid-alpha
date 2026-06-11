@@ -3,6 +3,7 @@ project(mmd LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(MMD_SOURCES
     pmx/PmxReader.cpp
@@ -42,7 +43,6 @@ set(BUILD_OPENGL3_DEMOS OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_SOURCE_DIR}/thirdparty/bullet bullet)
 
 add_library(mmd STATIC ${MMD_SOURCES})
-set_target_properties(mmd PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(angeloid::core ALIAS mmd)
 
 target_include_directories(mmd PUBLIC

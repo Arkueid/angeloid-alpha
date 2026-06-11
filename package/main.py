@@ -284,6 +284,7 @@ def main():
     last_time = glfw.get_time()
     frame_count = 0
     fps_time = 0.0
+    enable_mouse_tracking = False
     
     while not glfw.window_should_close(window):
         current_time = glfw.get_time()
@@ -302,9 +303,10 @@ def main():
 
         # Update lookAt target before model.update (which applies the bone rotation)
         width, height = glfw.get_framebuffer_size(window)
-        if cam.mode == 0 and glfw.get_input_mode(window, glfw.CURSOR) != glfw.CURSOR_DISABLED:
+        if enable_mouse_tracking and cam.mode == 0 and glfw.get_input_mode(window, glfw.CURSOR) != glfw.CURSOR_DISABLED:
             mx, my = glfw.get_cursor_pos(window)
             ww, wh = glfw.get_window_size(window)
+            
             if ww > 0 and wh > 0 and 0 <= mx <= ww and 0 <= my <= wh:
                 model.lookAt(int(mx * width / ww), int(my * height / wh), width, height)
             else:
