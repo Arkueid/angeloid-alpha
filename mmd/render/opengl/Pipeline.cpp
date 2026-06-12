@@ -79,11 +79,11 @@ void Pipeline::execute(ModelRenderer& renderer, const FrameParams& p) {
         if (s) {
             if (p.showToon) {
                 s->use();
-                s->setVec3("camera_pos", p.camPosX, p.camPosY, p.camPosZ);
-                s->setFloat("shadow_thresh", 0.0f);
-                s->setFloat("rim_power", 4.0f);
-                s->setVec3("rim_color", 1.0f, 1.0f, 1.0f);
-                s->setInt("gradient_map", TEX_UNIT_GRADIENT);
+                s->setVec3(U_CAMERA_POS, p.camPosX, p.camPosY, p.camPosZ);
+                s->setFloat(U_SHADOW_THRESH, 0.0f);
+                s->setFloat(U_RIM_POWER, 4.0f);
+                s->setVec3(U_RIM_COLOR, 1.0f, 1.0f, 1.0f);
+                s->setInt("u_gradientMap", TEX_UNIT_GRADIENT);
                 auto& ctx = mmd::RenderContext::instance();
                 glActiveTexture(GL_TEXTURE0 + TEX_UNIT_GRADIENT);
                 glBindTexture(GL_TEXTURE_2D, ctx.gradientTexture()->id);

@@ -24,6 +24,7 @@ void Model::load(const std::filesystem::path& pmxPath) {
 
     mBindPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx);
     mPoseWorld = mBindPoseWorld;
+    mInvBindPoseWorld = BoneSkinning::computeInvBindWorld(mBindPoseWorld);
     mPhysics.resetPhysics(mPoseWorld);
     mPhysics.getBoneTransforms(mPoseWorld);
 
@@ -388,7 +389,8 @@ void Model::setMorphWeights(const std::unordered_map<std::string, float>& weight
 }
 
 void Model::syncBoneTexture() {
-    auto skinMatrices = BoneSkinning::computeSkinningMatrices(mPmx, mPoseWorld);
+    auto skinMatrices = BoneSkinning::computeSkinningMatrices(
+        mPoseWorld, mInvBindPoseWorld, mPmx.boneCount());
     auto& bm = mMorphCtl.boneMorphs();
     if (!bm.empty())
         BoneSkinning::applyBoneMorphs(skinMatrices, mPmx.boneCount(), bm, mRenderer.modelScale());

@@ -136,6 +136,7 @@ private:
 
     std::vector<std::array<float, 16>> mPoseWorld;
     std::vector<std::array<float, 16>> mBindPoseWorld;
+    std::vector<std::array<float, 16>> mInvBindPoseWorld;
 
     bool mIdleEnabled = true;
     float mIdleTime = 0;

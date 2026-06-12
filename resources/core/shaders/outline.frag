@@ -1,19 +1,19 @@
 #version 330 core
 
-uniform vec3 outline_color;
-uniform sampler2D tex;
-uniform float alpha;
+uniform vec4 u_outlineColor;
+uniform sampler2D u_tex;
+uniform float u_materialAlpha;
 
 in vec2 v_uv;
 out vec4 fragColor;
 
 void main() {
-    if (alpha < 0.01) {
+    if (u_materialAlpha < 0.01) {
         discard;
     }
-    float tex_alpha = texture(tex, v_uv).a;
+    float tex_alpha = texture(u_tex, v_uv).a;
     if (tex_alpha < 0.5) {
         discard;
     }
-    fragColor = vec4(outline_color, 1.0);
+    fragColor = u_outlineColor;
 }

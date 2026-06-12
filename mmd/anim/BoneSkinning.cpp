@@ -382,15 +382,21 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
     return result;
 }
 
-std::vector<float> BoneSkinning::computeSkinningMatrices(
-    const PmxModel& model, const std::vector<std::array<float, 16>>& poseWorld) {
-    int n = model.boneCount();
-    auto bindWorld = BoneSkinning::computeBindWorldMatrices(model);
+std::vector<std::array<float, 16>> BoneSkinning::computeInvBindWorld(
+    const std::vector<std::array<float, 16>>& bindWorld) {
+    int n = (int)bindWorld.size();
+    std::vector<std::array<float, 16>> result(n);
+    for (int i = 0; i < n; ++i)
+        result[i] = inverseMat4(bindWorld[i]);
+    return result;
+}
 
-    std::vector<float> result(n * 16);
-    for (int i = 0; i < n; ++i) {
-        auto invBind = inverseMat4(bindWorld[i]);
-        auto M = mulMat4(poseWorld[i], invBind);
+std::vector<float> BoneSkinning::computeSkinningMatrices(
+    const std::vector<std::array<float, 16>>& poseWorld,
+    const std::vector<std::array<float, 16>>& invBindWorld, int boneCount) {
+    std::vector<float> result(boneCount * 16);
+    for (int i = 0; i < boneCount; ++i) {
+        auto M = mulMat4(poseWorld[i], invBindWorld[i]);
         std::memcpy(&result[i * 16], M.data(), 16 * sizeof(float));
     }
     return result;
@@ -520,14 +526,13 @@ void BoneSkinning::applyBoneMorphs(std::vector<float>& skinMatrices, int boneCou
         float ty = bm.translation[1] * modelScale;
         float tz = bm.translation[2] * modelScale;
 
-        float tmp[12];
+        float tmp[16] = {};
         for (int col = 0; col < 3; ++col) {
             for (int row = 0; row < 3; ++row) {
                 tmp[col * 4 + row] = R[row * 3 + 0] * M[col * 4 + 0] +
                                      R[row * 3 + 1] * M[col * 4 + 1] +
                                      R[row * 3 + 2] * M[col * 4 + 2];
             }
-            tmp[col * 4 + 3] = 0;
         }
         for (int row = 0; row < 3; ++row) {
             tmp[12 + row] = R[row * 3 + 0] * M[12] + R[row * 3 + 1] * M[13] +

@@ -1,6 +1,7 @@
 #include "render/opengl/debug/RigidBodyRenderer.h"
 
 #include "anim/PhysicsWorld.h"
+#include "render/opengl/ShaderStandard.h"
 #include "render/opengl/gpu/Shader.h"
 
 #include <algorithm>
@@ -449,9 +450,9 @@ void RigidBodyRenderer::render(Gpu::ShaderProgram& shader, const std::array<floa
     const float* mm = modelMatParam ? modelMatParam : defMat;
 
     shader.use();
-    shader.setMat4("projection", projection.data());
-    shader.setMat4("view", view.data());
-    shader.setMat4("model", mm);
+    shader.setMat4(U_PROJ_MAT, projection.data());
+    shader.setMat4(U_VIEW_MAT, view.data());
+    shader.setMat4(U_MODEL_MAT, mm);
 
     bool hasPhysics = (mRbPhysics.vertexCount > 0);
     const Gpu::Vao& rb = hasPhysics ? mRbPhysics : (useBoneMatrices ? mRbAnimated : mRbStatic);

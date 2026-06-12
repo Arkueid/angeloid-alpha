@@ -1,5 +1,7 @@
 #include "debug/WorldAxis.h"
 
+#include "render/opengl/ShaderStandard.h"
+
 #include <GL/glew.h>
 #include <vector>
 
@@ -71,9 +73,9 @@ void WorldAxis::render(const Gpu::ShaderProgram& shader, const std::array<float,
     float identity[] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
 
     shader.use();
-    shader.setMat4("projection", projection.data());
-    shader.setMat4("view", view.data());
-    shader.setMat4("model", identity);
+    shader.setMat4(U_PROJ_MAT, projection.data());
+    shader.setMat4(U_VIEW_MAT, view.data());
+    shader.setMat4(U_MODEL_MAT, identity);
 
     glDisable(GL_DEPTH_TEST);
     if (showGrid) {

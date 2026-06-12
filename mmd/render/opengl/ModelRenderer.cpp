@@ -1,5 +1,7 @@
 #include "render/opengl/ModelRenderer.h"
 
+#include "render/opengl/ShaderStandard.h"
+
 #include "anim/BoneSkinning.h"
 #include "anim/VpdLoader.h"
 #include "render/opengl/BoneTextureUtil.h"
@@ -293,16 +295,16 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
     const float* modelMatDefault = mModelMat.data();
     const float* mm = modelMatParam ? modelMatParam : modelMatDefault;
     shader.use();
-    shader.setMat4("projection", projection.data());
-    shader.setMat4("view", view.data());
-    shader.setMat4("model", mm);
-    shader.setVec3("light_dir", 0, 0.5f, 1.0f);
-    shader.setInt("tex", 0);
-    shader.setInt("sphere_tex", 3);
-    shader.setInt("toon_tex", 4);
-    shader.setInt("bone_texture", 1);
-    shader.setInt("bone_texture_width", mBoneTextureWidth);
-    shader.setFloat("morph_weight", 1.0f);
+    shader.setMat4(U_PROJ_MAT, projection.data());
+    shader.setMat4(U_VIEW_MAT, view.data());
+    shader.setMat4(U_MODEL_MAT, mm);
+    shader.setVec3(U_LIGHT_DIR, 0, 0.5f, 1.0f);
+    shader.setInt("u_tex", 0);
+    shader.setInt("u_sphereTex", 3);
+    shader.setInt("u_toonTex", 4);
+    shader.setInt("u_boneTex", 1);
+    shader.setInt(U_BONE_TEX_WIDTH, mBoneTextureWidth);
+    shader.setFloat(U_MORPH_WEIGHT, 1.0f);
     mBoneTexture->bind(1);
 
     Gpu::Vao& vao = showToon ? mMorphVao : mMorphVaoNoToon;
@@ -315,7 +317,7 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
             mDummyTexture->bind(0);
         const auto& mat = mModel->materials[batch.materialIndex];
         auto* ov = getMaterialOverride(batch.materialIndex);
-        shader.setInt("has_texture", hasTex ? 1 : 0);
+        shader.setInt(U_HAS_TEXTURE, hasTex ? 1 : 0);
         if (!hasTex) {
             float dx = mMaterialColor[batch.materialIndex].x,
                   dy = mMaterialColor[batch.materialIndex].y,
@@ -325,52 +327,52 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
                 dy *= ov->diffuse.y;
                 dz *= ov->diffuse.z;
             }
-            shader.setVec3("material_color", dx, dy, dz);
+            shader.setVec3(U_MATERIAL_DIFFUSE, dx, dy, dz);
         }
-        shader.setFloat("alpha", ov ? ov->alpha : mat.alpha);
+        shader.setFloat(U_MATERIAL_ALPHA, ov ? ov->alpha : mat.alpha);
         const auto& spec = mMaterialSpecular[batch.materialIndex];
-        shader.setVec3("specular_color", ov ? spec.color.x * ov->specular.x : spec.color.x,
+        shader.setVec3(U_SPECULAR_COLOR, ov ? spec.color.x * ov->specular.x : spec.color.x,
                        ov ? spec.color.y * ov->specular.y : spec.color.y,
                        ov ? spec.color.z * ov->specular.z : spec.color.z);
-        shader.setFloat("specular_factor", ov ? spec.factor * ov->specularFactor : spec.factor);
+        shader.setFloat(U_SPECULAR_FACTOR, ov ? spec.factor * ov->specularFactor : spec.factor);
         const auto& amb = mMaterialAmbient[batch.materialIndex];
-        shader.setVec3("ambient_color", ov ? amb.x * ov->ambient.x : amb.x,
+        shader.setVec3(U_MATERIAL_AMBIENT, ov ? amb.x * ov->ambient.x : amb.x,
                        ov ? amb.y * ov->ambient.y : amb.y, ov ? amb.z * ov->ambient.z : amb.z);
         const auto& sphere = mMaterialSphere[batch.materialIndex];
         if (sphere.textureIndex >= 0 && sphere.textureIndex < (int)mTextures.size() &&
             mTextures[sphere.textureIndex]) {
             mTextures[sphere.textureIndex]->bind(3);
-            shader.setInt("sphere_mode", sphere.mode);
+            shader.setInt(U_SPHERE_MODE, sphere.mode);
         }
         else {
-            shader.setInt("sphere_mode", 0);
+            shader.setInt(U_SPHERE_MODE, 0);
         }
         const auto& toon = mMaterialToon[batch.materialIndex];
         if (toon.sharingFlag != 0) {
             int si = toon.textureIndex;
             if (auto* t = mmd::RenderContext::instance().sharedToon(si)) {
                 t->bind(4);
-                shader.setInt("has_toon", 1);
+                shader.setInt(U_HAS_TOON, 1);
             }
             else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
                 t->bind(4);
-                shader.setInt("has_toon", 1);
+                shader.setInt(U_HAS_TOON, 1);
             }
             else {
-                shader.setInt("has_toon", 0);
+                shader.setInt(U_HAS_TOON, 0);
             }
         }
         else if (toon.textureIndex >= 0 && toon.textureIndex < (int)mTextures.size() &&
                  mTextures[toon.textureIndex]) {
             mTextures[toon.textureIndex]->bind(4);
-            shader.setInt("has_toon", 1);
+            shader.setInt(U_HAS_TOON, 1);
         }
         else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
             t->bind(4);
-            shader.setInt("has_toon", 1);
+            shader.setInt(U_HAS_TOON, 1);
         }
         else {
-            shader.setInt("has_toon", 0);
+            shader.setInt(U_HAS_TOON, 0);
         }
 
         vao.bind();
@@ -388,13 +390,13 @@ void ModelRenderer::renderMorphOutlinePass(Gpu::ShaderProgram& shader,
     const float* modelMatDefault = mModelMat.data();
     const float* mm = modelMatParam ? modelMatParam : modelMatDefault;
     shader.use();
-    shader.setMat4("projection", projection.data());
-    shader.setMat4("view", view.data());
-    shader.setMat4("model", mm);
-    shader.setInt("tex", 0);
-    shader.setInt("bone_texture", 1);
-    shader.setInt("bone_texture_width", mBoneTextureWidth);
-    shader.setFloat("morph_weight", 1.0f);
+    shader.setMat4(U_PROJ_MAT, projection.data());
+    shader.setMat4(U_VIEW_MAT, view.data());
+    shader.setMat4(U_MODEL_MAT, mm);
+    shader.setInt("u_tex", 0);
+    shader.setInt("u_boneTex", 1);
+    shader.setInt(U_BONE_TEX_WIDTH, mBoneTextureWidth);
+    shader.setFloat(U_MORPH_WEIGHT, 1.0f);
     mBoneTexture->bind(1);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_FRONT);
@@ -410,16 +412,16 @@ void ModelRenderer::renderMorphOutlinePass(Gpu::ShaderProgram& shader,
         const auto& edge = mMaterialEdge[batch.materialIndex];
         auto* ov = getMaterialOverride(batch.materialIndex);
         if (ov) {
-            shader.setVec4("outline_color", edge.color.x + ov->edgeColor.x,
+            shader.setVec4(U_OUTLINE_COLOR, edge.color.x + ov->edgeColor.x,
                            edge.color.y + ov->edgeColor.y, edge.color.z + ov->edgeColor.z,
                            edge.color.w + ov->edgeColor.w);
-            shader.setFloat("outline_thickness", (edge.size + ov->edgeSize) * 0.001f);
-            shader.setFloat("alpha", ov->alpha);
+            shader.setFloat(U_OUTLINE_THICKNESS, (edge.size + ov->edgeSize) * 0.001f);
+            shader.setFloat(U_MATERIAL_ALPHA, ov->alpha);
         }
         else {
-            shader.setVec4("outline_color", edge.color.x, edge.color.y, edge.color.z, edge.color.w);
-            shader.setFloat("outline_thickness", edge.size * 0.001f);
-            shader.setFloat("alpha", mModel->materials[batch.materialIndex].alpha);
+            shader.setVec4(U_OUTLINE_COLOR, edge.color.x, edge.color.y, edge.color.z, edge.color.w);
+            shader.setFloat(U_OUTLINE_THICKNESS, edge.size * 0.001f);
+            shader.setFloat(U_MATERIAL_ALPHA, mModel->materials[batch.materialIndex].alpha);
         }
         mMorphOutlineVao.bind();
         glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,

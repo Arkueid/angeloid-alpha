@@ -60,6 +60,13 @@ struct BoneSkinning {
     static void applyPhysics(const PmxModel& model, std::vector<float>& skinMatrices,
                              const std::vector<std::array<float, 16>>& physicsMats);
 
+    static std::vector<std::array<float, 16>> computeInvBindWorld(
+        const std::vector<std::array<float, 16>>& bindWorld);
+
+    static std::vector<float> computeSkinningMatrices(
+        const std::vector<std::array<float, 16>>& poseWorld,
+        const std::vector<std::array<float, 16>>& invBindWorld, int boneCount);
+
     static void applyBoneMorphs(std::vector<float>& skinMatrices, int boneCount,
                                  const std::unordered_map<int, BoneMorphTransform>& boneMorphs,
                                  float modelScale);
