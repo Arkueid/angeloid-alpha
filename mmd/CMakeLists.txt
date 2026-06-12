@@ -18,6 +18,7 @@ set(MMD_SOURCES
     render/opengl/gpu/Shader.cpp
     render/opengl/ModelRenderer.cpp
     render/opengl/RenderContext.cpp
+    render/opengl/RenderTarget.cpp
     render/opengl/debug/RigidBodyRenderer.cpp
     render/opengl/Pipeline.cpp
     render/opengl/StbImage.cpp

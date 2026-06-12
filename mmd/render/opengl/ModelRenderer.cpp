@@ -280,6 +280,30 @@ void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::
 
 }
 
+void ModelRenderer::renderDepthPass(Gpu::ShaderProgram& shader,
+                                     const std::array<float, 16>& lightViewProj,
+                                     const float* modelMatParam) {
+    if (!showModel || mMaterialBatches.empty()) return;
+
+    const float* mm = modelMatParam ? modelMatParam : mModelMat.data();
+    shader.use();
+    shader.setMat4("u_projMat", lightViewProj.data());
+    // Shadow shader uses lightViewProj directly as proj; view is identity
+    float identity[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    shader.setMat4("u_viewMat", identity);
+    shader.setMat4("u_modelMat", mm);
+    shader.setInt("u_boneTex", 1);
+    shader.setInt("u_boneTexWidth", mBoneTextureWidth);
+    shader.setFloat("u_morphWeight", 1.0f);
+    mBoneTexture->bind(1);
+
+    mMorphVao.bind();
+    for (const auto& batch : mMaterialBatches) {
+        glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
+                       (void*)(intptr_t)(batch.first * sizeof(int32_t)));
+    }
+}
+
 void ModelRenderer::uploadBoneData(const void* data, size_t bytes) {
     if (mBoneTexture)
         mBoneTexture->write(data);
@@ -298,7 +322,6 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
     shader.setMat4(U_PROJ_MAT, projection.data());
     shader.setMat4(U_VIEW_MAT, view.data());
     shader.setMat4(U_MODEL_MAT, mm);
-    shader.setVec3(U_LIGHT_DIR, 0, 0.5f, 1.0f);
     shader.setInt("u_tex", 0);
     shader.setInt("u_sphereTex", 3);
     shader.setInt("u_toonTex", 4);

@@ -237,6 +237,8 @@ void Model::update(float dt) {
 }
 
 void Model::draw(int screenWidth, int screenHeight) {
+    Pipeline::instance().resizeViewport(screenWidth, screenHeight);
+
     auto proj = Camera::projectionMatrix(screenWidth, screenHeight);
     auto view = Camera::instance().viewMatrix();
     float camPos[3];
@@ -259,6 +261,54 @@ void Model::draw(int screenWidth, int screenHeight) {
         mPhysicsDebug->useBoneMatrices = false;
     }
     
+    // Light-space view-projection for shadow map.
+    // Key light from upper-front-right (classic MMD lighting).
+    Vec3 ld = {0.3f, 0.8f, 0.5f};
+    float l = std::sqrt(ld.x*ld.x + ld.y*ld.y + ld.z*ld.z);
+    ld = {ld.x/l, ld.y/l, ld.z/l};
+
+    std::array<float, 16> lightViewProj;
+    {
+
+        // Light position 15 units away from origin in light direction
+        float dist = 15.0f;
+        Vec3 lp = {ld.x * dist, ld.y * dist, ld.z * dist};
+
+        // Simple orthographic: light looks toward origin
+        // Build view matrix (column-major): maps world coords to light-eye coords
+        Vec3 fwd = {-ld.x, -ld.y, -ld.z};
+        Vec3 worldUp = {0, 1, 0};
+        if (std::abs(fwd.x) < 0.001f && std::abs(fwd.z) < 0.001f)
+            worldUp = {1, 0, 0};
+        Vec3 r = {worldUp.y*fwd.z - worldUp.z*fwd.y,
+                  worldUp.z*fwd.x - worldUp.x*fwd.z,
+                  worldUp.x*fwd.y - worldUp.y*fwd.x};
+        float rl = std::sqrt(r.x*r.x + r.y*r.y + r.z*r.z);
+        r = {r.x/rl, r.y/rl, r.z/rl};
+        Vec3 u = {fwd.y*r.z - fwd.z*r.y,
+                  fwd.z*r.x - fwd.x*r.z,
+                  fwd.x*r.y - fwd.y*r.x};
+
+        // Orthographic projection (column-major)
+        float size = 6.0f;  // half-size of ortho frustum
+        float zn = 0.1f, zf = 50.0f;
+        float sx = 1.0f / size, sy = 1.0f / size;
+        float sz = 2.0f / (zn - zf);
+        float tz = -(zf + zn) / (zf - zn);
+
+        // View (column-major): translate by -lp, then rotate by [r,u,fwd]
+        // Combined VP: projection * view
+        lightViewProj = {
+            r.x * sx,        u.x * sy,        fwd.x * sz,     0,
+            r.y * sx,        u.y * sy,        fwd.y * sz,     0,
+            r.z * sx,        u.z * sy,        fwd.z * sz,     0,
+            -(r.x*lp.x + r.y*lp.y + r.z*lp.z) * sx,
+            -(u.x*lp.x + u.y*lp.y + u.z*lp.z) * sy,
+            -(fwd.x*lp.x + fwd.y*lp.y + fwd.z*lp.z) * sz + tz,
+            1.0f
+        };
+    }
+
     Pipeline::FrameParams fp;
     fp.proj = &proj;
     fp.view = &view;
@@ -266,7 +316,10 @@ void Model::draw(int screenWidth, int screenHeight) {
     fp.camPosX = camPos[0];
     fp.camPosY = camPos[1];
     fp.camPosZ = camPos[2];
-
+    fp.lightDirX = ld.x;
+    fp.lightDirY = ld.y;
+    fp.lightDirZ = ld.z;
+    fp.lightViewProj = &lightViewProj;
     fp.showToon = mRenderer.showToon;
     fp.showRigidBodies = mShowRigidBodies;
     fp.physicsDebug = mPhysicsDebug.get();

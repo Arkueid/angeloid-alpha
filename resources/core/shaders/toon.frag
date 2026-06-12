@@ -23,7 +23,25 @@ uniform bool u_hasToon;
 uniform sampler2D u_sphereTex;
 uniform int u_sphereMode;
 
+uniform sampler2D u_shadowMap;
+uniform mat4 u_lightViewProj;
+uniform bool u_hasShadow;
+
 out vec4 fragColor;
+
+float shadowFactor() {
+    if (!u_hasShadow) return 1.0;
+    vec4 lightClip = u_lightViewProj * vec4(v_world_pos, 1.0);
+    vec3 lightNdc = lightClip.xyz / lightClip.w;
+    if (lightNdc.x < -1.0 || lightNdc.x > 1.0 ||
+        lightNdc.y < -1.0 || lightNdc.y > 1.0)
+        return 1.0;
+    vec2 uv = lightNdc.xy * 0.5 + 0.5;
+    float shadowDepth = texture(u_shadowMap, uv).r;
+    float fragDepth = lightNdc.z * 0.5 + 0.5;
+    float bias = 0.002;
+    return fragDepth - bias <= shadowDepth ? 1.0 : 0.5;
+}
 
 void main() {
     if (u_materialAlpha < 0.01) {
@@ -75,7 +93,8 @@ void main() {
     float rim = pow(1.0 - max(dot(view_dir, normal), 0.0), u_rimPower);
     vec3 rim_contribution = rim * u_rimColor * 0.5;
 
-    vec3 result = shaded_color + rim_contribution;
+    float shadow = shadowFactor();
+    vec3 result = (shaded_color + rim_contribution) * shadow;
     result = clamp(result, 0.0, 1.0);
 
     fragColor = vec4(result, tex_color.a * u_materialAlpha);
