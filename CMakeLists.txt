@@ -13,8 +13,7 @@ if(MSVC)
 endif()
 
 set(ENABLE_STACKTRACE ON CACHE BOOL "Enable crash stack trace via backward-cpp" FORCE)
-set(BUILD_PYTHON_WRAPPER ON CACHE BOOL "Build Python wrapper bindings" FORCE)
-set(BUILD_VIEWER OFF CACHE BOOL "Build viewer" FORCE)
+set(BUILD_VIEWER OFF CACHE BOOL "Build viewer")
 
 if(ENABLE_STACKTRACE)
     add_subdirectory(thirdparty/backward-cpp)
@@ -24,8 +23,4 @@ add_subdirectory(mmd)
 
 if(BUILD_VIEWER)
     add_subdirectory(viewer)
-endif()
-
-if(BUILD_PYTHON_WRAPPER)
-    add_subdirectory(wrapper)
 endif()

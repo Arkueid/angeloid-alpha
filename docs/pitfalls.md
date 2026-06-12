@@ -5,15 +5,14 @@ type: reference
 ---
 
 ## Initialization Order
-1. **Window before model**: GL context must exist before `loadModel()` — it creates VAOs/textures via GL calls.
+1. **Window before model**: GL context must exist before `Model::load()` — it creates VAOs/textures via GL calls.
 2. **setupSkinning in load()**: must be called to initialize morph VBOs. Without it, ALL morph operations silently fail (VBO writes go to null).
 3. **VmdPlayer mPlaying**: default was `false` → VMD never advanced frames. Constructor now sets `true`.
 
-## GL State Leaks
-- **`renderMainPass`** calls `glDisable(GL_BLEND)` at end → re-enable before physics debug overlay
-- **`renderMainPass`** USED to call `glDisable(GL_DEPTH_TEST)` → REMOVED (was breaking debug wireframe depth)
-- Outline passes properly reset `GL_CULL_FACE`
-- Physics debug must call `glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LEQUAL)`
+## GL State
+- `Pipeline::execute()` sets baseline state at start: `GL_CW`, depth+blend enabled
+- Outline pass enables/disables `GL_CULL_FACE(GL_FRONT)` internally — cleans up before returning
+- `glDisable(GL_BLEND)` leak from old `renderMainPass` no longer exists (state set once in Pipeline)
 
 ## Draw Order
 Outline MUST draw before main model. Outline uses front-face culling + vertex extrusion; depth buffer must be empty for the shell to render correctly.

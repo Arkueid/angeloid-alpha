@@ -2,13 +2,10 @@
 
 #include "MMD.h"
 #include "pmx/PmxReader.h"
-#include "render/opengl/RenderContext.h"
-#include "render/opengl/gpu/Shader.h"
+#include "render/opengl/Pipeline.h"
 #include "util/Log.h"
 
-#include <GL/glew.h>
 #include <cmath>
-#include <set>
 
 namespace mmd {
 
@@ -23,7 +20,6 @@ void Model::load(const std::filesystem::path& pmxPath) {
 
     mVmdMixer = std::make_unique<VmdMixer>();
 
-    mRenderer.useSkinning = true;
     mRenderer.setupSkinning(mPmx);
 
     mBindPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx);
@@ -192,7 +188,7 @@ void Model::update(float dt) {
     if (mLookAtEnabled)
         applyLookAt();
 
-    mPhysics.updateMode0Bodies(mRenderer.useSkinning ? mPoseWorld : mBindPoseWorld);
+    mPhysics.updateMode0Bodies(mPoseWorld);
     if (mPhysics.enabled) {
         mPhysics.step(dt, mPoseWorld);
         mPhysics.getBoneTransforms(mPoseWorld);
@@ -240,18 +236,10 @@ void Model::update(float dt) {
 }
 
 void Model::draw(int screenWidth, int screenHeight) {
-    glFrontFace(GL_CW);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
     auto proj = Camera::projectionMatrix(screenWidth, screenHeight);
     auto view = Camera::instance().viewMatrix();
     float camPos[3];
     Camera::instance().getEyePosition(camPos[0], camPos[1], camPos[2]);
-
-    auto& ctx = RenderContext::instance();
 
     // Morph offset sync
     syncMorphOffsets();
@@ -261,64 +249,29 @@ void Model::draw(int screenWidth, int screenHeight) {
             mRenderer.setMaterialOverride((int)i, *ov);
     }
 
-    if (mRenderer.useSkinning) {
-        bool useMorph = mMorphCtl.hasActiveMorphs();
-        const char* ol = useMorph ? "morph_outline" : "outline_skinned";
-        if (auto* s = ctx.shader(ol))
-            useMorph ? mRenderer.renderMorphOutlinePass(*s, proj, view)
-                     : mRenderer.renderSkinnedOutlinePass(*s, proj, view);
-        const char* sn = useMorph ? (mRenderer.showToon ? "morph" : "morph_notoon")
-                                  : (mRenderer.showToon ? "skinned" : "skinned_notoon");
-        if (auto* s = ctx.shader(sn)) {
-            if (mRenderer.showToon) {
-                s->use();
-                s->setVec3("camera_pos", camPos[0], camPos[1], camPos[2]);
-                s->setFloat("shadow_thresh", 0.0f);
-                s->setFloat("rim_power", 4.0f);
-                s->setVec3("rim_color", 1.0f, 1.0f, 1.0f);
-                s->setInt("gradient_map", 2);
-                glActiveTexture(GL_TEXTURE2);
-                glBindTexture(GL_TEXTURE_2D, ctx.gradientTexture()->id);
-            }
-            useMorph ? mRenderer.renderMorphMainPass(*s, proj, view)
-                     : mRenderer.renderSkinnedMainPass(*s, proj, view);
-        }
+    // Lazy-init physics debug
+    if (mShowRigidBodies && !mPhysicsDebug) {
+        mPhysicsDebug = std::make_unique<RigidBodyRenderer>();
+        mPhysicsDebug->build(mPmx, mRenderer.modelScale());
+        mPhysicsDebug->showRigidBody = true;
+        mPhysicsDebug->showJoint = true;
+        mPhysicsDebug->useBoneMatrices = false;
     }
-    else {
-        if (auto* s = ctx.shader("outline"))
-            mRenderer.renderOutlinePass(*s, proj, view);
-        auto* sn = mRenderer.showToon ? "toon" : "main";
-        if (auto* s = ctx.shader(sn)) {
-            if (mRenderer.showToon) {
-                s->use();
-                s->setVec3("camera_pos", camPos[0], camPos[1], camPos[2]);
-                s->setFloat("shadow_thresh", 0.0f);
-                s->setFloat("rim_power", 4.0f);
-                s->setVec3("rim_color", 1.0f, 1.0f, 1.0f);
-                s->setInt("gradient_map", 1);
-                glActiveTexture(GL_TEXTURE1);
-                glBindTexture(GL_TEXTURE_2D, ctx.gradientTexture()->id);
-            }
-            mRenderer.renderMainPass(*s, proj, view);
-        }
-    }
+    
+    Pipeline::FrameParams fp;
+    fp.proj = &proj;
+    fp.view = &view;
+    fp.modelMat = mRenderer.modelMatrix();
+    fp.camPosX = camPos[0];
+    fp.camPosY = camPos[1];
+    fp.camPosZ = camPos[2];
 
-    // Rigid body debug overlay
-    if (mShowRigidBodies) {
-        if (!mPhysicsDebug) {
-            mPhysicsDebug = std::make_unique<RigidBodyRenderer>();
-            mPhysicsDebug->build(mPmx, mRenderer.modelScale());
-            mPhysicsDebug->showRigidBody = true;
-            mPhysicsDebug->showJoint = true;
-            mPhysicsDebug->useBoneMatrices = false;
-        }
-        if (mPhysicsDebug->showRigidBody) {
-            if (auto* s = ctx.shader("rigidbody")) {
-                mPhysicsDebug->updateFromPhysics(mPhysics);
-                mPhysicsDebug->render(*s, proj, view, mRenderer.modelMatrix());
-            }
-        }
-    }
+    fp.showToon = mRenderer.showToon;
+    fp.showRigidBodies = mShowRigidBodies;
+    fp.physicsDebug = mPhysicsDebug.get();
+    fp.physics = &mPhysics;
+
+    Pipeline::instance().execute(mRenderer, fp);
 }
 
 void Model::enablePhysics(bool on) {
@@ -435,8 +388,12 @@ void Model::setMorphWeights(const std::unordered_map<std::string, float>& weight
 }
 
 void Model::syncBoneTexture() {
+    auto skinMatrices = BoneSkinning::computeSkinningMatrices(mPmx, mPoseWorld);
     auto& bm = mMorphCtl.boneMorphs();
-    mRenderer.updateBoneTexture(mPmx, mPoseWorld, bm.empty() ? nullptr : &bm);
+    if (!bm.empty())
+        BoneSkinning::applyBoneMorphs(skinMatrices, mPmx.boneCount(), bm, mRenderer.modelScale());
+    auto data = BoneSkinning::packBoneMatrices(skinMatrices, mPmx.boneCount());
+    mRenderer.uploadBoneData(data.pixels.data(), data.pixels.size() * sizeof(float));
 }
 
 void Model::syncMorphOffsets() {
@@ -549,10 +506,12 @@ void Model::applyLookAt() {
     float tanHalfFov = std::tan(45.0f * 3.14159265f / 360.0f);
     Vec3 headView = {vec3Dot(vec3Sub(headPosWorld, camPos), right),
                      vec3Dot(vec3Sub(headPosWorld, camPos), upVec),
-                     vec3Dot(vec3Sub(headPosWorld, camPos), backward)}; // backward = camera -Z
+                     vec3Dot(vec3Sub(headPosWorld, camPos), backward)};  // backward = camera -Z
     float headViewZ = -headView.z;
-    if (headViewZ < 0.1f) headViewZ = 5.0f;
-    float headNdcX = -(headView.x / headViewZ) / (tanHalfFov * aspect); // mirror to match mouseNdcX
+    if (headViewZ < 0.1f)
+        headViewZ = 5.0f;
+    float headNdcX =
+        -(headView.x / headViewZ) / (tanHalfFov * aspect);  // mirror to match mouseNdcX
     float headNdcY = (headView.y / headViewZ) / tanHalfFov;
 
     // Mouse NDC — Orbit mode derives target from camera eye position
@@ -563,7 +522,7 @@ void Model::applyLookAt() {
     static constexpr float kMaxAngle = 50.0f * 3.14159265f / 180.0f;
 
     if (cam.mode() == CameraMode::Orbit)
-        return; // Orbit mode: skip lookAt
+        return;  // Orbit mode: skip lookAt
 
     // FPS mode: NDC-based mouse tracking
     float relNdcX = mouseNdcX - headNdcX;

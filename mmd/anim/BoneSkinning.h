@@ -1,5 +1,6 @@
 #pragma once
 
+#include "anim/MorphController.h"
 #include "pmx/PmxModel.h"
 
 #include <array>
@@ -58,6 +59,10 @@ struct BoneSkinning {
     // Overlay physics world matrices onto skinning matrices
     static void applyPhysics(const PmxModel& model, std::vector<float>& skinMatrices,
                              const std::vector<std::array<float, 16>>& physicsMats);
+
+    static void applyBoneMorphs(std::vector<float>& skinMatrices, int boneCount,
+                                 const std::unordered_map<int, BoneMorphTransform>& boneMorphs,
+                                 float modelScale);
 
     static BoneTextureData packBoneMatrices(const std::vector<float>& matrices, int numBones);
 };

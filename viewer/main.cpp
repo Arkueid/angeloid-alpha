@@ -2,6 +2,7 @@
 #include "Model.h"
 #include "debug/WorldAxis.h"
 #include "render/opengl/gpu/Shader.h"
+#include "util/CfgParser.h"
 #include "window/GlfwWindow.h"
 #include <vector>
 
@@ -34,7 +35,6 @@ static void printHelp() {
                  "  H key: Toggle model mesh display\n"
                  "  O key: Toggle outline display\n"
                  "  T key: Toggle toon shading\n"
-                 "  K key: Toggle GPU skinning\n"
                  "  P key: Toggle VPD pose\n"
                  "  R key: Reset camera to default position\n"
                  "Orbit Camera Controls:\n"
@@ -52,32 +52,13 @@ static void printHelp() {
               << std::endl;
 }
 
-static const std::unordered_map<std::string, const char*> MODELS = {
-    {"ikaros-origin", "resources/models/ikaros-origin/Ikaros.pmx"},
-    {"ikaros-uniform", "resources/models/ikaros-uniform/Ikaros.pmx"},
-    {"安比", "resources/models/安比/安比.pmx"},
-    {"刀", "resources/models/安比/刀.pmx"},
-    {"chloe", "resources/models/Chloe_Uniform1_0.9/Chloe_Uniform1_0.9.pmx"},
-    {"aqua-swimwear", "resources/models/Aqua_Swimwear_1.0/Aqua_Swimwear_1.0.pmx"},
-    {"marine-swimwear", "resources/models/Marine_Swmwear_1.01/Marine_Swmwear_1.01.pmx"},
-    {"aqua-basebody", "resources/models/Aqua_BaseBody_R15_0.9/Aqua_BaseBody_R15_0.9.pmx"},
-    {"aqua-sailor", "resources/models/Aqua_Sailor_0.8/Aqua_Sailor_0.8.pmx"},
-    {"brujas", "resources/models/Brujas/Brujas.pmx"},
-    {"lamy-swimwear", "resources/models/Lamy_Swimwear_1.0/Lamy_Swimwear_1.0.pmx"},
-    {"lulum", "resources/models/lulum/lulum_1.0.pmx"},
-    {"marine-jk1", "resources/models/Marine_JK1_Set_1.01/Marine_JK1_1.0.pmx"},
-    {"marine-jk1-hi", "resources/models/Marine_JK1_Set_1.01/Marine_JK1_Hi_1.0.pmx"},
-    {"rurudo-lion", "resources/models/RurudoLion_1.0/RurudoLion_1.0.pmx"},
-    {"rurudo-lion-hi", "resources/models/RurudoLion_1.0/RurudoLion_Hi_1.0.pmx"},
-    {"卢西娅", "resources/models/卢西娅/卢西娅.pmx"},
-    {"卢西娅-摘帽", "resources/models/卢西娅/卢西娅_摘帽.pmx"},
-    {"卢西娅-武器1", "resources/models/卢西娅/武器1.pmx"},
-    {"卢西娅-武器2", "resources/models/卢西娅/武器2.pmx"},
-    {"伊里伽尔", "resources/models/伊里伽尔/伊里伽尔.pmx"},
-    {"伊里伽尔-redhat", "resources/models/伊里伽尔-redhat/童话式复古.pmx"},
-    {"姵儿", "resources/models/姵儿/姵儿.pmx"},
-    {"艾尔莎", "resources/models/艾尔莎/莎小姐.pmx"},
-};
+static std::unordered_map<std::string, std::string> loadModelRegistry(const std::filesystem::path& cfgPath) {
+    auto map = parseCfgFile(cfgPath);
+    if (map.empty()) {
+        std::cerr << "WARNING: No models found in " << cfgPath.string() << std::endl;
+    }
+    return map;
+}
 
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
@@ -112,25 +93,24 @@ int main(int argc, char* argv[]) {
             modelName = arg;
     }
 
+    fs::path projRoot = fs::weakly_canonical(fs::path(MMD_PROJECT_ROOT));
+    auto modelRegistry = loadModelRegistry(projRoot / "resources/app/models.cfg");
+
     fs::path pmxPath;
-    auto it = MODELS.find(modelName);
-    if (it != MODELS.end())
-        pmxPath = fs::u8path(it->second);
+    auto it = modelRegistry.find(modelName);
+    if (it != modelRegistry.end())
+        pmxPath = projRoot / fs::u8path(it->second);
     else
         pmxPath = fs::u8path(modelName);
-    fs::path vpdPath = fs::u8path("resources/vpd/自然站姿.vpd");
-    fs::path projRoot = fs::weakly_canonical(fs::path(MMD_PROJECT_ROOT));
-    if (pmxPath.is_relative())
-        pmxPath = projRoot / pmxPath;
-    if (vpdPath.is_relative())
-        vpdPath = projRoot / vpdPath;
+    fs::path vpdPath = projRoot / fs::u8path("resources/app/vpd/自然站姿.vpd");
     // --- Window ---
     GlfwWindow app(1280, 720, "MMD PMX Viewer");
 
     // --- Init mmd module ---
     mmd::InitArgs args;
-    args.shaderDir = projRoot / "resources/shaders";
-    args.toonDir = projRoot / "resources/toon";
+    args.shaderDir = projRoot / "resources/core/shaders";
+    args.toonDir = projRoot / "resources/core/toon";
+    args.effectsCfg = projRoot / "resources/core/effects/effects.cfg";
     args.blinkMorphs = {"blink", "blink_l", "blink_r",
                         "まばたき", "まぶたき", "ウィンク", "ｳｨﾝｸ"};
     mmd::init(std::move(args));
@@ -162,9 +142,9 @@ int main(int argc, char* argv[]) {
     }
 
     WorldAxis worldAxis;
-    auto axisVert = Gpu::ShaderProgram::readFile(projRoot / "resources/shaders/axis.vert");
-    auto axisFrag = Gpu::ShaderProgram::readFile(projRoot / "resources/shaders/axis.frag");
-    Gpu::ShaderProgram axisShader(axisVert, axisFrag);
+    auto axisVert = Gpu::ShaderProgram::readFile(projRoot / "viewer/solid.vert");
+    auto axisFrag = Gpu::ShaderProgram::readFile(projRoot / "viewer/solid.frag");
+    Gpu::ShaderProgram solidShader(axisVert, axisFrag);
 
     printHelp();
 
@@ -210,10 +190,6 @@ int main(int argc, char* argv[]) {
                 model.applyVpd(activeVpdId);
                 std::cout << "VPD pose: ON" << std::endl;
             }
-        }
-        if (key == GLFW_KEY_K && act == GLFW_PRESS) {
-            model.setSkinning(!model.isSkinned());
-            std::cout << "GPU skinning: " << (model.isSkinned() ? "ON" : "OFF") << std::endl;
         }
         if (key == GLFW_KEY_Y && act == GLFW_PRESS) {
             model.enablePhysics(!model.physicsEnabled());
@@ -331,9 +307,9 @@ int main(int argc, char* argv[]) {
 
         auto proj = Camera::projectionMatrix(app.width(), app.height());
         auto view = Camera::instance().viewMatrix();
-        axisShader.use();
+        solidShader.use();
         glLineWidth(2.0f);
-        worldAxis.render(axisShader, proj, view);
+        worldAxis.render(solidShader, proj, view);
 
         model.draw(app.width(), app.height());
     };

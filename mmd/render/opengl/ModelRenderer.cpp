@@ -7,37 +7,12 @@
 #include "render/opengl/gpu/Shader.h"
 #include "util/Log.h"
 
-#include <cstring>
-
 #include <GL/glew.h>
 #include <algorithm>
 #include <filesystem>
 #include <stb_image.h>
 
 namespace fs = std::filesystem;
-
-// --- Helpers ---
-
-static void buildInterleavedVao(Gpu::Vao& vao, GLuint sharedVbo, GLuint sharedEbo, int indexCount) {
-    vao.bind();
-
-    glBindBuffer(GL_ARRAY_BUFFER, sharedVbo);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(8 * sizeof(float)));
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sharedEbo);
-    vao.ebo = sharedEbo;
-    vao.indexCount = indexCount;
-    Gpu::Vao::unbind();
-}
-
-// --- ModelRenderer ---
 
 ModelRenderer::ModelRenderer() {
     // 1x1 white dummy texture
@@ -47,15 +22,7 @@ ModelRenderer::ModelRenderer() {
     mDummyTexture->setWrap(false, false);
 }
 
-ModelRenderer::~ModelRenderer() {
-    mModelVao.ebo = 0;
-    mToonVao.ebo = 0;
-    mOutlineVao.ebo = 0;
-    if (mStaticVbo)
-        glDeleteBuffers(1, &mStaticVbo);
-    if (mStaticEbo)
-        glDeleteBuffers(1, &mStaticEbo);
-}
+ModelRenderer::~ModelRenderer() = default;
 
 void ModelRenderer::loadModel(const PmxModel& model, const std::filesystem::path& textureDir) {
     mModel = &model;
@@ -95,43 +62,8 @@ void ModelRenderer::loadModel(const PmxModel& model, const std::filesystem::path
     MMD_INFO("RENDER", "Center: (%.4f,%.4f,%.4f) scale: %.4f", mCenter.x, mCenter.y, mCenter.z,
              mScale);
 
-    // Build interleaved vertex data (PMX raw coordinates)
-    mVertices.clear();
-    mVertices.reserve(model.vertexCount() * 9);
-    for (const auto& v : model.vertices) {
-        // interleaved: [px,py,pz, nx,ny,nz, u,v, edge_factor]
-        mVertices.insert(mVertices.end(), {v.position.x, v.position.y, v.position.z, v.normal.x,
-                                           v.normal.y, v.normal.z, v.uv.x, v.uv.y, v.edge_factor});
-    }
-
-    // Copy indices
+    // Copy indices (shared by all VAOs)
     mIndices.assign(model.indices.begin(), model.indices.end());
-
-    // Create shared VBO/EBO for static VAOs
-    if (mStaticVbo)
-        glDeleteBuffers(1, &mStaticVbo);
-    if (mStaticEbo)
-        glDeleteBuffers(1, &mStaticEbo);
-    glGenBuffers(1, &mStaticVbo);
-    glBindBuffer(GL_ARRAY_BUFFER, mStaticVbo);
-    glBufferData(GL_ARRAY_BUFFER, mVertices.size() * sizeof(float), mVertices.data(),
-                 GL_STATIC_DRAW);
-    glGenBuffers(1, &mStaticEbo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mStaticEbo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mIndices.size() * sizeof(int32_t), mIndices.data(),
-                 GL_STATIC_DRAW);
-
-    // Clear ownership from old VAOs before creating new ones
-    mModelVao.vbos.clear();
-    mModelVao.ebo = 0;
-    mToonVao.vbos.clear();
-    mToonVao.ebo = 0;
-    mOutlineVao.vbos.clear();
-    mOutlineVao.ebo = 0;
-
-    buildInterleavedVao(mModelVao, mStaticVbo, mStaticEbo, (int)mIndices.size());
-    buildInterleavedVao(mToonVao, mStaticVbo, mStaticEbo, (int)mIndices.size());
-    buildInterleavedVao(mOutlineVao, mStaticVbo, mStaticEbo, (int)mIndices.size());
 
     // Load textures
     loadTextures(textureDir);
@@ -251,181 +183,6 @@ void ModelRenderer::buildMaterialBatches(const PmxModel& model) {
     }
 }
 
-void ModelRenderer::renderMainPass(Gpu::ShaderProgram& shader,
-                                   const std::array<float, 16>& projection,
-                                   const std::array<float, 16>& view, const float* modelMatParam) {
-    if (!showModel || mMaterialBatches.empty())
-        return;
-
-    const float* modelMatDefault = mModelMat.data();
-    const float* modelMat = modelMatParam ? modelMatParam : modelMatDefault;
-
-    shader.use();
-    shader.setMat4("projection", projection.data());
-    shader.setMat4("view", view.data());
-    shader.setMat4("model", modelMat);
-    shader.setVec3("light_dir", 0, 0.5f, 1.0f);
-    shader.setInt("tex", 0);
-    shader.setInt("sphere_tex", 3);
-    shader.setInt("toon_tex", 4);
-
-    std::memset(mLastBoundTex, 0, sizeof(mLastBoundTex));
-
-    Gpu::Vao& vao = showToon ? mToonVao : mModelVao;
-
-    for (const auto& batch : mMaterialBatches) {
-        bool hasTex = false;
-        if (batch.textureIndex >= 0 && batch.textureIndex < (int)mTextures.size() &&
-            mTextures[batch.textureIndex]) {
-            auto* tex = mTextures[batch.textureIndex].get();
-            if (tex->id != mLastBoundTex[0]) {
-                tex->bind(0);
-                mLastBoundTex[0] = tex->id;
-            }
-            hasTex = true;
-        }
-        else {
-            if (mDummyTexture->id != mLastBoundTex[0]) {
-                mDummyTexture->bind(0);
-                mLastBoundTex[0] = mDummyTexture->id;
-            }
-        }
-        const auto& mat = mModel->materials[batch.materialIndex];
-        auto* ov = getMaterialOverride(batch.materialIndex);
-
-        shader.setInt("has_texture", hasTex ? 1 : 0);
-        if (!hasTex) {
-            float dx = mMaterialColor[batch.materialIndex].x;
-            float dy = mMaterialColor[batch.materialIndex].y;
-            float dz = mMaterialColor[batch.materialIndex].z;
-            if (ov) {
-                dx *= ov->diffuse.x;
-                dy *= ov->diffuse.y;
-                dz *= ov->diffuse.z;
-            }
-            shader.setVec3("material_color", dx, dy, dz);
-        }
-        shader.setFloat("alpha", ov ? ov->alpha : mat.alpha);
-
-        const auto& spec = mMaterialSpecular[batch.materialIndex];
-        shader.setVec3("specular_color", spec.color.x, spec.color.y, spec.color.z);
-        shader.setFloat("specular_factor", spec.factor);
-
-        const auto& amb = mMaterialAmbient[batch.materialIndex];
-        shader.setVec3("ambient_color", amb.x, amb.y, amb.z);
-
-        {
-            const auto& sphere = mMaterialSphere[batch.materialIndex];
-            if (sphere.textureIndex >= 0 && sphere.textureIndex < (int)mTextures.size() &&
-                mTextures[sphere.textureIndex]) {
-                auto* sTex = mTextures[sphere.textureIndex].get();
-                if (sTex->id != mLastBoundTex[3]) {
-                    sTex->bind(3);
-                    mLastBoundTex[3] = sTex->id;
-                }
-                shader.setInt("sphere_mode", sphere.mode);
-            }
-            else {
-                shader.setInt("sphere_mode", 0);
-            }
-        }
-
-        {
-            const auto& toon = mMaterialToon[batch.materialIndex];
-            Gpu::Texture* toonTex = nullptr;
-            if (toon.sharingFlag != 0) {
-                toonTex = mmd::RenderContext::instance().sharedToon(toon.textureIndex);
-                if (!toonTex)
-                    toonTex = mmd::RenderContext::instance().sharedToon(0);
-            }
-            else if (toon.textureIndex >= 0 && toon.textureIndex < (int)mTextures.size() &&
-                     mTextures[toon.textureIndex]) {
-                toonTex = mTextures[toon.textureIndex].get();
-            }
-            else {
-                toonTex = mmd::RenderContext::instance().sharedToon(0);
-            }
-            if (toonTex) {
-                if (toonTex->id != mLastBoundTex[4]) {
-                    toonTex->bind(4);
-                    mLastBoundTex[4] = toonTex->id;
-                }
-                shader.setInt("has_toon", 1);
-            }
-            else {
-                shader.setInt("has_toon", 0);
-            }
-        }
-
-        vao.bind();
-        glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
-                       (void*)(intptr_t)(batch.first * sizeof(int32_t)));
-    }
-
-    glDisable(GL_BLEND);
-}
-
-// Outline pass: render back faces with a slight offset along vertex normals.
-// We cull FRONT faces and draw BACK faces — the vertex shader extrudes each
-// vertex along its normal by outline_thickness in clip space, so the back faces
-// extend slightly beyond the front faces, creating a visible outline rim.
-// This is the standard "inverted hull" technique for toon outlines.
-void ModelRenderer::renderOutlinePass(Gpu::ShaderProgram& shader,
-                                      const std::array<float, 16>& projection,
-                                      const std::array<float, 16>& view,
-                                      const float* modelMatParam) {
-    if (!showModel || !showOutline || mMaterialBatches.empty())
-        return;
-
-    const float* modelMatDefault = mModelMat.data();
-    const float* modelMat = modelMatParam ? modelMatParam : modelMatDefault;
-
-    shader.use();
-    shader.setMat4("projection", projection.data());
-    shader.setMat4("view", view.data());
-    shader.setMat4("model", modelMat);
-    shader.setInt("tex", 0);
-
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_FRONT);  // Cull front faces → draw only back faces (the "inverted hull")
-
-    for (const auto& batch : mMaterialBatches) {
-        if (!batch.hasEdge)
-            continue;
-
-        // Bind texture (for alpha discard in outline frag shader)
-        if (batch.textureIndex >= 0 && batch.textureIndex < (int)mTextures.size() &&
-            mTextures[batch.textureIndex]) {
-            mTextures[batch.textureIndex]->bind(0);
-        }
-        else {
-            mDummyTexture->bind(0);
-        }
-
-        const auto& edge = mMaterialEdge[batch.materialIndex];
-        const auto& mat = mModel->materials[batch.materialIndex];
-        auto* ov = getMaterialOverride(batch.materialIndex);
-        if (ov) {
-            shader.setVec4("outline_color", edge.color.x + ov->edgeColor.x,
-                           edge.color.y + ov->edgeColor.y, edge.color.z + ov->edgeColor.z,
-                           edge.color.w + ov->edgeColor.w);
-            shader.setFloat("outline_thickness", (edge.size + ov->edgeSize) * 0.001f);
-            shader.setFloat("alpha", ov->alpha);
-        }
-        else {
-            shader.setVec4("outline_color", edge.color.x, edge.color.y, edge.color.z, edge.color.w);
-            shader.setFloat("outline_thickness", edge.size * 0.001f);
-            shader.setFloat("alpha", mat.alpha);
-        }
-
-        mOutlineVao.bind();
-        glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
-                       (void*)(intptr_t)(batch.first * sizeof(int32_t)));
-    }
-
-    glDisable(GL_CULL_FACE);
-}
-
 // --- Skinning ---
 
 void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::path& vpdPath) {
@@ -468,12 +225,6 @@ void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::
         {4, skinData.boneWeights.data(), skinData.boneWeights.size() * sizeof(float), 4, GL_FLOAT},
         {5, skinData.edgeFactors.data(), skinData.edgeFactors.size() * sizeof(float), 1, GL_FLOAT},
     };
-
-    // Use the same index data as static VAOs
-    mSkinnedVao = Gpu::Vao::create(descs, mIndices.data(), mIndices.size() * sizeof(int32_t));
-    mSkinnedVaoNoToon = Gpu::Vao::create(descs, mIndices.data(), mIndices.size() * sizeof(int32_t));
-    mSkinnedOutlineVao =
-        Gpu::Vao::create(descs, mIndices.data(), mIndices.size() * sizeof(int32_t));
 
     // --- Morph VAOs (skinned + morph_offset + uv_morph_offset + edge_factor VBOs) ---
     std::vector<Gpu::VertexBufferDesc> morphDescs = {
@@ -524,307 +275,19 @@ void ModelRenderer::setupSkinning(const PmxModel& model, const std::filesystem::
     mMorphVboW = std::make_unique<Gpu::VboWrapper>(mMorphVao.vbos[mMorphVao.vbos.size() - 2]);
     mUvMorphVboW = std::make_unique<Gpu::VboWrapper>(mMorphVao.vbos[mMorphVao.vbos.size() - 1]);
 
-    useSkinning = true;
+
 }
 
-void ModelRenderer::applyPhysics(const PmxModel& model,
-                                 const std::vector<std::array<float, 16>>& physicsMats) {
-    if (!mBoneTexture || !useSkinning)
-        return;
-    std::vector<float> skinMatrices = BoneSkinning::computeSkinningMatrices(model);
-    BoneSkinning::applyPhysics(model, skinMatrices, physicsMats);
-    auto data = BoneSkinning::packBoneMatrices(skinMatrices, model.boneCount());
-    mBoneTexture->write(data.pixels.data());
-}
-
-void ModelRenderer::updateBoneTexture(
-    const PmxModel& model, const std::vector<std::array<float, 16>>& poseWorld,
-    const std::unordered_map<int, BoneMorphTransform>* boneMorphs) {
-    if (!mBoneTexture || !useSkinning)
-        return;
-
-    auto skinMatrices = BoneSkinning::computeSkinningMatrices(model, poseWorld);
-
-    // Apply bone morph transforms on top of the skinning matrix.
-    // Bone morph = local rotation + translation per-bone (e.g. from "wink" morph).
-    // The morph transform is a column-major 4x3 matrix (R | t) multiplied on the LEFT:
-    //   M' = morphMat · M
-    // This means the morph rotation/translation is applied in the bone's local space
-    // before the skinning matrix transforms to world space.
-    if (boneMorphs && !boneMorphs->empty()) {
-        for (const auto& [boneIdx, bm] : *boneMorphs) {
-            if (boneIdx < 0 || boneIdx >= model.boneCount())
-                continue;
-            float* M = &skinMatrices[boneIdx * 16];
-            // Quaternion to 3×3 rotation matrix (row-major for multiplication convenience)
-            float qx = bm.rotation[0], qy = bm.rotation[1], qz = bm.rotation[2],
-                  qw = bm.rotation[3];
-            float x2 = qx + qx, y2 = qy + qy, z2 = qz + qz;
-            float xx = qx * x2, xy = qx * y2, xz = qx * z2;
-            float yy = qy * y2, yz = qy * z2, zz = qz * z2;
-            float wx = qw * x2, wy = qw * y2, wz = qw * z2;
-            float R[9] = {1.0f - (yy + zz), xy - wz, xz + wy, xy + wz,         1.0f - (xx + zz),
-                          yz - wx,          xz - wy, yz + wx, 1.0f - (xx + yy)};
-            // Scale morph translation to match display space (PMX-native → display units)
-            float tx = bm.translation[0] * mScale;
-            float ty = bm.translation[1] * mScale;
-            float tz = bm.translation[2] * mScale;
-            // morphMat · M (column-major 4×4), only compute upper 3 rows (row 4 is [0,0,0,1])
-            float tmp[12];
-            for (int col = 0; col < 3; ++col) {
-                for (int row = 0; row < 3; ++row) {
-                    tmp[col * 4 + row] = R[row * 3 + 0] * M[col * 4 + 0] +
-                                         R[row * 3 + 1] * M[col * 4 + 1] +
-                                         R[row * 3 + 2] * M[col * 4 + 2];
-                }
-                tmp[col * 4 + 3] = 0;
-            }
-            // Translation column: R · t_M + t_morph
-            for (int row = 0; row < 3; ++row) {
-                tmp[12 + row] = R[row * 3 + 0] * M[12] + R[row * 3 + 1] * M[13] +
-                                R[row * 3 + 2] * M[14] +
-                                (row == 0   ? tx
-                                 : row == 1 ? ty
-                                            : tz);
-            }
-            for (int j = 0; j < 12; ++j)
-                M[j] = tmp[j];
-        }
-    }
-
-    auto boneData = BoneSkinning::packBoneMatrices(skinMatrices, model.boneCount());
-    mBoneTexture->write(boneData.pixels.data());
-}
-
-void ModelRenderer::updateBoneTexture(
-    const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses,
-    const std::unordered_map<std::string, std::pair<std::array<float, 3>, std::array<float, 4>>>&
-        vmdTransforms,
-    const std::unordered_map<int, BoneMorphTransform>* boneMorphs) {
-    if (!mBoneTexture || !useSkinning)
-        return;
-
-    std::vector<float> skinMatrices;
-    if (!vmdTransforms.empty()) {
-        skinMatrices = BoneSkinning::computeSkinningMatrices(model, vpdPoses, vmdTransforms);
-    }
-    else {
-        skinMatrices = BoneSkinning::computeSkinningMatrices(model, vpdPoses);
-    }
-
-    // Apply bone morph transforms on top
-    if (boneMorphs && !boneMorphs->empty()) {
-        for (const auto& [boneIdx, bm] : *boneMorphs) {
-            if (boneIdx < 0 || boneIdx >= model.boneCount())
-                continue;
-            float* M = &skinMatrices[boneIdx * 16];
-
-            // Quat to matrix
-            float qx = bm.rotation[0], qy = bm.rotation[1], qz = bm.rotation[2],
-                  qw = bm.rotation[3];
-            float x2 = qx + qx, y2 = qy + qy, z2 = qz + qz;
-            float xx = qx * x2, xy = qx * y2, xz = qx * z2;
-            float yy = qy * y2, yz = qy * z2, zz = qz * z2;
-            float wx = qw * x2, wy = qw * y2, wz = qw * z2;
-            float R[9] = {1.0f - (yy + zz), xy - wz, xz + wy, xy + wz,         1.0f - (xx + zz),
-                          yz - wx,          xz - wy, yz + wx, 1.0f - (xx + yy)};
-            float tx = bm.translation[0] * mScale;
-            float ty = bm.translation[1] * mScale;
-            float tz = bm.translation[2] * mScale;
-
-            // morphMat * M (both column-major 4x4)
-            float tmp[12];
-            for (int col = 0; col < 3; ++col) {
-                for (int row = 0; row < 3; ++row) {
-                    tmp[col * 4 + row] = R[row * 3 + 0] * M[col * 4 + 0] +
-                                         R[row * 3 + 1] * M[col * 4 + 1] +
-                                         R[row * 3 + 2] * M[col * 4 + 2];
-                }
-                tmp[col * 4 + 3] = 0;
-            }
-            // Translation: morphMat * t_M + t_morph
-            for (int row = 0; row < 3; ++row) {
-                tmp[12 + row] = R[row * 3 + 0] * M[12] + R[row * 3 + 1] * M[13] +
-                                R[row * 3 + 2] * M[14] +
-                                (row == 0   ? tx
-                                 : row == 1 ? ty
-                                            : tz);
-            }
-            for (int j = 0; j < 12; ++j)
-                M[j] = tmp[j];
-        }
-    }
-
-    auto boneData = BoneSkinning::packBoneMatrices(skinMatrices, model.boneCount());
-    mBoneTexture->write(boneData.pixels.data());
-}
-
-void ModelRenderer::renderSkinnedMainPass(Gpu::ShaderProgram& shader,
-                                          const std::array<float, 16>& projection,
-                                          const std::array<float, 16>& view,
-                                          const float* modelMatParam) {
-    if (!showModel || !useSkinning || mMaterialBatches.empty())
-        return;
-
-    const float* modelMatDefault = mModelMat.data();
-    const float* modelMat = modelMatParam ? modelMatParam : modelMatDefault;
-
-    shader.use();
-    shader.setMat4("projection", projection.data());
-    shader.setMat4("view", view.data());
-    shader.setMat4("model", modelMat);
-    shader.setVec3("light_dir", 0, 0.5f, 1.0f);
-    shader.setInt("tex", 0);
-    shader.setInt("sphere_tex", 3);
-    shader.setInt("toon_tex", 4);
-    shader.setInt("bone_texture", 1);
-    shader.setInt("bone_texture_width", mBoneTextureWidth);
-
-    mBoneTexture->bind(1);
-
-    Gpu::Vao& vao = showToon ? mSkinnedVao : mSkinnedVaoNoToon;
-
-    for (const auto& batch : mMaterialBatches) {
-        bool hasTex = false;
-        if (batch.textureIndex >= 0 && batch.textureIndex < (int)mTextures.size() &&
-            mTextures[batch.textureIndex]) {
-            mTextures[batch.textureIndex]->bind(0);
-            hasTex = true;
-        }
-        else {
-            mDummyTexture->bind(0);
-        }
-        const auto& mat = mModel->materials[batch.materialIndex];
-        auto* ov = getMaterialOverride(batch.materialIndex);
-        shader.setInt("has_texture", hasTex ? 1 : 0);
-        if (!hasTex) {
-            float dx = mMaterialColor[batch.materialIndex].x;
-            float dy = mMaterialColor[batch.materialIndex].y;
-            float dz = mMaterialColor[batch.materialIndex].z;
-            if (ov) {
-                dx *= ov->diffuse.x;
-                dy *= ov->diffuse.y;
-                dz *= ov->diffuse.z;
-            }
-            shader.setVec3("material_color", dx, dy, dz);
-        }
-        shader.setFloat("alpha", ov ? ov->alpha : mat.alpha);
-
-        const auto& spec = mMaterialSpecular[batch.materialIndex];
-        shader.setVec3("specular_color", spec.color.x, spec.color.y, spec.color.z);
-        shader.setFloat("specular_factor", spec.factor);
-
-        const auto& amb = mMaterialAmbient[batch.materialIndex];
-        shader.setVec3("ambient_color", amb.x, amb.y, amb.z);
-
-        const auto& sphere = mMaterialSphere[batch.materialIndex];
-        if (sphere.textureIndex >= 0 && sphere.textureIndex < (int)mTextures.size() &&
-            mTextures[sphere.textureIndex]) {
-            mTextures[sphere.textureIndex]->bind(3);
-            shader.setInt("sphere_mode", sphere.mode);
-        }
-        else {
-            shader.setInt("sphere_mode", 0);
-        }
-
-        const auto& toon = mMaterialToon[batch.materialIndex];
-        if (toon.sharingFlag != 0) {
-            int si = toon.textureIndex;
-            if (auto* t = mmd::RenderContext::instance().sharedToon(si)) {
-                t->bind(4);
-                shader.setInt("has_toon", 1);
-            }
-            else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
-                t->bind(4);
-                shader.setInt("has_toon", 1);
-            }
-            else {
-                shader.setInt("has_toon", 0);
-            }
-        }
-        else if (toon.textureIndex >= 0 && toon.textureIndex < (int)mTextures.size() &&
-                 mTextures[toon.textureIndex]) {
-            mTextures[toon.textureIndex]->bind(4);
-            shader.setInt("has_toon", 1);
-        }
-        else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
-            t->bind(4);
-            shader.setInt("has_toon", 1);
-        }
-        else {
-            shader.setInt("has_toon", 0);
-        }
-
-        vao.bind();
-        glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
-                       (void*)(intptr_t)(batch.first * sizeof(int32_t)));
-    }
-}
-
-void ModelRenderer::renderSkinnedOutlinePass(Gpu::ShaderProgram& shader,
-                                             const std::array<float, 16>& projection,
-                                             const std::array<float, 16>& view,
-                                             const float* modelMatParam) {
-    if (!showModel || !showOutline || !useSkinning || mMaterialBatches.empty())
-        return;
-
-    const float* modelMatDefault = mModelMat.data();
-    const float* modelMat = modelMatParam ? modelMatParam : modelMatDefault;
-
-    shader.use();
-    shader.setMat4("projection", projection.data());
-    shader.setMat4("view", view.data());
-    shader.setMat4("model", modelMat);
-    shader.setInt("tex", 0);
-    shader.setInt("bone_texture", 1);
-    shader.setInt("bone_texture_width", mBoneTextureWidth);
-
-    mBoneTexture->bind(1);
-
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_FRONT);
-
-    for (const auto& batch : mMaterialBatches) {
-        if (!batch.hasEdge)
-            continue;
-
-        if (batch.textureIndex >= 0 && batch.textureIndex < (int)mTextures.size() &&
-            mTextures[batch.textureIndex]) {
-            mTextures[batch.textureIndex]->bind(0);
-        }
-        else {
-            mDummyTexture->bind(0);
-        }
-
-        const auto& edge = mMaterialEdge[batch.materialIndex];
-        const auto& mat = mModel->materials[batch.materialIndex];
-        auto* ov = getMaterialOverride(batch.materialIndex);
-        if (ov) {
-            shader.setVec4("outline_color", edge.color.x + ov->edgeColor.x,
-                           edge.color.y + ov->edgeColor.y, edge.color.z + ov->edgeColor.z,
-                           edge.color.w + ov->edgeColor.w);
-            shader.setFloat("outline_thickness", (edge.size + ov->edgeSize) * 0.001f);
-            shader.setFloat("alpha", ov->alpha);
-        }
-        else {
-            shader.setVec4("outline_color", edge.color.x, edge.color.y, edge.color.z, edge.color.w);
-            shader.setFloat("outline_thickness", edge.size * 0.001f);
-            shader.setFloat("alpha", mat.alpha);
-        }
-
-        mSkinnedOutlineVao.bind();
-        glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
-                       (void*)(intptr_t)(batch.first * sizeof(int32_t)));
-    }
-
-    glDisable(GL_CULL_FACE);
+void ModelRenderer::uploadBoneData(const void* data, size_t bytes) {
+    if (mBoneTexture)
+        mBoneTexture->write(data);
 }
 
 void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
                                         const std::array<float, 16>& projection,
                                         const std::array<float, 16>& view,
                                         const float* modelMatParam) {
-    if (!showModel || !useSkinning || mMaterialBatches.empty())
+    if (!showModel || mMaterialBatches.empty())
         return;
 
     const float* modelMatDefault = mModelMat.data();
@@ -920,7 +383,7 @@ void ModelRenderer::renderMorphOutlinePass(Gpu::ShaderProgram& shader,
                                            const std::array<float, 16>& projection,
                                            const std::array<float, 16>& view,
                                            const float* modelMatParam) {
-    if (!showModel || !showOutline || !useSkinning || mMaterialBatches.empty())
+    if (!showModel || !showOutline || mMaterialBatches.empty())
         return;
     const float* modelMatDefault = mModelMat.data();
     const float* mm = modelMatParam ? modelMatParam : modelMatDefault;

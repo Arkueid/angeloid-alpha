@@ -19,7 +19,7 @@ set(MMD_SOURCES
     render/opengl/ModelRenderer.cpp
     render/opengl/RenderContext.cpp
     render/opengl/debug/RigidBodyRenderer.cpp
-    render/opengl/ShaderManager.cpp
+    render/opengl/Pipeline.cpp
     render/opengl/StbImage.cpp
     Camera.cpp
     MMD.cpp

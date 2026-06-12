@@ -87,13 +87,6 @@ public:
     bool showToon() const {
         return mRenderer.showToon;
     }
-    bool isSkinned() const {
-        return mRenderer.useSkinning;
-    }
-    void setSkinning(bool on) {
-        mRenderer.useSkinning = on;
-    }
-
     // --- LookAt ---
     void lookAt(int screenX, int screenY, int screenW, int screenH);
     void resetLookAt();

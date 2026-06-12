@@ -2,6 +2,7 @@
 
 #include "util/Log.h"
 
+#include <GL/glew.h>
 #include <stb_image.h>
 
 #include <cstdio>
@@ -15,9 +16,8 @@ RenderContext& RenderContext::instance() {
     return ctx;
 }
 
-void RenderContext::init(const fs::path& shaderDir, const fs::path& toonDir) {
-    mShaderManager = std::make_unique<ShaderManager>(shaderDir);
-    MMD_INFO("RENDER", "Shaders initialized");
+void RenderContext::init(const fs::path& toonDir) {
+    createGradientTexture();
 
     // Load shared toon textures (toon01.bmp ~ toon10.bmp)
     if (!toonDir.empty()) {
@@ -42,16 +42,22 @@ void RenderContext::init(const fs::path& shaderDir, const fs::path& toonDir) {
 void RenderContext::release() {
     for (auto& t : mSharedToons)
         t.reset();
-    mShaderManager.reset();
+    mGradient.reset();
     MMD_INFO("RENDER", "GPU resources released");
 }
 
-Gpu::ShaderProgram* RenderContext::shader(const std::string& name) {
-    return mShaderManager ? mShaderManager->get(name) : nullptr;
+void RenderContext::createGradientTexture() {
+    // 4-level gray gradient for cel-shading ramp in toon fragment shader.
+    uint8_t gradient[] = {
+        60, 60, 60, 120, 120, 120, 180, 180, 180, 220, 220, 220,
+    };
+    mGradient = std::make_unique<Gpu::Texture>(4, 1, 3, gradient);
+    mGradient->setFilter(GL_LINEAR, GL_LINEAR);
+    mGradient->setWrap(false, false);
 }
 
 Gpu::Texture* RenderContext::gradientTexture() {
-    return mShaderManager ? mShaderManager->gradientTexture() : nullptr;
+    return mGradient.get();
 }
 
 Gpu::Texture* RenderContext::sharedToon(int index) {

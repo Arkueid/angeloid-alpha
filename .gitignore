@@ -1,51 +1,33 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.Python
-*.so
-*.egg
-*.egg-info/
-dist/
-build/
-.venv/
-venv/
-ENV/
-
-# UV
-uv.lock
-
 # IDE
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 *~
+
+# Build output
+build/
+dist/
 
 # Render output
 render_output.png
 view_history.json
 debug.log
+*.log
 
-# Model files
-# Only ignore ikaros models, keep shaders and other models
-resources/models/*
-!resources/models/姵儿
-!resources/models/艾尔莎
-
-!resources/models/.gitkeep
-resources/vpd/*
-!resources/vpd/.gitkeep
-resources/vmd/*
-!resources/vmd/.gitkeep
-!resources/shaders/
+# Model files (third-party, tracked selectively)
+resources/app/models/*
+!resources/app/models/姵儿
+!resources/app/models/艾尔莎
+resources/app/vpd/*
+!resources/app/vpd/.gitkeep
+resources/app/vmd/*
+!resources/app/vmd/.gitkeep
 
 # OS
 .DS_Store
 Thumbs.db
-
-*.json
 
 # Local scripts (env-specific paths)
 build.bat
@@ -53,8 +35,5 @@ build.bat
 # Private docs
 docs/angeloid-alpha-plan.md
 
-*.log
-
-saba-master
-
+# Misc
 imgui.ini

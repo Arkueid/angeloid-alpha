@@ -1,5 +1,6 @@
 #include "MMD.h"
 #include "util/Log.h"
+#include "render/opengl/Pipeline.h"
 #include "render/opengl/RenderContext.h"
 
 #ifdef MMD_ENABLE_STACKTRACE
@@ -17,7 +18,8 @@ void init(const InitArgs& args) {
 #ifdef MMD_ENABLE_STACKTRACE
     static backward::SignalHandling sh;
 #endif
-    RenderContext::instance().init(args.shaderDir, args.toonDir);
+    RenderContext::instance().init(args.toonDir);
+    Pipeline::instance().init(args.effectsCfg, args.shaderDir);
 }
 
 void glInit() {
@@ -27,6 +29,7 @@ void glInit() {
 }
 
 void dispose() {
+    Pipeline::instance().clear();
     RenderContext::instance().release();
 }
 

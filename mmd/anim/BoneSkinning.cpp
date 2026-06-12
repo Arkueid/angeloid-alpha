@@ -501,6 +501,44 @@ static int nextPow2(int x) {
     return p;
 }
 
+void BoneSkinning::applyBoneMorphs(std::vector<float>& skinMatrices, int boneCount,
+                                    const std::unordered_map<int, BoneMorphTransform>& boneMorphs,
+                                    float modelScale) {
+    for (const auto& [boneIdx, bm] : boneMorphs) {
+        if (boneIdx < 0 || boneIdx >= boneCount)
+            continue;
+        float* M = &skinMatrices[boneIdx * 16];
+
+        float qx = bm.rotation[0], qy = bm.rotation[1], qz = bm.rotation[2], qw = bm.rotation[3];
+        float x2 = qx + qx, y2 = qy + qy, z2 = qz + qz;
+        float xx = qx * x2, xy = qx * y2, xz = qx * z2;
+        float yy = qy * y2, yz = qy * z2, zz = qz * z2;
+        float wx = qw * x2, wy = qw * y2, wz = qw * z2;
+        float R[9] = {1.0f - (yy + zz), xy - wz, xz + wy, xy + wz,         1.0f - (xx + zz),
+                      yz - wx,          xz - wy, yz + wx, 1.0f - (xx + yy)};
+        float tx = bm.translation[0] * modelScale;
+        float ty = bm.translation[1] * modelScale;
+        float tz = bm.translation[2] * modelScale;
+
+        float tmp[12];
+        for (int col = 0; col < 3; ++col) {
+            for (int row = 0; row < 3; ++row) {
+                tmp[col * 4 + row] = R[row * 3 + 0] * M[col * 4 + 0] +
+                                     R[row * 3 + 1] * M[col * 4 + 1] +
+                                     R[row * 3 + 2] * M[col * 4 + 2];
+            }
+            tmp[col * 4 + 3] = 0;
+        }
+        for (int row = 0; row < 3; ++row) {
+            tmp[12 + row] = R[row * 3 + 0] * M[12] + R[row * 3 + 1] * M[13] +
+                            R[row * 3 + 2] * M[14] +
+                            (row == 0 ? tx : row == 1 ? ty : tz);
+        }
+        for (int j = 0; j < 12; ++j)
+            M[j] = tmp[j];
+    }
+}
+
 void BoneSkinning::applyPhysics(const PmxModel& model, std::vector<float>& skinMatrices,
                                 const std::vector<std::array<float, 16>>& physicsMats) {
     auto bindWorld = BoneSkinning::computeBindWorldMatrices(model);

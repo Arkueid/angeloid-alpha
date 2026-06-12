@@ -10,6 +10,7 @@ namespace mmd {
 struct InitArgs {
     std::filesystem::path shaderDir;
     std::filesystem::path toonDir;
+    std::filesystem::path effectsCfg;
     std::vector<std::string> blinkMorphs;  // morph names for auto-blink, set by caller
 };
 

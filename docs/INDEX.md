@@ -1,12 +1,12 @@
 # Angeloid Alpha — Docs Index
 
 ## User-Facing
-- [Python API Reference](PYTHON_API.md) — Model, Camera, module functions (full API)
-- [Build Guide](BUILD.md) — pip / CMake build, C++ viewer CLI, keyboard shortcuts, tech details
+- [Build Guide](BUILD.md) — CMake build, viewer CLI, keyboard shortcuts
 
 ## Design & Architecture
 - [Architecture Overview](architecture.md) — project structure, CMake, layers, key files, model registry
 - [Refactoring Plan](ARCHITECTURE.md) — AssetStore, RenderContext design, migration steps
+- [Pluggable Render Pipeline](pluggable-render-pipeline.md) — MME-style effect system: Pipeline/Slot/Effect/Pass design
 
 ## Subsystems
 - [Physics Engine](physics.md) — Bullet world, shapes, joints, collision, body modes

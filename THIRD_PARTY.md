@@ -7,7 +7,7 @@
 - **PMX规格.txt**: MMD 内置的 PMX 格式规格说明文档
 - **Joint限制.txt**: MMD 关节限制参数说明文档
 
-## resources/toon/
+## resources/core/toon/
 
 MMD 默认 toon 纹理（MMD 程序内置资源）：
 
