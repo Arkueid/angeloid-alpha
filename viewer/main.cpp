@@ -2,7 +2,6 @@
 #include "Model.h"
 #include "framework/opengl/Pipeline.h"
 #include "framework/opengl/debug/WorldAxis.h"
-#include "framework/opengl/gpu/Shader.h"
 #include "framework/util/CfgParser.h"
 #include "window/GlfwWindow.h"
 #include "imgui/ImGuiManager.h"
@@ -148,9 +147,7 @@ int main(int argc, char* argv[]) {
     }
 
     WorldAxis worldAxis;
-    auto axisVert = Gpu::ShaderProgram::readFile(projRoot / "viewer/solid.vert");
-    auto axisFrag = Gpu::ShaderProgram::readFile(projRoot / "viewer/solid.frag");
-    Gpu::ShaderProgram solidShader(axisVert, axisFrag);
+    Pipeline::instance().setWorldAxis(&worldAxis);
 
     printHelp();
 
@@ -327,26 +324,7 @@ int main(int argc, char* argv[]) {
 
     // Render
     app.onRender = [&]() {
-        glFrontFace(GL_CW);
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LEQUAL);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        auto proj = Camera::projectionMatrix(app.width(), app.height());
-        auto view = Camera::instance().viewMatrix();
-
-        if (model.showGround())
-            Pipeline::instance().renderGround(&proj, &view, true);
-
-        solidShader.use();
-        glLineWidth(2.0f);
-        worldAxis.render(solidShader, proj, view);
-
         model.draw(app.width(), app.height());
-
         imgui.endFrame();
     };
 

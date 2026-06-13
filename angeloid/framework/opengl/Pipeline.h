@@ -10,11 +10,13 @@
 #include <string>
 #include <vector>
 
+class WorldAxis;
+
 // ──── Pipeline — singleton, owns all GPU shader programs ────
 //
 //   All shader programs are defined in effects.cfg.
 //     [base] / [toon] — swappable rendering styles (T key)
-//     [shadow] / [outline] / [rigidbody] — built-in infrastructure
+//     [shadow] / [outline] / [rigidbody] / [ground] / [axis] — built-in infrastructure
 
 class Pipeline {
 public:
@@ -31,7 +33,6 @@ public:
         float camPosX = 0, camPosY = 0, camPosZ = 10;
         float lightDirX = 0, lightDirY = 0.5f, lightDirZ = 1.0f;
 
-        // Shadow map: light-space view-projection matrix
         const std::array<float, 16>* lightViewProj = nullptr;
 
         bool showToon = true;
@@ -43,14 +44,8 @@ public:
 
     void execute(ModelRenderer& renderer, const FrameParams& p);
 
-    // Render ground plane (call after shadow pass, between axis and model)
-    void renderGround(const std::array<float, 16>* proj,
-                      const std::array<float, 16>* view,
-                      bool hasShadow);
+    void setWorldAxis(WorldAxis* wa) { mWorldAxis = wa; }
 
-    const std::array<float, 16>* lightViewProj() const { return &mLightViewProj; }
-
-    // Call when window resizes
     void resizeViewport(int w, int h);
 
 private:
@@ -60,17 +55,37 @@ private:
                                 const std::string& vert, const std::string& frag);
 
     void renderShadowPass(ModelRenderer& renderer, const FrameParams& p);
+    void renderGroundPass(const std::array<float, 16>& proj,
+                          const std::array<float, 16>& view,
+                          bool hasShadow);
+    void renderAxisPass(const std::array<float, 16>& proj,
+                        const std::array<float, 16>& view);
+    void renderOutlinePass(ModelRenderer& renderer,
+                           const std::array<float, 16>& proj,
+                           const std::array<float, 16>& view,
+                           const float* modelMat);
+    void renderMainPass(ModelRenderer& renderer, const FrameParams& p,
+                        const std::array<float, 16>& proj,
+                        const std::array<float, 16>& view,
+                        const float* modelMat);
+    void renderPhysicsPass(const FrameParams& p,
+                           const std::array<float, 16>& proj,
+                           const std::array<float, 16>& view,
+                           const float* modelMat);
 
     Gpu::ShaderProgram* mShadowProg = nullptr;
     Gpu::ShaderProgram* mOutlineProg = nullptr;
-    Gpu::ShaderProgram* mMainProg = nullptr;      // [base]
-    Gpu::ShaderProgram* mMainToonProg = nullptr;  // [toon]
-    Gpu::ShaderProgram* mRigidbodyProg = nullptr;  // [rigidbody]
-    Gpu::ShaderProgram* mGroundProg = nullptr;      // [ground]
+    Gpu::ShaderProgram* mMainProg = nullptr;
+    Gpu::ShaderProgram* mMainToonProg = nullptr;
+    Gpu::ShaderProgram* mRigidbodyProg = nullptr;
+    Gpu::ShaderProgram* mGroundProg = nullptr;
+    Gpu::ShaderProgram* mAxisProg = nullptr;
 
     GLuint mGroundVao = 0;
     GLuint mGroundVbo = 0;
     int mGroundVertCount = 0;
+
+    WorldAxis* mWorldAxis = nullptr;
 
     RenderTarget mShadowMap;
     std::array<float, 16> mLightViewProj{};

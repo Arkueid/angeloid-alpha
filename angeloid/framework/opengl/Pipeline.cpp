@@ -6,6 +6,7 @@
 #include "framework/opengl/RenderContext.h"
 #include "framework/opengl/ShaderStandard.h"
 #include "framework/opengl/debug/RigidBodyRenderer.h"
+#include "framework/opengl/debug/WorldAxis.h"
 #include "framework/util/CfgParser.h"
 #include "core/util/Log.h"
 
@@ -59,6 +60,9 @@ void Pipeline::init(const fs::path& effectsCfg, const fs::path& shaderDir) {
     if (auto* c = get("ground"))
         mGroundProg = compile(shaderDir, (*c)["vert"], (*c)["frag"]);
 
+    if (auto* c = get("axis"))
+        mAxisProg = compile(shaderDir, (*c)["vert"], (*c)["frag"]);
+
     // Create ground plane VAO (large quad on XZ plane)
     if (mGroundProg) {
         float groundSize = 100.0f;
@@ -100,6 +104,7 @@ void Pipeline::clear() {
     mMainToonProg = nullptr;
     mRigidbodyProg = nullptr;
     mGroundProg = nullptr;
+    mAxisProg = nullptr;
 }
 
 void Pipeline::resizeViewport(int w, int h) {
@@ -114,87 +119,50 @@ void Pipeline::renderShadowPass(ModelRenderer& renderer, const FrameParams& p) {
 
     mLightViewProj = *p.lightViewProj;
 
+    GLint prevDepthFunc;
+    glGetIntegerv(GL_DEPTH_FUNC, &prevDepthFunc);
+
     mShadowMap.bind();
     glClear(GL_DEPTH_BUFFER_BIT);
-    glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
     renderer.renderDepthPass(*mShadowProg, *p.lightViewProj, p.modelMat);
+
+    glDepthFunc(prevDepthFunc);
 }
 
 void Pipeline::execute(ModelRenderer& renderer, const FrameParams& p) {
     if (!p.proj || !p.view) return;
 
-    // ── Shadow pass ──
-    renderShadowPass(renderer, p);
-    RenderTarget::bindScreen(mViewportW, mViewportH);
-
-    // ── Baseline GL state ──
     glFrontFace(GL_CW);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    const auto& proj     = *p.proj;
-    const auto& view     = *p.view;
-    const auto* modelMat = p.modelMat;
+    renderShadowPass(renderer, p);
+    RenderTarget::bindScreen(mViewportW, mViewportH);
 
-    // ── Outline ──
-    if (renderer.showOutline && mOutlineProg)
-        renderer.renderMorphOutlinePass(*mOutlineProg, proj, view, modelMat);
+    const auto& proj = *p.proj;
+    const auto& view = *p.view;
 
-    // ── Main ──
-    if (renderer.showModel) {
-        auto* s = p.showToon ? mMainToonProg : mMainProg;
-        if (s) {
-            s->use();
-
-            // Bind shadow map to texture unit 5
-            if (mShadowProg && p.lightViewProj) {
-                s->setInt("u_shadowMap", 5);
-                s->setMat4("u_lightViewProj", p.lightViewProj->data());
-                s->setInt("u_hasShadow", 1);
-                glActiveTexture(GL_TEXTURE5);
-                glBindTexture(GL_TEXTURE_2D, mShadowMap.depthTex());
-            } else {
-                s->setInt("u_hasShadow", 0);
-            }
-
-            s->setVec3(U_LIGHT_DIR, p.lightDirX, p.lightDirY, p.lightDirZ);
-
-            if (p.showToon) {
-                s->setVec3(U_CAMERA_POS, p.camPosX, p.camPosY, p.camPosZ);
-                s->setFloat(U_SHADOW_THRESH, 0.0f);
-                s->setFloat(U_RIM_POWER, 4.0f);
-                s->setVec3(U_RIM_COLOR, 1.0f, 1.0f, 1.0f);
-                s->setInt("u_gradientMap", TEX_UNIT_GRADIENT);
-                auto& ctx = mmd::RenderContext::instance();
-                glActiveTexture(GL_TEXTURE0 + TEX_UNIT_GRADIENT);
-                glBindTexture(GL_TEXTURE_2D, ctx.gradientTexture()->id);
-            }
-
-            renderer.renderMorphMainPass(*s, proj, view, modelMat);
-        }
-    }
-
-    // ── Physics debug ──
-    if (p.showRigidBodies && p.physicsDebug && p.physics && mRigidbodyProg) {
-        if (p.physicsDebug->showRigidBody) {
-            p.physicsDebug->updateFromPhysics(*p.physics);
-            p.physicsDebug->render(*mRigidbodyProg, proj, view, modelMat);
-        }
-    }
+    renderGroundPass(proj, view, /*hasShadow=*/p.lightViewProj != nullptr);
+    renderAxisPass(proj, view);
+    renderOutlinePass(renderer, proj, view, p.modelMat);
+    renderMainPass(renderer, p, proj, view, p.modelMat);
+    renderPhysicsPass(p, proj, view, p.modelMat);
 }
 
-void Pipeline::renderGround(const std::array<float, 16>* proj,
-                            const std::array<float, 16>* view,
-                            bool hasShadow) {
-    if (!mGroundProg || !proj || !view) return;
+void Pipeline::renderGroundPass(const std::array<float, 16>& proj,
+                                const std::array<float, 16>& view,
+                                bool hasShadow) {
+    if (!mGroundProg) return;
 
     mGroundProg->use();
-    mGroundProg->setMat4(U_PROJ_MAT, proj->data());
-    mGroundProg->setMat4(U_VIEW_MAT, view->data());
+    mGroundProg->setMat4(U_PROJ_MAT, proj.data());
+    mGroundProg->setMat4(U_VIEW_MAT, view.data());
     if (mShadowProg && hasShadow) {
         mGroundProg->setInt("u_shadowMap", 5);
         mGroundProg->setMat4("u_lightViewProj", mLightViewProj.data());
@@ -207,4 +175,68 @@ void Pipeline::renderGround(const std::array<float, 16>* proj,
     glBindVertexArray(mGroundVao);
     glDrawArrays(GL_TRIANGLES, 0, mGroundVertCount);
     glBindVertexArray(0);
+}
+
+void Pipeline::renderAxisPass(const std::array<float, 16>& proj,
+                              const std::array<float, 16>& view) {
+    if (mWorldAxis && mAxisProg)
+        mWorldAxis->render(*mAxisProg, proj, view);
+}
+
+void Pipeline::renderOutlinePass(ModelRenderer& renderer,
+                                  const std::array<float, 16>& proj,
+                                  const std::array<float, 16>& view,
+                                  const float* modelMat) {
+    if (renderer.showOutline && mOutlineProg)
+        renderer.renderMorphOutlinePass(*mOutlineProg, proj, view, modelMat);
+}
+
+void Pipeline::renderMainPass(ModelRenderer& renderer, const FrameParams& p,
+                               const std::array<float, 16>& proj,
+                               const std::array<float, 16>& view,
+                               const float* modelMat) {
+    if (!renderer.showModel) return;
+
+    auto* s = p.showToon ? mMainToonProg : mMainProg;
+    if (!s) return;
+
+    s->use();
+
+    if (mShadowProg && p.lightViewProj) {
+        s->setInt("u_shadowMap", 5);
+        s->setMat4("u_lightViewProj", p.lightViewProj->data());
+        s->setInt("u_hasShadow", 1);
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, mShadowMap.depthTex());
+    } else {
+        s->setInt("u_hasShadow", 0);
+    }
+
+    s->setVec3(U_LIGHT_DIR, p.lightDirX, p.lightDirY, p.lightDirZ);
+
+    if (p.showToon) {
+        s->setVec3(U_CAMERA_POS, p.camPosX, p.camPosY, p.camPosZ);
+        s->setFloat(U_SHADOW_THRESH, 0.0f);
+        s->setFloat(U_RIM_POWER, 4.0f);
+        s->setVec3(U_RIM_COLOR, 1.0f, 1.0f, 1.0f);
+        s->setInt("u_gradientMap", TEX_UNIT_GRADIENT);
+        auto& ctx = mmd::RenderContext::instance();
+        glActiveTexture(GL_TEXTURE0 + TEX_UNIT_GRADIENT);
+        glBindTexture(GL_TEXTURE_2D, ctx.gradientTexture()->id);
+    }
+
+    renderer.renderMorphMainPass(*s, proj, view, modelMat);
+}
+
+void Pipeline::renderPhysicsPass(const FrameParams& p,
+                                  const std::array<float, 16>& proj,
+                                  const std::array<float, 16>& view,
+                                  const float* modelMat) {
+    if (!p.showRigidBodies || !p.physicsDebug || !p.physics || !mRigidbodyProg)
+        return;
+    if (!p.physicsDebug->showRigidBody)
+        return;
+
+    p.physicsDebug->updateFromPhysics(*p.physics);
+    p.physicsDebug->render(*mRigidbodyProg, proj, view, modelMat);
 }
