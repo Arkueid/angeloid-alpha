@@ -1,8 +1,8 @@
-#include "MMD.h"
+#include "framework/MMD.h"
 #include "Model.h"
 #include "debug/WorldAxis.h"
-#include "render/opengl/gpu/Shader.h"
-#include "util/CfgParser.h"
+#include "framework/opengl/gpu/Shader.h"
+#include "framework/util/CfgParser.h"
 #include "window/GlfwWindow.h"
 #include <vector>
 
@@ -94,7 +94,7 @@ int main(int argc, char* argv[]) {
     }
 
     fs::path projRoot = fs::weakly_canonical(fs::path(MMD_PROJECT_ROOT));
-    auto modelRegistry = loadModelRegistry(projRoot / "resources/app/models.cfg");
+    auto modelRegistry = loadModelRegistry(projRoot / "resources/models.cfg");
 
     fs::path pmxPath;
     auto it = modelRegistry.find(modelName);
@@ -102,15 +102,15 @@ int main(int argc, char* argv[]) {
         pmxPath = projRoot / fs::u8path(it->second);
     else
         pmxPath = fs::u8path(modelName);
-    fs::path vpdPath = projRoot / fs::u8path("resources/app/vpd/自然站姿.vpd");
+    fs::path vpdPath = projRoot / fs::u8path("resources/vpd/自然站姿.vpd");
     // --- Window ---
     GlfwWindow app(1280, 720, "MMD PMX Viewer");
 
     // --- Init mmd module ---
     mmd::InitArgs args;
-    args.shaderDir = projRoot / "resources/core/shaders";
-    args.toonDir = projRoot / "resources/core/toon";
-    args.effectsCfg = projRoot / "resources/core/effects/effects.cfg";
+    args.shaderDir = projRoot / "resources/shaders";
+    args.toonDir = projRoot / "resources/toon";
+    args.effectsCfg = projRoot / "resources/effects.cfg";
     args.blinkMorphs = {"blink", "blink_l", "blink_r",
                         "まばたき", "まぶたき", "ウィンク", "ｳｨﾝｸ"};
     mmd::init(std::move(args));

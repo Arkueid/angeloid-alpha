@@ -26,7 +26,7 @@ Dependencies (git submodules):
 
 | Flag | Description |
 |------|-------------|
-| `-m, --model` | Model name (matches entries in `resources/app/models.cfg`) |
+| `-m, --model` | Model name (matches entries in `resources/models.cfg`) |
 | `-v, --vmd` | VMD file(s), accepts multiple |
 
 ### Keyboard

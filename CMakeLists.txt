@@ -19,7 +19,7 @@ if(ENABLE_STACKTRACE)
     add_subdirectory(thirdparty/backward-cpp)
 endif()
 
-add_subdirectory(mmd)
+add_subdirectory(angeloid)
 
 if(BUILD_VIEWER)
     add_subdirectory(viewer)

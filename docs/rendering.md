@@ -23,7 +23,7 @@ Pipeline::execute()
 ```
 
 ## Shader Programs
-All defined in `resources/core/effects/effects.cfg`. Pipeline reads the config and compiles programs once at init.
+All defined in `resources/effects.cfg`. Pipeline reads the config and compiles programs once at init.
 
 ```
 effects.cfg:

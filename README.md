@@ -61,7 +61,7 @@ angeloid/
 
 ## 模型版权
 
-`resources/app/models/` 下模型为第三方资产，各有独立许可。详见各模型目录下 `readme.txt`。
+`resources/models/` 下模型为第三方资产，各有独立许可。详见各模型目录下 `readme.txt`。
 
 - **姵儿** © 上海鹏拜信息技术有限公司（Playbox） — 模型：椛暗 / 设定：Pre / 原案：王乾龙Ashsteins
 - **艾尔莎** © 虚研社 — 建模：悠米露 / 绑定：补骨脂

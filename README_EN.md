@@ -60,7 +60,7 @@ angeloid/
 
 ## Model Credits
 
-Models under `resources/app/models/` are third-party assets with independent licenses. See each model's `readme.txt` for details.
+Models under `resources/models/` are third-party assets with independent licenses. See each model's `readme.txt` for details.
 
 - **姵儿** © Shanghai Playbox Information Technology Co., Ltd. — Model: 椛暗 / Design: Pre / Planning: 王乾龙Ashsteins
 - **艾尔莎** © Xuyan Studio (虚研社) — Modeling: 悠米露 / Rigging: 补骨脂

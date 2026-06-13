@@ -31,7 +31,7 @@ cmake --build build --config RelWithDebInfo
 - `thirdparty/` — GLFW, glad, Bullet, stb, backward-cpp
 
 ## Rendering Pipeline
-- Effects defined in `resources/core/effects/effects.cfg` (INI-style sections)
+- Effects defined in `resources/effects.cfg` (INI-style sections)
 - `Pipeline` class maps model state ("static"|"skinned"|"morph") → Effect → shader programs
 - `Effect::loadAll()` compiles shaders via `Gpu::ShaderProgram`; `Pipeline::execute()` drives per-frame draw order: Outline → Opaque → Debug
 - `ShaderManager` still owns gradient + shared toon textures (used by Pipeline)
@@ -72,7 +72,7 @@ cmake --build build --config RelWithDebInfo
 - Before any non-trivial change, check relevant docs for context
 
 ## Model Credits
-Models in `resources/app/models/` are third-party assets with their own licenses. See each model's `readme.txt` for details.
+Models in `resources/models/` are third-party assets with their own licenses. See each model's `readme.txt` for details.
 
 - **姵儿** (椛暗式-姵儿ver1.2): 模型作者 椛暗 | 人物设定 Pre | 企划原案 王乾龙Ashsteins | © 上海鹏拜信息技术有限公司 (Playbox) — 改造・二次配布可（需注明出处）
 - **艾尔莎** (居家服): 建模 悠米露 | 绑定 补骨脂（卟咕子） | © 虚研社 — 非商业使用可・改造可（需注明出处）

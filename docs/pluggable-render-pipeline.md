@@ -1,6 +1,6 @@
 # Pluggable Render Pipeline
 
-All shader programs are defined in `resources/core/effects/effects.cfg`. Pipeline reads this config at init, compiles everything once, and dispatches per frame.
+All shader programs are defined in `resources/effects.cfg`. Pipeline reads this config at init, compiles everything once, and dispatches per frame.
 
 ## effects.cfg
 
@@ -64,7 +64,7 @@ Pipeline::instance().execute(mRenderer, fp);
 ## Adding a new rendering style
 
 1. Write a GLSL fragment shader (e.g. `pbr.frag`)
-2. Add a section to `resources/core/effects/effects.cfg`:
+2. Add a section to `resources/effects.cfg`:
    ```ini
    [pbr]
    vert = main.vert

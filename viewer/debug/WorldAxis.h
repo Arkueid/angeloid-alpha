@@ -1,7 +1,7 @@
 #pragma once
 
-#include "render/opengl/gpu/Mesh.h"
-#include "render/opengl/gpu/Shader.h"
+#include "framework/opengl/gpu/Mesh.h"
+#include "framework/opengl/gpu/Shader.h"
 
 #include <array>
 

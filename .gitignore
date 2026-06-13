@@ -17,13 +17,13 @@ debug.log
 *.log
 
 # Model files (third-party, tracked selectively)
-resources/app/models/*
-!resources/app/models/姵儿
-!resources/app/models/艾尔莎
-resources/app/vpd/*
-!resources/app/vpd/.gitkeep
-resources/app/vmd/*
-!resources/app/vmd/.gitkeep
+resources/models/*
+!resources/models/姵儿
+!resources/models/艾尔莎
+resources/vpd/*
+!resources/vpd/.gitkeep
+resources/vmd/*
+!resources/vmd/.gitkeep
 
 # OS
 .DS_Store
