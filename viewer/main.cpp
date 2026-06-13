@@ -1,5 +1,6 @@
 #include "framework/MMD.h"
 #include "Model.h"
+#include "framework/opengl/Pipeline.h"
 #include "framework/opengl/debug/WorldAxis.h"
 #include "framework/opengl/gpu/Shader.h"
 #include "framework/util/CfgParser.h"
@@ -308,6 +309,8 @@ int main(int argc, char* argv[]) {
             if (ImGui::Checkbox("Toon", &v)) model.showToon(v);
             v = model.physicsEnabled();
             if (ImGui::Checkbox("Physics", &v)) model.enablePhysics(v);
+            v = model.showGround();
+            if (ImGui::Checkbox("Ground", &v)) model.showGround(v);
         }
         ImGui::End();
 
@@ -334,6 +337,10 @@ int main(int argc, char* argv[]) {
 
         auto proj = Camera::projectionMatrix(app.width(), app.height());
         auto view = Camera::instance().viewMatrix();
+
+        if (model.showGround())
+            Pipeline::instance().renderGround(&proj, &view, true);
+
         solidShader.use();
         glLineWidth(2.0f);
         worldAxis.render(solidShader, proj, view);

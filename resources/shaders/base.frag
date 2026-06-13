@@ -31,6 +31,7 @@ float shadowFactor() {
 
     vec2 uv = lightNdc.xy * 0.5 + 0.5;
     float fragDepth = lightNdc.z * 0.5 + 0.5;
+    fragDepth = clamp(fragDepth, 0.0, 1.0);
 
     float bias = 0.002;
     // Hardware 4-tap PCF via sampler2DShadow + GL_LINEAR

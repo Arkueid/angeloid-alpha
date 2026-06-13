@@ -36,11 +36,19 @@ public:
 
         bool showToon = true;
         bool showRigidBodies = false;
+        bool showGround = true;
         class RigidBodyRenderer* physicsDebug = nullptr;
         const class PhysicsWorld* physics = nullptr;
     };
 
     void execute(ModelRenderer& renderer, const FrameParams& p);
+
+    // Render ground plane (call after shadow pass, between axis and model)
+    void renderGround(const std::array<float, 16>* proj,
+                      const std::array<float, 16>* view,
+                      bool hasShadow);
+
+    const std::array<float, 16>* lightViewProj() const { return &mLightViewProj; }
 
     // Call when window resizes
     void resizeViewport(int w, int h);
@@ -61,9 +69,11 @@ private:
     Gpu::ShaderProgram* mGroundProg = nullptr;      // [ground]
 
     GLuint mGroundVao = 0;
+    GLuint mGroundVbo = 0;
     int mGroundVertCount = 0;
 
     RenderTarget mShadowMap;
+    std::array<float, 16> mLightViewProj{};
     int mViewportW = 0, mViewportH = 0;
 
     std::vector<std::unique_ptr<Gpu::ShaderProgram>> mPrograms;

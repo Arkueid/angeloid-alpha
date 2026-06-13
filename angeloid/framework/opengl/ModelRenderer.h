@@ -60,6 +60,7 @@ public:
     bool showModel = true;
     bool showOutline = true;
     bool showToon = true;
+    bool showGround = true;
 
     // Depth-only pass for shadow map generation (no textures, no materials)
     void renderDepthPass(Gpu::ShaderProgram& shader, const std::array<float, 16>& lightViewProj,

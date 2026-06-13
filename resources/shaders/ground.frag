@@ -17,22 +17,15 @@ void main() {
             lightNdc.y > -1.0 && lightNdc.y < 1.0) {
             vec2 uv = lightNdc.xy * 0.5 + 0.5;
             float fragDepth = lightNdc.z * 0.5 + 0.5;
+            // Clamp: fragments beyond far plane would incorrectly compare against
+            // the cleared depth (1.0) and fail GL_LEQUAL, causing false shadow
+            fragDepth = clamp(fragDepth, 0.0, 1.0);
             // Hardware 4-tap PCF via sampler2DShadow + GL_LINEAR
             float pcf = texture(u_shadowMap, vec3(uv, fragDepth - 0.003));
             shadow = 0.3 + pcf * 0.7;
         }
     }
 
-    // Checkerboard pattern for ground visibility
-    float cx = floor(v_world_pos.x);
-    float cz = floor(v_world_pos.z);
-    float checker = mod(cx + cz, 2.0) < 1.0 ? 0.6 : 0.4;
-    vec3 groundColor = vec3(checker) * shadow;
-
-    // Offset strips for spatial reference
-    float stripe = abs(fract(v_world_pos.z * 0.25) - 0.5) * 2.0; // 0~1 sawtooth
-    float lineMask = smoothstep(0.95, 1.0, stripe);
-    groundColor = mix(groundColor, vec3(0.2), lineMask * 0.5);
-
+    vec3 groundColor = vec3(1.0) * shadow;
     fragColor = vec4(groundColor, 1.0);
 }

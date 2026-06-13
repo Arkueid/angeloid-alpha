@@ -56,16 +56,50 @@ void Pipeline::init(const fs::path& effectsCfg, const fs::path& shaderDir) {
     if (auto* c = get("rigidbody"))
         mRigidbodyProg = compile(shaderDir, (*c)["vert"], (*c)["frag"]);
 
+    if (auto* c = get("ground"))
+        mGroundProg = compile(shaderDir, (*c)["vert"], (*c)["frag"]);
+
+    // Create ground plane VAO (large quad on XZ plane)
+    if (mGroundProg) {
+        float groundSize = 100.0f;
+        float verts[] = {
+            -groundSize, 0, -groundSize,
+             groundSize, 0, -groundSize,
+             groundSize, 0,  groundSize,
+            -groundSize, 0, -groundSize,
+             groundSize, 0,  groundSize,
+            -groundSize, 0,  groundSize,
+        };
+        glGenVertexArrays(1, &mGroundVao);
+        glBindVertexArray(mGroundVao);
+        glGenBuffers(1, &mGroundVbo);
+        glBindBuffer(GL_ARRAY_BUFFER, mGroundVbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        glBindVertexArray(0);
+        mGroundVertCount = 6;
+    }
+
     MMD_INFO("PIPELINE", "Initialized (%zu programs)", mPrograms.size());
 }
 
 void Pipeline::clear() {
+    if (mGroundVao) {
+        glDeleteVertexArrays(1, &mGroundVao);
+        mGroundVao = 0;
+    }
+    if (mGroundVbo) {
+        glDeleteBuffers(1, &mGroundVbo);
+        mGroundVbo = 0;
+    }
     mPrograms.clear();
     mShadowProg = nullptr;
     mOutlineProg = nullptr;
     mMainProg = nullptr;
     mMainToonProg = nullptr;
     mRigidbodyProg = nullptr;
+    mGroundProg = nullptr;
 }
 
 void Pipeline::resizeViewport(int w, int h) {
@@ -77,6 +111,8 @@ void Pipeline::resizeViewport(int w, int h) {
 
 void Pipeline::renderShadowPass(ModelRenderer& renderer, const FrameParams& p) {
     if (!mShadowProg || !p.lightViewProj) return;
+
+    mLightViewProj = *p.lightViewProj;
 
     mShadowMap.bind();
     glClear(GL_DEPTH_BUFFER_BIT);
@@ -149,4 +185,26 @@ void Pipeline::execute(ModelRenderer& renderer, const FrameParams& p) {
             p.physicsDebug->render(*mRigidbodyProg, proj, view, modelMat);
         }
     }
+}
+
+void Pipeline::renderGround(const std::array<float, 16>* proj,
+                            const std::array<float, 16>* view,
+                            bool hasShadow) {
+    if (!mGroundProg || !proj || !view) return;
+
+    mGroundProg->use();
+    mGroundProg->setMat4(U_PROJ_MAT, proj->data());
+    mGroundProg->setMat4(U_VIEW_MAT, view->data());
+    if (mShadowProg && hasShadow) {
+        mGroundProg->setInt("u_shadowMap", 5);
+        mGroundProg->setMat4("u_lightViewProj", mLightViewProj.data());
+        mGroundProg->setInt("u_hasShadow", 1);
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, mShadowMap.depthTex());
+    } else {
+        mGroundProg->setInt("u_hasShadow", 0);
+    }
+    glBindVertexArray(mGroundVao);
+    glDrawArrays(GL_TRIANGLES, 0, mGroundVertCount);
+    glBindVertexArray(0);
 }

@@ -33,8 +33,8 @@ WorldAxis::WorldAxis() {
     // Ground grid on the XZ plane (Y=0), rendered as intersecting lines.
     // The grid is axis-aligned and renders without depth test so it's always visible
     // behind the model, providing spatial reference for the viewer.
-    const float gridSize = 50.0f;
-    const int gridDivs = 25;
+    const float gridSize = 200.0f;
+    const int gridDivs = 50;
     const float step = gridSize / gridDivs;
     const int halfDivs = gridDivs / 2;  // 12
     const int lines = gridDivs + 1;     // 26 lines per axis
@@ -77,7 +77,10 @@ void WorldAxis::render(const Gpu::ShaderProgram& shader, const std::array<float,
     shader.setMat4(U_VIEW_MAT, view.data());
     shader.setMat4(U_MODEL_MAT, identity);
 
-    glDisable(GL_DEPTH_TEST);
+    // Polygon offset prevents z-fighting with the ground plane at Y=0
+    // while still letting the model occlude axis lines behind it.
+    glEnable(GL_POLYGON_OFFSET_LINE);
+    glPolygonOffset(-1.0f, -1.0f);
     if (showGrid) {
         mGridVao.render(GL_LINES);
     }
@@ -86,5 +89,5 @@ void WorldAxis::render(const Gpu::ShaderProgram& shader, const std::array<float,
         mAxisVao.render(GL_LINES);
         glLineWidth(1.0f);
     }
-    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_POLYGON_OFFSET_LINE);
 }

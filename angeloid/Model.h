@@ -78,6 +78,9 @@ public:
     void showToon(bool v) {
         mRenderer.showToon = v;
     }
+    void showGround(bool v) {
+        mRenderer.showGround = v;
+    }
     bool showModel() const {
         return mRenderer.showModel;
     }
@@ -86,6 +89,9 @@ public:
     }
     bool showToon() const {
         return mRenderer.showToon;
+    }
+    bool showGround() const {
+        return mRenderer.showGround;
     }
     // --- LookAt ---
     void lookAt(int screenX, int screenY, int screenW, int screenH);

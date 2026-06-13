@@ -321,6 +321,7 @@ void Model::draw(int screenWidth, int screenHeight) {
     fp.lightDirZ = ld.z;
     fp.lightViewProj = &lightViewProj;
     fp.showToon = mRenderer.showToon;
+    fp.showGround = mRenderer.showGround;
     fp.showRigidBodies = mShowRigidBodies;
     fp.physicsDebug = mPhysicsDebug.get();
     fp.physics = &mPhysics;
