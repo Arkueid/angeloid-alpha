@@ -300,6 +300,11 @@ void ModelRenderer::renderDepthPass(Gpu::ShaderProgram& shader,
 
     mMorphVao.bind();
     for (const auto& batch : mMaterialBatches) {
+        float alpha = mModel->materials[batch.materialIndex].alpha;
+        if (auto* ov = getMaterialOverride(batch.materialIndex)) {
+            alpha = ov->alpha;
+        }
+        shader.setFloat("u_alpha", alpha);
         glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
                        (void*)(intptr_t)(batch.first * sizeof(int32_t)));
     }
