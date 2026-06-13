@@ -31,11 +31,12 @@ cmake --build build --config RelWithDebInfo
       - `gpu/` — Mesh, Texture, Shader (OpenGL primitives)
       - `debug/` — RigidBodyRenderer
   - `util/` — CfgParser, Log
-- `viewer/` — application entry point + WorldAxis debug
+- `viewer/` — application entry point, WorldAxis, ImGui debug panels
+    - `imgui/` — `ImGuiManager` (lifecycle + GLFW event forwarding)
 - `resources/` — assets
   - `core/` — engine resources (shaders, effects, toon)
   - `app/` — user content (models, VPD, VMD)
-- `thirdparty/` — GLFW, glad, Bullet, stb, backward-cpp
+- `thirdparty/` — GLFW, glad, Bullet, stb, backward-cpp, imgui
 
 ## Rendering Pipeline
 - Effects defined in `resources/effects.cfg` (INI-style sections)

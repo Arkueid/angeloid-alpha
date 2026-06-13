@@ -19,12 +19,25 @@ endif()
 add_executable(viewer
     main.cpp
     window/GlfwWindow.cpp
+    imgui/ImGuiManager.cpp
 )
 
 target_include_directories(viewer PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../angeloid
 )
+
+# Dear ImGui
+set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/imgui)
+target_sources(viewer PRIVATE
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+target_include_directories(viewer PRIVATE ${IMGUI_DIR} ${IMGUI_DIR}/backends)
 
 target_link_libraries(viewer PRIVATE angeloid glfw)
 target_compile_definitions(viewer PRIVATE

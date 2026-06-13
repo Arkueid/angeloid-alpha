@@ -4,6 +4,8 @@
 #include "framework/opengl/gpu/Shader.h"
 #include "framework/util/CfgParser.h"
 #include "window/GlfwWindow.h"
+#include "imgui/ImGuiManager.h"
+#include <imgui.h>
 #include <vector>
 
 #ifdef _WIN32
@@ -106,6 +108,9 @@ int main(int argc, char* argv[]) {
     // --- Window ---
     GlfwWindow app(1280, 720, "MMD PMX Viewer");
 
+    ImGuiManager imgui;
+    imgui.init(app.glfwWindow());
+
     // --- Init mmd module ---
     mmd::InitArgs args;
     args.shaderDir = projRoot / "resources/shaders";
@@ -155,16 +160,24 @@ int main(int argc, char* argv[]) {
 
     // Input
     auto& cam = Camera::instance();
-    app.onMouseButton = [&cam](int b, int a, int m) {
-        cam.onMouseButton(b, a, m);
+    app.onMouseButton = [&](int b, int a, int m) {
+        imgui.onMouseButton(b, a, m);
+        if (!ImGui::GetIO().WantCaptureMouse)
+            cam.onMouseButton(b, a, m);
     };
-    app.onCursorPos = [&cam](double x, double y) {
-        cam.onCursorPos(x, y);
+    app.onCursorPos = [&](double x, double y) {
+        if (!ImGui::GetIO().WantCaptureMouse)
+            cam.onCursorPos(x, y);
     };
-    app.onScroll = [&cam](double, double yo) {
-        cam.onScroll(yo);
+    app.onScroll = [&](double xo, double yo) {
+        imgui.onScroll(xo, yo);
+        if (!ImGui::GetIO().WantCaptureMouse)
+            cam.onScroll(yo);
     };
-    app.onKey = [&](int key, int, int act, int) {
+    app.onKey = [&](int key, int sc, int act, int mods) {
+        imgui.onKey(key, sc, act, mods);
+        if (ImGui::GetIO().WantCaptureKeyboard)
+            return;
         if (key == GLFW_KEY_ESCAPE && act == GLFW_PRESS)
             app.close();
         if (key == GLFW_KEY_X && act == GLFW_PRESS)
@@ -273,6 +286,31 @@ int main(int argc, char* argv[]) {
 
     // Update
     app.onUpdate = [&](float dt) {
+        imgui.beginFrame();
+
+        // ---- Debug Panel ----
+        static float smoothFps = 0.0f;
+        smoothFps = smoothFps * 0.95f + (1.0f / dt) * 0.05f;
+        if (ImGui::Begin("Debug", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text("FPS: %.0f (%.2f ms)", smoothFps, dt * 1000.0);
+            ImGui::SeparatorText("Model");
+            ImGui::Text("Name: %s", model.modelName().c_str());
+            ImGui::Text("Vertices: %d", model.data().vertexCount());
+            ImGui::Text("Faces: %d", model.data().faceCount());
+            ImGui::Text("Bones: %d", model.data().boneCount());
+            ImGui::Text("Morphs: %d", model.morphCount());
+            ImGui::SeparatorText("Render");
+            bool v = model.showModel();
+            if (ImGui::Checkbox("Model", &v)) model.showModel(v);
+            v = model.showOutline();
+            if (ImGui::Checkbox("Outline", &v)) model.showOutline(v);
+            v = model.showToon();
+            if (ImGui::Checkbox("Toon", &v)) model.showToon(v);
+            v = model.physicsEnabled();
+            if (ImGui::Checkbox("Physics", &v)) model.enablePhysics(v);
+        }
+        ImGui::End();
+
         auto* win = app.glfwWindow();
         if (cam.mode() == CameraMode::FPS) {
             cam.update(
@@ -282,17 +320,6 @@ int main(int argc, char* argv[]) {
                 glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS);
         }
         model.update(dt);
-
-        static int fc = 0;
-        static float et = 0;
-        fc++;
-        et += dt;
-        if (et >= 0.5f) {
-            app.setTitle("MMD PMX Viewer - " + model.modelName() + " [" +
-                         std::to_string((int)(fc / et)) + " FPS]");
-            fc = 0;
-            et = 0;
-        }
     };
 
     // Render
@@ -312,6 +339,8 @@ int main(int argc, char* argv[]) {
         worldAxis.render(solidShader, proj, view);
 
         model.draw(app.width(), app.height());
+
+        imgui.endFrame();
     };
 
     app.run();

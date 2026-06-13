@@ -10,3 +10,7 @@
 	path = thirdparty/backward-cpp
 	url = https://github.com/bombela/backward-cpp.git
 	shallow = true
+[submodule "thirdparty/imgui"]
+	path = thirdparty/imgui
+	url = https://github.com/ocornut/imgui.git
+	shallow = true
