@@ -1,3 +1,8 @@
+> ⚠️ **Historical planning document (2025).**  Many items have been superseded.
+> Current architecture is documented in `CLAUDE.md` and `docs/rendering.md`.
+> Key divergences: no AssetStore exists; ShaderManager is a separate singleton
+> from RenderContext; Model implements Renderable interface; Pipeline is list-driven.
+
 # MMD PMX Viewer — Architecture
 
 ## Overview

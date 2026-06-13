@@ -21,29 +21,46 @@ cmake --build build --config RelWithDebInfo
 - `ENABLE_STACKTRACE` option: includes backward-cpp submodule for crash stack traces (printed to stderr, includes file/line/function)
 
 ## Project structure
-- `mmd/` — computation + rendering library
-  - `Model.h/.cpp` — facade class: load/update/draw
+- `angeloid/core/` — computation layer (no OpenGL dependency)
   - `pmx/` — PmxModel, PmxReader
   - `anim/` — BoneSkinning, MorphController, VmdPlayer, VpdLoader, PhysicsWorld (Bullet)
   - `encoding/` — text encoding
   - `math/` — Vec2/3/4, Quat
-  - `render/opengl/` — ModelRenderer, Pipeline, Effect, ShaderManager, RenderContext, GPU wrappers
-      - `gpu/` — Mesh, Texture, Shader (OpenGL primitives)
-      - `debug/` — RigidBodyRenderer
-  - `util/` — CfgParser, Log
-- `viewer/` — application entry point, WorldAxis, ImGui debug panels
-    - `imgui/` — `ImGuiManager` (lifecycle + GLFW event forwarding)
+  - `util/` — Log
+- `angeloid/framework/` — rendering + framework layer
+  - `Model.h/.cpp` — facade: load/update + Renderable (onShadowPass/onMainPass/onDebugPass)
+  - `MMD.h/.cpp` — init/dispose, InitArgs
+  - `Camera.h/.cpp` — FPS + Orbit camera
+  - `opengl/` — OpenGL rendering
+      - `Renderable.h` — interface (onShadowPass/onMainPass/onDebugPass)
+      - `Pipeline.h/.cpp` — render orchestrator: pass ordering + renderable list + shadow map
+      - `ShaderManager.h/.cpp` — global shader registry (7 programs from effects.cfg)
+      - `RenderContext.h/.cpp` — singleton: gradient + toon textures
+      - `RenderTarget.h/.cpp` — FBO wrapper (color + depth)
+      - `ModelRenderer.h/.cpp` — PMX GPU meshes, material batches, morph VAOs
+      - `ShaderStandard.h` — uniform/texture/attribute naming conventions
+      - `BoneTextureUtil.h`, `StbImage.cpp` — utilities
+      - `gpu/` — Mesh, Shader, Texture (OpenGL primitives)
+      - `scene/` — visual Renderable implementations
+          - `GroundPlane` — 200×200 white quad with shadow reception
+          - `WorldAxis` — RGB axis + grid lines
+          - `RigidBodyRenderer` — physics debug wireframe
+  - `util/` — CfgParser
+- `viewer/` — application entry point (GLFW + ImGui)
+    - `imgui/` — ImGuiManager (lifecycle + event forwarding)
 - `resources/` — assets
-  - `core/` — engine resources (shaders, effects, toon)
-  - `app/` — user content (models, VPD, VMD)
+  - `shaders/` — GLSL vertex/fragment shaders
+  - `toon/` — shared toon ramp textures
+  - `models/` — PMX model directories
 - `thirdparty/` — GLFW, glad, Bullet, stb, backward-cpp, imgui
 
 ## Rendering Pipeline
-- Effects defined in `resources/effects.cfg` (INI-style sections)
-- `Pipeline` class maps model state ("static"|"skinned"|"morph") → Effect → shader programs
-- `Effect::loadAll()` compiles shaders via `Gpu::ShaderProgram`; `Pipeline::execute()` drives per-frame draw order: Outline → Opaque → Debug
-- `ShaderManager` still owns gradient + shared toon textures (used by Pipeline)
-- Shader standard (`ShaderStandard.h`) defines uniform/texture/attribute naming conventions but built-in shaders use legacy names — pending migration
+- Pipeline owns `vector<Renderable*>`; items register via `addRenderable()` in draw order
+- Per frame: `computeLightMatrix()` → `execute()` (shadow pass → main pass → debug pass)
+- Each Renderable fetches its own shader from `ShaderManager::instance()`
+- Shaders loaded from `resources/effects.cfg` (INI-style `[section] vert= frag=`) — 7 programs: shadow/outline/base/toon/rigidbody/ground/axis
+- Renderable interface: `onShadowPass(lightViewProj, model)` / `onMainPass(proj, view, model, lightViewProj, hasShadow)` / `onDebugPass(proj, view, model)` — all `const std::array<float,16>&`
+- Shadow map: 4096×4096 depth-only, 3×3 manual PCF, alpha-aware (morph transparency via `shadow_depth.frag`)
 
 ## Physics (Bullet)
 - Bullet Physics as git submodule at `thirdparty/bullet` (version 3.27)
@@ -64,7 +81,7 @@ cmake --build build --config RelWithDebInfo
 - File naming: PascalCase (`PmxModel.h`, `BoneSkinning.cpp`)
 - Methods: `camelCase` (`readF32`, `hasFlag`, `vertexCount`)
 - Members: `mPascalCase` (`mWindow`, `mData`, `mDeltaTime`)
-- Constants: `UPPER_SNAKE_CASE` (`BONEFLAG_TAILPOS_IS_BONE`)
+- Constants: `kPascalCase` (`kShadowMapSize`, `kIdentity`) or `UPPER_SNAKE_CASE` for flags
 - Statics: `sPascalCase`
 - Types: `PascalCase` (`PmxModel`, `BinaryReader`)
 - Free functions → class static methods preferred
