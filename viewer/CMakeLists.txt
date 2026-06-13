@@ -19,7 +19,6 @@ endif()
 add_executable(viewer
     main.cpp
     window/GlfwWindow.cpp
-    debug/WorldAxis.cpp
 )
 
 target_include_directories(viewer PRIVATE

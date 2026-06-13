@@ -21,6 +21,7 @@ set(MMD_SOURCES
     framework/opengl/RenderContext.cpp
     framework/opengl/RenderTarget.cpp
     framework/opengl/debug/RigidBodyRenderer.cpp
+    framework/opengl/debug/WorldAxis.cpp
     framework/opengl/Pipeline.cpp
     framework/opengl/StbImage.cpp
     framework/Camera.cpp

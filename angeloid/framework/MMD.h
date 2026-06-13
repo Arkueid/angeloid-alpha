@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "core/util/Log.h"
+
 namespace mmd {
 
 // Initialization arguments passed to mmd::init().
@@ -12,6 +14,7 @@ struct InitArgs {
     std::filesystem::path toonDir;
     std::filesystem::path effectsCfg;
     std::vector<std::string> blinkMorphs;  // morph names for auto-blink, set by caller
+    LogFunc logFunc = nullptr;                   // optional custom log sink
 };
 
 // Initialize mmd module (GPU resources, etc.). Must call while GL context is alive.

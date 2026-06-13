@@ -1,6 +1,6 @@
 #include "framework/MMD.h"
 #include "Model.h"
-#include "debug/WorldAxis.h"
+#include "framework/opengl/debug/WorldAxis.h"
 #include "framework/opengl/gpu/Shader.h"
 #include "framework/util/CfgParser.h"
 #include "window/GlfwWindow.h"

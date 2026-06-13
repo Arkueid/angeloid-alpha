@@ -1,4 +1,4 @@
-#include "debug/WorldAxis.h"
+#include "framework/opengl/debug/WorldAxis.h"
 
 #include "framework/opengl/ShaderStandard.h"
 
