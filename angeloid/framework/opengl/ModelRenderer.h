@@ -60,17 +60,21 @@ public:
     bool showModel = true;
     bool showOutline = true;
     bool showToon = true;
-    bool showGround = true;
 
     // Depth-only pass for shadow map generation (no textures, no materials)
-    void renderDepthPass(Gpu::ShaderProgram& shader, const std::array<float, 16>& lightViewProj,
+    void renderDepthPass(Gpu::ShaderProgram& shader,
+                         const std::array<float, 16>& lightViewProj,
                          const float* modelMat = nullptr);
 
-    void renderMorphMainPass(Gpu::ShaderProgram& shader, const std::array<float, 16>& projection,
-                             const std::array<float, 16>& view, const float* modelMat = nullptr);
+    void renderMorphMainPass(Gpu::ShaderProgram& shader,
+                             const std::array<float, 16>& proj,
+                             const std::array<float, 16>& view,
+                             const float* modelMat = nullptr);
 
-    void renderMorphOutlinePass(Gpu::ShaderProgram& shader, const std::array<float, 16>& projection,
-                                const std::array<float, 16>& view, const float* modelMat = nullptr);
+    void renderMorphOutlinePass(Gpu::ShaderProgram& shader,
+                                const std::array<float, 16>& proj,
+                                const std::array<float, 16>& view,
+                                const float* modelMat = nullptr);
 
     Gpu::VboWrapper* morphVbo() const  { return mMorphVboW.get(); }
     Gpu::VboWrapper* uvMorphVbo() const { return mUvMorphVboW.get(); }

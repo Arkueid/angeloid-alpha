@@ -311,7 +311,7 @@ void ModelRenderer::uploadBoneData(const void* data, size_t bytes) {
 }
 
 void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
-                                        const std::array<float, 16>& projection,
+                                        const std::array<float, 16>& proj,
                                         const std::array<float, 16>& view,
                                         const float* modelMatParam) {
     if (!showModel || mMaterialBatches.empty())
@@ -320,7 +320,7 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
     const float* modelMatDefault = mModelMat.data();
     const float* mm = modelMatParam ? modelMatParam : modelMatDefault;
     shader.use();
-    shader.setMat4(U_PROJ_MAT, projection.data());
+    shader.setMat4(U_PROJ_MAT, proj.data());
     shader.setMat4(U_VIEW_MAT, view.data());
     shader.setMat4(U_MODEL_MAT, mm);
     shader.setInt("u_tex", 0);
@@ -406,7 +406,7 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
 }
 
 void ModelRenderer::renderMorphOutlinePass(Gpu::ShaderProgram& shader,
-                                           const std::array<float, 16>& projection,
+                                           const std::array<float, 16>& proj,
                                            const std::array<float, 16>& view,
                                            const float* modelMatParam) {
     if (!showModel || !showOutline || mMaterialBatches.empty())
@@ -414,7 +414,7 @@ void ModelRenderer::renderMorphOutlinePass(Gpu::ShaderProgram& shader,
     const float* modelMatDefault = mModelMat.data();
     const float* mm = modelMatParam ? modelMatParam : modelMatDefault;
     shader.use();
-    shader.setMat4(U_PROJ_MAT, projection.data());
+    shader.setMat4(U_PROJ_MAT, proj.data());
     shader.setMat4(U_VIEW_MAT, view.data());
     shader.setMat4(U_MODEL_MAT, mm);
     shader.setInt("u_tex", 0);

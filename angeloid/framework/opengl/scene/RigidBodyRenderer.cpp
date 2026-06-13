@@ -1,6 +1,7 @@
-#include "framework/opengl/debug/RigidBodyRenderer.h"
+#include "framework/opengl/scene/RigidBodyRenderer.h"
 
 #include "core/anim/PhysicsWorld.h"
+#include "framework/opengl/ShaderManager.h"
 #include "framework/opengl/ShaderStandard.h"
 #include "framework/opengl/gpu/Shader.h"
 
@@ -313,7 +314,12 @@ static void buildPass(const PmxModel& model, float cx, float my, float cz, float
     }
 }
 
-void RigidBodyRenderer::build(const PmxModel& model, float modelScale) {
+void RigidBodyRenderer::build(const PmxModel& model, float modelScale,
+                               const float* modelMat,
+                               const PhysicsWorld* physicsWorld) {
+    mModelScale = modelScale;
+    mModelMat = modelMat;
+    mPhysicsWorld = physicsWorld;
     Vec3 minPos = {1e9f, 1e9f, 1e9f}, maxPos = {-1e9f, -1e9f, -1e9f};
     for (const auto& v : model.vertices) {
         minPos.x = std::min(minPos.x, v.position.x);
@@ -337,8 +343,9 @@ void RigidBodyRenderer::build(const PmxModel& model, float modelScale) {
 // then use instanced rendering in the vertex shader (sampling the texture
 // by gl_InstanceID) to transform each shape from local space to world space.
 // The VAO is rebuilt only when the body count changes.
-void RigidBodyRenderer::updateFromPhysics(const PhysicsWorld& world) {
-    const auto& bodies = world.bodies();
+void RigidBodyRenderer::updateFromPhysics() {
+    if (!mPhysicsWorld) return;
+    const auto& bodies = mPhysicsWorld->bodies();
     int nBodies = (int)bodies.size();
 
     // Pack body world matrices into a flat array for texture upload.
@@ -443,16 +450,18 @@ void RigidBodyRenderer::updateFromPhysics(const PhysicsWorld& world) {
     }
 }
 
-void RigidBodyRenderer::render(Gpu::ShaderProgram& shader, const std::array<float, 16>& projection,
-                               const std::array<float, 16>& view,
-                               const float* modelMatParam) const {
-    float defMat[] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1};
-    const float* mm = modelMatParam ? modelMatParam : defMat;
+void RigidBodyRenderer::onDebugPass(const std::array<float, 16>& proj,
+                                    const std::array<float, 16>& view,
+                                    const std::array<float, 16>& /*model*/) {
+    updateFromPhysics();
 
-    shader.use();
-    shader.setMat4(U_PROJ_MAT, projection.data());
-    shader.setMat4(U_VIEW_MAT, view.data());
-    shader.setMat4(U_MODEL_MAT, mm);
+    auto* s = ShaderManager::instance().rigidBody();
+    if (!s) return;
+
+    s->use();
+    s->setMat4(U_PROJ_MAT, proj.data());
+    s->setMat4(U_VIEW_MAT, view.data());
+    s->setMat4(U_MODEL_MAT, mModelMat);
 
     bool hasPhysics = (mRbPhysics.vertexCount > 0);
     const Gpu::Vao& rb = hasPhysics ? mRbPhysics : (useBoneMatrices ? mRbAnimated : mRbStatic);
@@ -460,9 +469,9 @@ void RigidBodyRenderer::render(Gpu::ShaderProgram& shader, const std::array<floa
 
     if (showRigidBody && rb.vertexCount > 0) {
         if (hasPhysics && mBodyTex) {
-            shader.setInt(U_BONE_TEX_WIDTH, mBodyTexWidth);
+            s->setInt(U_BONE_TEX_WIDTH, mBodyTexWidth);
             mBodyTex->bind(TEX_UNIT_BONE);
-            shader.setInt(U_BONE_TEX, TEX_UNIT_BONE);
+            s->setInt(U_BONE_TEX, TEX_UNIT_BONE);
         }
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         rb.render(GL_TRIANGLES);

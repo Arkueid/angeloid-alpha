@@ -2,6 +2,7 @@
 #include "core/util/Log.h"
 #include "framework/opengl/Pipeline.h"
 #include "framework/opengl/RenderContext.h"
+#include "framework/opengl/ShaderManager.h"
 
 #include <cstdio>   // printf, fprintf, vprintf, vfprintf
 
@@ -53,7 +54,8 @@ void init(const InitArgs& args) {
     static backward::SignalHandling sh;
 #endif
     RenderContext::instance().init(args.toonDir);
-    Pipeline::instance().init(args.effectsCfg, args.shaderDir);
+    ShaderManager::instance().init(args.effectsCfg, args.shaderDir);
+    Pipeline::instance().init();
 }
 
 void glInit() {
@@ -64,6 +66,7 @@ void glInit() {
 
 void dispose() {
     Pipeline::instance().clear();
+    ShaderManager::instance().clear();
     RenderContext::instance().release();
 }
 

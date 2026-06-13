@@ -8,7 +8,7 @@
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 
-static ImGuiManager* s_Instance = nullptr;
+static ImGuiManager* sInstance = nullptr;
 
 ImGuiManager::~ImGuiManager() {
     shutdown();
@@ -36,7 +36,7 @@ bool ImGuiManager::init(GLFWwindow* window) {
         return false;
 
     // Install char callback for text input (GlfwWindow doesn't forward it)
-    s_Instance = this;
+    sInstance = this;
     glfwSetCharCallback(window, charCallback);
 
     mInitialized = true;
@@ -67,7 +67,7 @@ void ImGuiManager::shutdown() {
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 
-    s_Instance = nullptr;
+    sInstance = nullptr;
     mInitialized = false;
 }
 
@@ -89,6 +89,6 @@ void ImGuiManager::onChar(unsigned int codepoint) {
 
 // static
 void ImGuiManager::charCallback(GLFWwindow* /*window*/, unsigned int codepoint) {
-    if (s_Instance)
-        s_Instance->onChar(codepoint);
+    if (sInstance)
+        sInstance->onChar(codepoint);
 }

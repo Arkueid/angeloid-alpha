@@ -2,7 +2,9 @@
 
 #include "framework/MMD.h"
 #include "core/pmx/PmxReader.h"
-#include "framework/opengl/Pipeline.h"
+#include "framework/opengl/RenderContext.h"
+#include "framework/opengl/ShaderManager.h"
+#include "framework/opengl/ShaderStandard.h"
 #include "core/util/Log.h"
 
 #include <cmath>
@@ -236,15 +238,10 @@ void Model::update(float dt) {
     syncBoneTexture();
 }
 
-void Model::draw(int screenWidth, int screenHeight) {
-    Pipeline::instance().resizeViewport(screenWidth, screenHeight);
+void Model::onShadowPass(const std::array<float, 16>& lightViewProj,
+                         const std::array<float, 16>& /*model*/) {
+    if (!mRenderer.showModel) return;
 
-    auto proj = Camera::projectionMatrix(screenWidth, screenHeight);
-    auto view = Camera::instance().viewMatrix();
-    float camPos[3];
-    Camera::instance().getEyePosition(camPos[0], camPos[1], camPos[2]);
-
-    // Morph offset sync
     syncMorphOffsets();
     mRenderer.clearMaterialOverrides();
     for (size_t i = 0; i < mPmx.materials.size(); ++i) {
@@ -252,81 +249,67 @@ void Model::draw(int screenWidth, int screenHeight) {
             mRenderer.setMaterialOverride((int)i, *ov);
     }
 
-    // Lazy-init physics debug
-    if (mShowRigidBodies && !mPhysicsDebug) {
-        mPhysicsDebug = std::make_unique<RigidBodyRenderer>();
-        mPhysicsDebug->build(mPmx, mRenderer.modelScale());
-        mPhysicsDebug->showRigidBody = true;
-        mPhysicsDebug->showJoint = true;
-        mPhysicsDebug->useBoneMatrices = false;
-    }
-    
-    // Light-space view-projection for shadow map.
-    // Key light from upper-front-right (classic MMD lighting).
-    Vec3 ld = {0.3f, 0.8f, 0.5f};
-    float l = std::sqrt(ld.x*ld.x + ld.y*ld.y + ld.z*ld.z);
-    ld = {ld.x/l, ld.y/l, ld.z/l};
+    auto* shadowProg = ShaderManager::instance().shadow();
+    if (shadowProg)
+        mRenderer.renderDepthPass(*shadowProg, lightViewProj, mRenderer.modelMatrix());
+}
 
-    std::array<float, 16> lightViewProj;
-    {
+void Model::onMainPass(const std::array<float, 16>& proj,
+                       const std::array<float, 16>& view,
+                       const std::array<float, 16>& /*model*/,
+                       const std::array<float, 16>& lightViewProj,
+                       bool hasShadow) {
+    if (!mRenderer.showModel) return;
+    const float* mm = mRenderer.modelMatrix();
 
-        // Light position 15 units away from origin in light direction
-        float dist = 15.0f;
-        Vec3 lp = {ld.x * dist, ld.y * dist, ld.z * dist};
+    auto& sm = ShaderManager::instance();
 
-        // Simple orthographic: light looks toward origin
-        // Build view matrix (column-major): maps world coords to light-eye coords
-        Vec3 fwd = {-ld.x, -ld.y, -ld.z};
-        Vec3 worldUp = {0, 1, 0};
-        if (std::abs(fwd.x) < 0.001f && std::abs(fwd.z) < 0.001f)
-            worldUp = {1, 0, 0};
-        Vec3 r = {worldUp.y*fwd.z - worldUp.z*fwd.y,
-                  worldUp.z*fwd.x - worldUp.x*fwd.z,
-                  worldUp.x*fwd.y - worldUp.y*fwd.x};
-        float rl = std::sqrt(r.x*r.x + r.y*r.y + r.z*r.z);
-        r = {r.x/rl, r.y/rl, r.z/rl};
-        Vec3 u = {fwd.y*r.z - fwd.z*r.y,
-                  fwd.z*r.x - fwd.x*r.z,
-                  fwd.x*r.y - fwd.y*r.x};
-
-        // Orthographic projection (column-major)
-        float size = 3.0f;  // half-size of ortho frustum
-        float zn = dist - 2.0f, zf = dist + 2.0f;
-        float sx = 1.0f / size, sy = 1.0f / size;
-        float sz = 2.0f / (zf - zn);
-        float tz = -(zf + zn) / (zf - zn);
-
-        // View (column-major): translate by -lp, then rotate by [r,u,fwd]
-        // Combined VP: projection * view
-        lightViewProj = {
-            r.x * sx,        u.x * sy,        fwd.x * sz,     0,
-            r.y * sx,        u.y * sy,        fwd.y * sz,     0,
-            r.z * sx,        u.z * sy,        fwd.z * sz,     0,
-            -(r.x*lp.x + r.y*lp.y + r.z*lp.z) * sx,
-            -(u.x*lp.x + u.y*lp.y + u.z*lp.z) * sy,
-            -(fwd.x*lp.x + fwd.y*lp.y + fwd.z*lp.z) * sz + tz,
-            1.0f
-        };
+    if (mRenderer.showOutline) {
+        auto* outlineProg = sm.outline();
+        if (outlineProg)
+            mRenderer.renderMorphOutlinePass(*outlineProg, proj, view, mm);
     }
 
-    Pipeline::FrameParams fp;
-    fp.proj = &proj;
-    fp.view = &view;
-    fp.modelMat = mRenderer.modelMatrix();
-    fp.camPosX = camPos[0];
-    fp.camPosY = camPos[1];
-    fp.camPosZ = camPos[2];
-    fp.lightDirX = ld.x;
-    fp.lightDirY = ld.y;
-    fp.lightDirZ = ld.z;
-    fp.lightViewProj = &lightViewProj;
-    fp.showToon = mRenderer.showToon;
-    fp.showGround = mRenderer.showGround;
-    fp.showRigidBodies = mShowRigidBodies;
-    fp.physicsDebug = mPhysicsDebug.get();
-    fp.physics = &mPhysics;
+    auto* mainProg = mRenderer.showToon ? sm.toon() : sm.main();
+    if (!mainProg) return;
 
-    Pipeline::instance().execute(mRenderer, fp);
+    mainProg->use();
+
+    if (hasShadow) {
+        mainProg->setInt("u_shadowMap", 5);
+        mainProg->setMat4("u_lightViewProj", lightViewProj.data());
+        mainProg->setInt("u_hasShadow", 1);
+    } else {
+        mainProg->setInt("u_hasShadow", 0);
+    }
+
+    mainProg->setVec3(U_LIGHT_DIR, 0.3f, 0.8f, 0.5f);
+
+    if (mRenderer.showToon) {
+        float camPos[3];
+        Camera::instance().getEyePosition(camPos[0], camPos[1], camPos[2]);
+        mainProg->setVec3(U_CAMERA_POS, camPos[0], camPos[1], camPos[2]);
+        mainProg->setFloat(U_SHADOW_THRESH, 0.0f);
+        mainProg->setFloat(U_RIM_POWER, 4.0f);
+        mainProg->setVec3(U_RIM_COLOR, 1.0f, 1.0f, 1.0f);
+
+        mainProg->setInt("u_gradientMap", TEX_UNIT_GRADIENT);
+        auto& ctx = mmd::RenderContext::instance();
+        glActiveTexture(GL_TEXTURE0 + TEX_UNIT_GRADIENT);
+        glBindTexture(GL_TEXTURE_2D, ctx.gradientTexture()->id);
+    }
+
+    mRenderer.renderMorphMainPass(*mainProg, proj, view, mm);
+}
+
+void Model::onDebugPass(const std::array<float, 16>& proj,
+                        const std::array<float, 16>& view,
+                        const std::array<float, 16>& model) {
+    if (mShowRigidBodies) {
+        auto* dbg = physicsDebug();
+        if (dbg)
+            dbg->onDebugPass(proj, view, model);
+    }
 }
 
 void Model::enablePhysics(bool on) {
@@ -591,6 +574,17 @@ void Model::applyLookAt() {
     applyBoneQuat(mHeadBoneIndex, qFull, 1.0f);
     applyBoneQuat(mLeftEyeBoneIndex, qFull, 0.2f);
     applyBoneQuat(mRightEyeBoneIndex, qFull, 0.2f);
+}
+
+RigidBodyRenderer* Model::physicsDebug() {
+    if (!mPhysicsDebug) {
+        mPhysicsDebug = std::make_unique<RigidBodyRenderer>();
+        mPhysicsDebug->build(mPmx, mRenderer.modelScale(), mRenderer.modelMatrix(), &mPhysics);
+        mPhysicsDebug->showRigidBody = true;
+        mPhysicsDebug->showJoint = true;
+        mPhysicsDebug->useBoneMatrices = false;
+    }
+    return mPhysicsDebug.get();
 }
 
 }  // namespace mmd

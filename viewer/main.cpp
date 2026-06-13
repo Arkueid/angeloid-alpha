@@ -1,7 +1,8 @@
 #include "framework/MMD.h"
-#include "Model.h"
+#include "framework/Model.h"
 #include "framework/opengl/Pipeline.h"
-#include "framework/opengl/debug/WorldAxis.h"
+#include "framework/opengl/scene/GroundPlane.h"
+#include "framework/opengl/scene/WorldAxis.h"
 #include "framework/util/CfgParser.h"
 #include "window/GlfwWindow.h"
 #include "imgui/ImGuiManager.h"
@@ -147,7 +148,12 @@ int main(int argc, char* argv[]) {
     }
 
     WorldAxis worldAxis;
-    Pipeline::instance().setWorldAxis(&worldAxis);
+    GroundPlane groundPlane;
+
+    auto& pipe = Pipeline::instance();
+    pipe.addRenderable(&groundPlane);
+    pipe.addRenderable(&worldAxis);
+    pipe.addRenderable(&model);
 
     printHelp();
 
@@ -183,9 +189,7 @@ int main(int argc, char* argv[]) {
         if (key == GLFW_KEY_G && act == GLFW_PRESS)
             worldAxis.showGrid = !worldAxis.showGrid;
         if (key == GLFW_KEY_B && act == GLFW_PRESS) {
-            static bool showDbg = false;
-            showDbg = !showDbg;
-            model.showRigidBodies(showDbg);
+            model.showRigidBodies(!model.showRigidBodies());
         }
         if (key == GLFW_KEY_H && act == GLFW_PRESS)
             model.showModel(!model.showModel());
@@ -306,8 +310,8 @@ int main(int argc, char* argv[]) {
             if (ImGui::Checkbox("Toon", &v)) model.showToon(v);
             v = model.physicsEnabled();
             if (ImGui::Checkbox("Physics", &v)) model.enablePhysics(v);
-            v = model.showGround();
-            if (ImGui::Checkbox("Ground", &v)) model.showGround(v);
+            v = groundPlane.visible;
+            if (ImGui::Checkbox("Ground", &v)) groundPlane.visible = v;
         }
         ImGui::End();
 
@@ -324,7 +328,15 @@ int main(int argc, char* argv[]) {
 
     // Render
     app.onRender = [&]() {
-        model.draw(app.width(), app.height());
+        pipe.resizeViewport(app.width(), app.height());
+
+        auto proj = Camera::projectionMatrix(app.width(), app.height());
+        auto view = Camera::instance().viewMatrix();
+
+        float lightDir[3] = {0.3f, 0.8f, 0.5f};
+        pipe.computeLightMatrix(lightDir);
+        pipe.execute(proj, view);
+
         imgui.endFrame();
     };
 

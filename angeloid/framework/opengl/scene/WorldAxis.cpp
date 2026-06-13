@@ -1,5 +1,6 @@
-#include "framework/opengl/debug/WorldAxis.h"
+#include "framework/opengl/scene/WorldAxis.h"
 
+#include "framework/opengl/ShaderManager.h"
 #include "framework/opengl/ShaderStandard.h"
 
 #include <glad/glad.h>
@@ -68,14 +69,18 @@ WorldAxis::WorldAxis() {
     Gpu::Vao::unbind();
 }
 
-void WorldAxis::render(const Gpu::ShaderProgram& shader, const std::array<float, 16>& projection,
-                       const std::array<float, 16>& view) const {
+void WorldAxis::onDebugPass(const std::array<float, 16>& proj,
+                            const std::array<float, 16>& view,
+                            const std::array<float, 16>& /*model*/) {
+    auto* shader = ShaderManager::instance().axis();
+    if (!shader) return;
+
     float identity[] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
 
-    shader.use();
-    shader.setMat4(U_PROJ_MAT, projection.data());
-    shader.setMat4(U_VIEW_MAT, view.data());
-    shader.setMat4(U_MODEL_MAT, identity);
+    shader->use();
+    shader->setMat4(U_PROJ_MAT, proj.data());
+    shader->setMat4(U_VIEW_MAT, view.data());
+    shader->setMat4(U_MODEL_MAT, identity);
 
     // Polygon offset prevents z-fighting with the ground plane at Y=0
     // while still letting the model occlude axis lines behind it.

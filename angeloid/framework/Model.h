@@ -7,8 +7,9 @@
 #include "core/anim/VmdPlayer.h"
 #include "core/anim/VpdLoader.h"
 #include "core/pmx/PmxModel.h"
+#include "framework/opengl/Renderable.h"
 #include "framework/opengl/ModelRenderer.h"
-#include "framework/opengl/debug/RigidBodyRenderer.h"
+#include "framework/opengl/scene/RigidBodyRenderer.h"
 
 #include <array>
 #include <filesystem>
@@ -20,7 +21,7 @@
 
 namespace mmd {
 
-class Model {
+class Model : public Renderable {
 public:
     Model() = default;
 
@@ -29,7 +30,21 @@ public:
 
     // --- Per-frame ---
     void update(float dt);
-    void draw(int screenWidth, int screenHeight);
+
+    // --- Renderable ---
+    const char* name() const override { return mPmx.name.c_str(); }
+    bool castShadow() const override { return true; }
+
+    void onShadowPass(const std::array<float, 16>& lightViewProj,
+                      const std::array<float, 16>& model) override;
+    void onMainPass(const std::array<float, 16>& proj,
+                    const std::array<float, 16>& view,
+                    const std::array<float, 16>& model,
+                    const std::array<float, 16>& lightViewProj,
+                    bool hasShadow) override;
+    void onDebugPass(const std::array<float, 16>& proj,
+                     const std::array<float, 16>& view,
+                     const std::array<float, 16>& model) override;
 
     // --- Physics ---
     void enablePhysics(bool on);
@@ -38,6 +53,9 @@ public:
     }
     void showRigidBodies(bool v) {
         mShowRigidBodies = v;
+    }
+    bool showRigidBodies() const {
+        return mShowRigidBodies;
     }
 
     // --- VMD animation ---
@@ -78,9 +96,6 @@ public:
     void showToon(bool v) {
         mRenderer.showToon = v;
     }
-    void showGround(bool v) {
-        mRenderer.showGround = v;
-    }
     bool showModel() const {
         return mRenderer.showModel;
     }
@@ -89,9 +104,6 @@ public:
     }
     bool showToon() const {
         return mRenderer.showToon;
-    }
-    bool showGround() const {
-        return mRenderer.showGround;
     }
     // --- LookAt ---
     void lookAt(int screenX, int screenY, int screenW, int screenH);
@@ -122,6 +134,8 @@ public:
     const float* modelMatrix() const {
         return mRenderer.modelMatrix();
     }
+    RigidBodyRenderer* physicsDebug();
+    PhysicsWorld* physicsWorld() { return &mPhysics; }
 
 private:
     void syncBoneTexture();
