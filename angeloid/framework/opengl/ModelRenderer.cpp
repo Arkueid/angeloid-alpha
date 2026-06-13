@@ -183,6 +183,15 @@ void ModelRenderer::buildMaterialBatches(const PmxModel& model) {
 
         indexOffset += mat.vertex_count;
     }
+
+    // DEBUG: dump per-material ambient colors
+    for (int i = 0; i < model.materialCount(); ++i) {
+        const auto& a = mMaterialAmbient[i];
+        const auto& diff = mMaterialColor[i];
+        const auto& tex = model.textures[model.materials[i].texture_index];
+        MMD_INFO("RENDER", " mat[%d] ambient=(%.3f,%.3f,%.3f) diffuse=(%.3f,%.3f,%.3f) tex=%s",
+                 i, a.x, a.y, a.z, diff.x, diff.y, diff.z, tex.c_str());
+    }
 }
 
 // --- Skinning ---
