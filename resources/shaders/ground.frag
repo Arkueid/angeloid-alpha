@@ -2,7 +2,7 @@
 
 in vec3 v_world_pos;
 
-uniform sampler2D u_shadowMap;
+uniform sampler2DShadow u_shadowMap;
 uniform mat4 u_lightViewProj;
 uniform bool u_hasShadow;
 
@@ -16,9 +16,10 @@ void main() {
         if (lightNdc.x > -1.0 && lightNdc.x < 1.0 &&
             lightNdc.y > -1.0 && lightNdc.y < 1.0) {
             vec2 uv = lightNdc.xy * 0.5 + 0.5;
-            float shadowDepth = texture(u_shadowMap, uv).r;
             float fragDepth = lightNdc.z * 0.5 + 0.5;
-            shadow = fragDepth - 0.003 <= shadowDepth ? 1.0 : 0.3;
+            // Hardware 4-tap PCF via sampler2DShadow + GL_LINEAR
+            float pcf = texture(u_shadowMap, vec3(uv, fragDepth - 0.003));
+            shadow = 0.3 + pcf * 0.7;
         }
     }
 

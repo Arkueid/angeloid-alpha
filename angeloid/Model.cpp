@@ -290,10 +290,10 @@ void Model::draw(int screenWidth, int screenHeight) {
                   fwd.x*r.y - fwd.y*r.x};
 
         // Orthographic projection (column-major)
-        float size = 6.0f;  // half-size of ortho frustum
-        float zn = dist - 5.0f, zf = dist + 5.0f;
+        float size = 3.0f;  // half-size of ortho frustum
+        float zn = dist - 2.0f, zf = dist + 2.0f;
         float sx = 1.0f / size, sy = 1.0f / size;
-        float sz = 2.0f / (zn - zf);
+        float sz = 2.0f / (zf - zn);
         float tz = -(zf + zn) / (zf - zn);
 
         // View (column-major): translate by -lp, then rotate by [r,u,fwd]

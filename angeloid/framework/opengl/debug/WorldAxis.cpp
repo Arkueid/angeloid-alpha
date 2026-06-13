@@ -2,7 +2,7 @@
 
 #include "framework/opengl/ShaderStandard.h"
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 #include <vector>
 
 // 6 floats per vertex: px,py,pz, cr,cg,cb

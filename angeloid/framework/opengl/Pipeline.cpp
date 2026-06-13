@@ -1,6 +1,6 @@
 #include "framework/opengl/Pipeline.h"
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 #include "core/anim/PhysicsWorld.h"
 #include "framework/opengl/RenderContext.h"
@@ -10,6 +10,8 @@
 #include "core/util/Log.h"
 
 namespace fs = std::filesystem;
+
+static constexpr int kShadowMapSize = 4096;
 
 Pipeline& Pipeline::instance() {
     static Pipeline p;
@@ -70,7 +72,7 @@ void Pipeline::resizeViewport(int w, int h) {
     mViewportW = w;
     mViewportH = h;
     if (mShadowProg)
-        mShadowMap.resize(w, h, false, true);  // depth-only
+        mShadowMap.resize(kShadowMapSize, kShadowMapSize, false, true);  // depth-only
 }
 
 void Pipeline::renderShadowPass(ModelRenderer& renderer, const FrameParams& p) {

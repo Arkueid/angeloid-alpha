@@ -2,7 +2,7 @@
 
 #include "framework/opengl/gpu/Texture.h"
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 #include <memory>
 
 // Wraps an FBO with color + depth attachments.

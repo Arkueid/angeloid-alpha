@@ -3,7 +3,7 @@
 #include "core/anim/BoneSkinning.h"
 #include "framework/opengl/gpu/Texture.h"
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 #include <memory>
 
 // Creates a GPU texture from CPU-side bone matrix data.

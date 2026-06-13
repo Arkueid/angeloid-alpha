@@ -15,7 +15,7 @@ uniform vec3 u_materialAmbient;
 uniform vec3 u_specularColor;
 uniform float u_specularFactor;
 
-uniform sampler2D u_shadowMap;
+uniform sampler2DShadow u_shadowMap;
 uniform mat4 u_lightViewProj;
 uniform bool u_hasShadow;
 
@@ -30,11 +30,12 @@ float shadowFactor() {
         return 1.0;
 
     vec2 uv = lightNdc.xy * 0.5 + 0.5;
-    float shadowDepth = texture(u_shadowMap, uv).r;
     float fragDepth = lightNdc.z * 0.5 + 0.5;
 
     float bias = 0.002;
-    return fragDepth - bias <= shadowDepth ? 1.0 : 0.5;
+    // Hardware 4-tap PCF via sampler2DShadow + GL_LINEAR
+    float pcf = texture(u_shadowMap, vec3(uv, fragDepth - bias));
+    return 0.5 + pcf * 0.5;
 }
 
 void main() {

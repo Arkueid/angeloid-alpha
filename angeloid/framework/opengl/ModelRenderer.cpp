@@ -9,7 +9,7 @@
 #include "framework/opengl/gpu/Shader.h"
 #include "core/util/Log.h"
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 #include <algorithm>
 #include <filesystem>
 #include <stb_image.h>
