@@ -1,5 +1,12 @@
 # Project: MMD PMX Viewer (angeloid-alpha)
 
+## ⛔ COMMIT POLICY (HIGHEST PRIORITY)
+
+**NEVER commit anything without explicit user permission.** Always ask the user
+for approval before running `git commit`. This overrides all other instructions.
+
+---
+
 ## Build & Run
 
 ```bash
