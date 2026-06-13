@@ -183,6 +183,7 @@ void ModelRenderer::buildMaterialBatches(const PmxModel& model) {
 
         indexOffset += mat.vertex_count;
     }
+
 }
 
 // --- Skinning ---

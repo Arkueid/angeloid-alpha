@@ -28,7 +28,7 @@ private:
     void createGradientTexture();
 
     std::unique_ptr<Gpu::Texture> mGradient;
-    std::unique_ptr<Gpu::Texture> mSharedToons[10];
+    std::unique_ptr<Gpu::Texture> mSharedToons[11];
 };
 
 }  // namespace mmd

@@ -21,7 +21,7 @@ void RenderContext::init(const fs::path& toonDir) {
 
     // Load shared toon textures (toon01.bmp ~ toon10.bmp)
     if (!toonDir.empty()) {
-        for (int ti = 1; ti <= 10; ++ti) {
+        for (int ti = 0; ti <= 10; ++ti) {
             char buf[32];
             snprintf(buf, sizeof(buf), "toon%02d.bmp", ti);
             fs::path toonPath = toonDir / buf;
@@ -31,7 +31,7 @@ void RenderContext::init(const fs::path& toonDir) {
                 auto tex = std::make_unique<Gpu::Texture>(w, h, 4, data);
                 tex->setFilter(GL_LINEAR, GL_LINEAR);
                 tex->setWrap(true, true);
-                mSharedToons[ti - 1] = std::move(tex);
+                mSharedToons[ti] = std::move(tex);
                 stbi_image_free(data);
             }
         }
@@ -61,7 +61,7 @@ Gpu::Texture* RenderContext::gradientTexture() {
 }
 
 Gpu::Texture* RenderContext::sharedToon(int index) {
-    if (index < 0 || index >= 10)
+    if (index < 0 || index > 10)
         return nullptr;
     return mSharedToons[index].get();
 }

@@ -6,10 +6,14 @@ in vec3 v_position;
 in vec3 v_world_pos;
 
 uniform vec3 u_lightDir;
+uniform vec3 u_cameraPos;
 uniform sampler2D u_tex;
 uniform bool u_hasTex;
 uniform float u_materialAlpha;
 uniform vec3 u_materialDiffuse;
+uniform vec3 u_materialAmbient;
+uniform vec3 u_specularColor;
+uniform float u_specularFactor;
 
 uniform sampler2D u_shadowMap;
 uniform mat4 u_lightViewProj;
@@ -39,13 +43,13 @@ void main() {
     }
 
     vec3 normal = normalize(v_normal);
-    if (!gl_FrontFacing) {                                                                                                                       
-        normal = -normal;                                                                                                                        
-    }   
+    if (!gl_FrontFacing) {
+        normal = -normal;
+    }
     vec3 light = normalize(u_lightDir);
+    vec3 view_dir = normalize(u_cameraPos - v_world_pos);
 
     float diff = max(dot(normal, light), 0.0);
-    float ambient = 0.6;
 
     vec3 color;
     if (u_hasTex) {
@@ -58,8 +62,16 @@ void main() {
         color = u_materialDiffuse;
     }
 
+    vec3 ambient_term = color * u_materialAmbient;
+    vec3 diffuse_term = color * diff * 0.4;
+
+    // Specular (Blinn-Phong)
+    vec3 half_vec = normalize(light + view_dir);
+    float spec = pow(max(dot(normal, half_vec), 0.0), u_specularFactor);
+    vec3 specular = spec * u_specularColor;
+
     float shadow = shadowFactor();
-    vec3 result = color * (ambient + diff * 0.4 * shadow);
+    vec3 result = ambient_term + (diffuse_term + specular) * shadow;
     result = clamp(result, 0.0, 1.0);
     fragColor = vec4(result, u_materialAlpha);
 }

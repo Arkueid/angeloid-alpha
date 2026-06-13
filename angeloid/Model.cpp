@@ -291,7 +291,7 @@ void Model::draw(int screenWidth, int screenHeight) {
 
         // Orthographic projection (column-major)
         float size = 6.0f;  // half-size of ortho frustum
-        float zn = 0.1f, zf = 50.0f;
+        float zn = dist - 5.0f, zf = dist + 5.0f;
         float sx = 1.0f / size, sy = 1.0f / size;
         float sz = 2.0f / (zn - zf);
         float tz = -(zf + zn) / (zf - zn);

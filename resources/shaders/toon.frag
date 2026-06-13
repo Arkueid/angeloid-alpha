@@ -9,11 +9,12 @@ uniform vec3 u_lightDir;
 uniform vec3 u_cameraPos;
 uniform sampler2D u_tex;
 uniform bool u_hasTex;
-uniform sampler2D u_gradientMap;
 uniform float u_materialAlpha;
 uniform vec3 u_materialDiffuse;
+uniform vec3 u_materialAmbient;
+uniform vec3 u_specularColor;
+uniform float u_specularFactor;
 
-uniform float u_shadowThresh;
 uniform float u_rimPower;
 uniform vec3 u_rimColor;
 
@@ -74,6 +75,8 @@ void main() {
         float toon_uv_y = (1.0 - NdotL) * 0.5;
         vec3 toon_color = texture(u_toonTex, vec2(0.5, toon_uv_y)).rgb;
         shaded_color = base_color * toon_color;
+        // Ambient floor prevents dark collapse when NdotL < 0
+        shaded_color = max(shaded_color, base_color * u_materialAmbient);
     } else {
         shaded_color = base_color * (0.6 + NdotL * 0.4);
     }
@@ -90,11 +93,16 @@ void main() {
         shaded_color = shaded_color * sphere_color;
     }
 
+    // Specular (Blinn-Phong)
+    vec3 half_vec = normalize(light + view_dir);
+    float spec = pow(max(dot(normal, half_vec), 0.0), u_specularFactor);
+    vec3 specular = spec * u_specularColor;
+
     float rim = pow(1.0 - max(dot(view_dir, normal), 0.0), u_rimPower);
     vec3 rim_contribution = rim * u_rimColor * 0.5;
 
     float shadow = shadowFactor();
-    vec3 result = (shaded_color + rim_contribution) * shadow;
+    vec3 result = (shaded_color + specular + rim_contribution) * shadow;
     result = clamp(result, 0.0, 1.0);
 
     fragColor = vec4(result, tex_color.a * u_materialAlpha);
