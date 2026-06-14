@@ -13,7 +13,6 @@ if(MSVC)
 endif()
 
 set(ENABLE_STACKTRACE ON CACHE BOOL "Enable crash stack trace via backward-cpp" FORCE)
-set(BUILD_VIEWER OFF CACHE BOOL "Build viewer")
 
 if(ENABLE_STACKTRACE)
     add_subdirectory(thirdparty/backward-cpp)
@@ -21,6 +20,4 @@ endif()
 
 add_subdirectory(angeloid)
 
-if(BUILD_VIEWER)
-    add_subdirectory(viewer)
-endif()
+add_subdirectory(viewer)
