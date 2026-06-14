@@ -12,6 +12,7 @@ Texture::Texture(int w, int h, int comps, const void* data, GLenum dtype)
     GLenum fmt = formatFromComps(comps, isFloat);
 
     glTexImage2D(GL_TEXTURE_2D, 0, ifmt, width, height, 0, fmt, dtype, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 Texture::~Texture() {

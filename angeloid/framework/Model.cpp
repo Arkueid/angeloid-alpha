@@ -143,45 +143,19 @@ void Model::update(float dt) {
     bool bonesChanged = vmdUpdated || mLookAtEnabled;
 
     if (vmdUpdated || !mClearVmd || mLookAtEnabled) {
-        static int rebuildFrame = 0;
-        ++rebuildFrame;
-        MMD_DEBUG("LOOKAT", "rebuild poseWorld frame=%d (vmd=%d clear=%d lookAt=%d)", rebuildFrame,
-                  (int)vmdUpdated, (int)!mClearVmd, (int)mLookAtEnabled);
-        mVmdBoneCache.clear();
-        for (const auto& bone : mPmx.bones) {
-            std::array<float, 3> pos;
-            std::array<float, 4> rot;
-            if (mVmdMixer->getBoneTransform(bone.name, pos, rot))
-                mVmdBoneCache[bone.name] = {pos, rot};
-        }
-
-        if (!mVmdBoneCache.empty()) {
+        // Single pass: query VmdMixer inline instead of building mVmdBoneCache first
+        if (mVmdMixer->playing() || mLookAtEnabled) {
             if (mActiveVpdId >= 0) {
                 for (auto& [id, poses] : mVpdPoses) {
                     if (id == mActiveVpdId) {
-                        mPoseWorld =
-                            BoneSkinning::computePoseWorldMatrices(mPmx, poses, mVmdBoneCache);
+                        mPoseWorld = BoneSkinning::computePoseWorldMatrices(
+                            mPmx, poses, *mVmdMixer);
                         break;
                     }
                 }
-            }
-            else {
-                mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, {}, mVmdBoneCache);
-            }
-        }
-        else if (mLookAtEnabled) {
-            // Rebuild pose world from VPD-only (no VMD) so lookAt always
-            // starts from the canonical pose each frame.
-            if (mActiveVpdId >= 0) {
-                for (auto& [id, poses] : mVpdPoses) {
-                    if (id == mActiveVpdId) {
-                        mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, poses);
-                        break;
-                    }
-                }
-            }
-            else {
-                mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx);
+            } else {
+                mPoseWorld = BoneSkinning::computePoseWorldMatrices(
+                    mPmx, {}, *mVmdMixer);
             }
         }
         mVmdMorphCache.clear();
@@ -213,6 +187,7 @@ void Model::update(float dt) {
         }
         bonesChanged = true;
 
+#ifndef NDEBUG
         static int checkFrame = 0;
         if (++checkFrame % 60 == 0) {
             int nanCount = 0;
@@ -229,6 +204,7 @@ void Model::update(float dt) {
                           (int)mPoseWorld.size());
             }
         }
+#endif
         // Periodic physics analysis (press F to dump manually via debugDump instead)
         // static int dumpFrame = 0;
         // if (++dumpFrame % 120 == 0) {

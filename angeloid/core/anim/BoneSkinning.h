@@ -20,6 +20,7 @@ struct SkinningVertexData {
 };
 
 struct VpdPose;
+class VmdMixer;
 
 // VMD bone transform: (position vec3, rotation quat)
 using VmdBoneTransform = std::pair<std::array<float, 3>, std::array<float, 4>>;
@@ -37,10 +38,15 @@ struct BoneSkinning {
     static std::vector<std::array<float, 16>> computePoseWorldMatrices(const PmxModel& model);
     static std::vector<std::array<float, 16>> computePoseWorldMatrices(
         const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses);
+    // With pre-built VMD transform cache (legacy)
     static std::vector<std::array<float, 16>> computePoseWorldMatrices(
         const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses,
         const std::unordered_map<
             std::string, std::pair<std::array<float, 3>, std::array<float, 4>>>& vmdTransforms);
+    // With VmdMixer directly — avoids building intermediate cache (single pass)
+    static std::vector<std::array<float, 16>> computePoseWorldMatrices(
+        const PmxModel& model, const std::unordered_map<std::string, VpdPose>& vpdPoses,
+        VmdMixer& vmdMixer);
 
     static std::vector<float> computeSkinningMatrices(const PmxModel& model);
     static std::vector<float> computeSkinningMatrices(

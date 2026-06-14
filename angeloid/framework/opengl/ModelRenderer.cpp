@@ -119,7 +119,7 @@ void ModelRenderer::loadTextures(const std::filesystem::path& textureDir) {
 
         if (data) {
             auto tex = std::make_unique<Gpu::Texture>(w, h, 4, data);
-            tex->setFilter(GL_LINEAR, GL_LINEAR);
+            tex->setFilter(GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR);
             tex->setWrap(true, true);
             mTextures.push_back(std::move(tex));
             stbi_image_free(data);

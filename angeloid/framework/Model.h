@@ -169,7 +169,6 @@ private:
 
     std::unordered_map<std::string, float> mSavedWeights;
 
-    std::unordered_map<std::string, std::pair<std::array<float, 3>, std::array<float, 4>>> mVmdBoneCache;
     std::unordered_map<std::string, float> mVmdMorphCache;
 
     // LookAt state

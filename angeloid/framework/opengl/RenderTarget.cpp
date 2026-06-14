@@ -36,8 +36,8 @@ void RenderTarget::resize(int w, int h, bool withColor, bool withDepth) {
     if (withDepth) {
         glGenTextures(1, &mDepthTex);
         glBindTexture(GL_TEXTURE_2D, mDepthTex);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, w, h, 0,
-                     GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0,
+                     GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
