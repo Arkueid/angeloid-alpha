@@ -35,7 +35,7 @@ float shadowFactor() {
 
     float bias = 0.002;
     // Hardware 4-tap PCF (sampler2DShadow + bilinear)
-    float pcf = texture(u_shadowMap, vec4(uv, 0.0, fragDepth - bias));
+    float pcf = texture(u_shadowMap, vec3(uv, fragDepth - bias));
     return 0.5 + pcf * 0.5;
 }
 
