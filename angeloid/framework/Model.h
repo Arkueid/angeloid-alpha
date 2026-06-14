@@ -164,7 +164,8 @@ private:
     bool mIdleEnabled = true;
     float mIdleTime = 0;
     bool mShowRigidBodies = false;
-    bool mClearVmd = false; // if true, skip VMD updates
+    bool mBoneDirty = true; // true at load; cleared after GPU upload
+    bool mClearVmd = false;  // if true, skip VMD updates
 
     std::unordered_map<std::string, float> mSavedWeights;
 

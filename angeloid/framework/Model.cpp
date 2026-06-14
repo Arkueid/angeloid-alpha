@@ -79,6 +79,7 @@ void Model::applyVpd(int vpdId) {
             mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, poses);
             if (mPhysics.enabled)
                 mPhysics.resetPhysics(mPoseWorld);
+            mBoneDirty = true;
             syncBoneTexture();
             return;
         }
@@ -96,6 +97,7 @@ void Model::resetPose() {
     mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx);
     if (mPhysics.enabled)
         mPhysics.resetPhysics(mPoseWorld);
+    mBoneDirty = true;
     syncBoneTexture();
 }
 
@@ -110,12 +112,14 @@ void Model::syncVpdPose() {
             if (id == mActiveVpdId) {
                 MMD_INFO("MODEL", "VPD pose sync [id=%d]", id);
                 mPoseWorld = BoneSkinning::computePoseWorldMatrices(mPmx, poses);
+                mBoneDirty = true;
                 syncBoneTexture();
                 return;
             }
     }
     MMD_INFO("MODEL", "VPD pose sync: no active VPD, using bind pose");
     mPoseWorld = mBindPoseWorld;
+    mBoneDirty = true;
     syncBoneTexture();
 }
 
@@ -136,6 +140,8 @@ void Model::removeVpd(int vpdId) {
 //   4. GPU sync:  pack pose world matrices into bone texture for vertex shader skinning
 void Model::update(float dt) {
     bool vmdUpdated = mVmdMixer->update(dt);
+    bool bonesChanged = vmdUpdated || mLookAtEnabled;
+
     if (vmdUpdated || !mClearVmd || mLookAtEnabled) {
         static int rebuildFrame = 0;
         ++rebuildFrame;
@@ -205,6 +211,7 @@ void Model::update(float dt) {
                 }
             BoneSkinning::recomputeAfterPhysicsBones(mPmx, *activeVpd, mPoseWorld);
         }
+        bonesChanged = true;
 
         static int checkFrame = 0;
         if (++checkFrame % 60 == 0) {
@@ -235,6 +242,7 @@ void Model::update(float dt) {
     }
 
     // --- Upload bone matrices to GPU ---
+    mBoneDirty = mBoneDirty || bonesChanged;
     syncBoneTexture();
 }
 
@@ -425,6 +433,7 @@ void Model::setMorphWeights(const std::unordered_map<std::string, float>& weight
 }
 
 void Model::syncBoneTexture() {
+    if (!mBoneDirty) return;
     auto skinMatrices = BoneSkinning::computeSkinningMatrices(
         mPoseWorld, mInvBindPoseWorld, mPmx.boneCount());
     auto& bm = mMorphCtl.boneMorphs();
@@ -432,6 +441,7 @@ void Model::syncBoneTexture() {
         BoneSkinning::applyBoneMorphs(skinMatrices, mPmx.boneCount(), bm, mRenderer.modelScale());
     auto data = BoneSkinning::packBoneMatrices(skinMatrices, mPmx.boneCount());
     mRenderer.uploadBoneData(data.pixels.data(), data.pixels.size() * sizeof(float));
+    mBoneDirty = false;
 }
 
 void Model::syncMorphOffsets() {
