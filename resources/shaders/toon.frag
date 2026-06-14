@@ -40,8 +40,11 @@ float shadowFactor() {
     vec2 uv = lightNdc.xy * 0.5 + 0.5;
     float fragDepth = lightNdc.z * 0.5 + 0.5;
     fragDepth = clamp(fragDepth, 0.0, 1.0);
-    float bias = 0.002;
-    // Hardware 4-tap PCF (sampler2DShadow + bilinear)
+
+    // Slope-scale bias: surfaces at grazing angle to light need larger offset
+    float NdotL = abs(dot(normalize(v_normal), normalize(u_lightDir)));
+    float bias = max(0.005 * (1.0 - NdotL), 0.001);
+    // Hardware 4-tap PCF (sampler2DShadow + GL_LINEAR filtering)
     float pcf = texture(u_shadowMap, vec3(uv, fragDepth - bias));
     return 0.5 + pcf * 0.5;
 }
@@ -52,9 +55,9 @@ void main() {
     }
 
     vec3 normal = normalize(v_normal);
-    if (!gl_FrontFacing) {                                                                                                                       
-        normal = -normal;                                                                                                                        
-    }   
+    if (!gl_FrontFacing) {
+        normal = -normal;
+    }
     vec3 light = normalize(u_lightDir);
     vec3 view_dir = normalize(u_cameraPos - v_world_pos);
 
