@@ -16,6 +16,8 @@ Angeloid Alpha is a pure C++20 MMD PMX model renderer. Features GPU skeletal ski
 
 ![preview](./docs/assets/preview.gif)
 
+![preview2](./docs/assets/Snipaste_2026-06-14_17-55-29.png)
+
 ## Quick Start
 
 ```bash

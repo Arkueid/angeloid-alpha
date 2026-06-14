@@ -16,6 +16,8 @@ Angeloid Alpha 是一个 MMD PMX 模型渲染器，纯 C++20 实现。支持 GPU
 
 ![preview](./docs/assets/preview.gif)
 
+![preview2](./docs/assets/Snipaste_2026-06-14_17-55-29.png)
+
 ## 快速开始
 
 ```bash
