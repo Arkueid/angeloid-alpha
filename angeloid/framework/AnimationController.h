@@ -81,6 +81,7 @@ private:
 
     std::unique_ptr<VmdMixer> mVmdMixer;
     std::unordered_map<std::string, std::pair<std::array<float, 3>, std::array<float, 4>>> mVmdBoneCache;
+    bool mFrameSeeked = false;
     std::deque<VmdAnimation> mVmdAnimations;
 
     std::vector<std::pair<int, VpdPoseMap>> mVpdPoses;

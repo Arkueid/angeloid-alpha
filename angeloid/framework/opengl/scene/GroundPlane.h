@@ -14,11 +14,7 @@ public:
     const char* name() const override { return "Ground"; }
     bool castShadow() const override { return false; }
 
-    void onMainPass(const std::array<float, 16>& proj,
-                    const std::array<float, 16>& view,
-                    const std::array<float, 16>& model,
-                    const std::array<float, 16>& lightViewProj,
-                    bool hasShadow) override;
+    void onMainPass(const MainPassParams& mp) override;
 
 private:
     GLuint mVao = 0;

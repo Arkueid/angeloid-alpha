@@ -7,7 +7,7 @@ public:
     ImGuiManager() = default;
     ~ImGuiManager();
 
-    bool init(GLFWwindow* window);
+    bool init(GLFWwindow* window, const char* cjkFontPath = nullptr);
     void beginFrame();
     void endFrame();
     void shutdown();

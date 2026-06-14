@@ -25,20 +25,16 @@ GroundPlane::GroundPlane() {
     glBindVertexArray(0);
 }
 
-void GroundPlane::onMainPass(const std::array<float, 16>& proj,
-                             const std::array<float, 16>& view,
-                             const std::array<float, 16>& /*model*/,
-                             const std::array<float, 16>& lightViewProj,
-                             bool hasShadow) {
+void GroundPlane::onMainPass(const MainPassParams& mp) {
     auto* shader = ShaderManager::instance().ground();
     if (!shader) return;
 
     shader->use();
-    shader->setMat4(U_PROJ_MAT, proj.data());
-    shader->setMat4(U_VIEW_MAT, view.data());
-    if (hasShadow) {
+    shader->setMat4(U_PROJ_MAT, mp.proj.data());
+    shader->setMat4(U_VIEW_MAT, mp.view.data());
+    if (mp.hasShadow) {
         shader->setInt("u_shadowMap", 5);
-        shader->setMat4("u_lightViewProj", lightViewProj.data());
+        shader->setMat4("u_lightViewProj", mp.lightViewProj.data());
         shader->setInt("u_hasShadow", 1);
     } else {
         shader->setInt("u_hasShadow", 0);

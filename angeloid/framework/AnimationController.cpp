@@ -22,7 +22,9 @@ AnimationController::UpdateResult AnimationController::update(
     result.bonesChanged = vmdUpdated;
 
     if (vmdUpdated || !mClearVmd) {
-        if (mVmdMixer->playing()) {
+        bool needCompute = mVmdMixer->playing() || mFrameSeeked;
+        if (needCompute) {
+            mFrameSeeked = false;
             mVmdBoneCache.clear();
             for (const auto& bone : pmx.bones) {
                 std::array<float, 3> pos;
@@ -33,11 +35,14 @@ AnimationController::UpdateResult AnimationController::update(
             if (!mVmdBoneCache.empty())
                 computePoseWorld(pmx, outPoseWorld);
         }
-        result.vmdMorphWeights.clear();
-        for (const auto& m : pmx.morphs) {
-            float w = mVmdMixer->getMorphWeight(m.name);
-            if (w != 0)
-                result.vmdMorphWeights[m.name] = w;
+        // Only collect VMD morphs when playing/seeking; otherwise
+        // clearMorphs() would be immediately overwritten next frame
+        if (needCompute) {
+            for (const auto& m : pmx.morphs) {
+                float w = mVmdMixer->getMorphWeight(m.name);
+                if (w != 0)
+                    result.vmdMorphWeights[m.name] = w;
+            }
         }
     }
 
@@ -131,11 +136,12 @@ float AnimationController::vmdCurrentFrame(int trackId) const {
     return mVmdMixer ? mVmdMixer->currentFrame(trackId) : 0;
 }
 float AnimationController::vmdMaxFrame(int trackId) const {
-    return vmdCurrentFrame(trackId);
+    return mVmdMixer ? mVmdMixer->maxFrame(trackId) : 0;
 }
 
 void AnimationController::setVmdFrame(int trackId, float frame) {
     mVmdMixer->setFrame(trackId, frame);
+    mFrameSeeked = true;
 }
 
 // --- VPD ---

@@ -450,17 +450,15 @@ void RigidBodyRenderer::updateFromPhysics() {
     }
 }
 
-void RigidBodyRenderer::onDebugPass(const std::array<float, 16>& proj,
-                                    const std::array<float, 16>& view,
-                                    const std::array<float, 16>& /*model*/) {
+void RigidBodyRenderer::onDebugPass(const DebugPassParams& dp) {
     updateFromPhysics();
 
     auto* s = ShaderManager::instance().rigidBody();
     if (!s) return;
 
     s->use();
-    s->setMat4(U_PROJ_MAT, proj.data());
-    s->setMat4(U_VIEW_MAT, view.data());
+    s->setMat4(U_PROJ_MAT, dp.proj.data());
+    s->setMat4(U_VIEW_MAT, dp.view.data());
     s->setMat4(U_MODEL_MAT, mModelMat);
 
     bool hasPhysics = (mRbPhysics.vertexCount > 0);

@@ -69,17 +69,15 @@ WorldAxis::WorldAxis() {
     Gpu::Vao::unbind();
 }
 
-void WorldAxis::onDebugPass(const std::array<float, 16>& proj,
-                            const std::array<float, 16>& view,
-                            const std::array<float, 16>& /*model*/) {
+void WorldAxis::onDebugPass(const DebugPassParams& dp) {
     auto* shader = ShaderManager::instance().axis();
     if (!shader) return;
 
     float identity[] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
 
     shader->use();
-    shader->setMat4(U_PROJ_MAT, proj.data());
-    shader->setMat4(U_VIEW_MAT, view.data());
+    shader->setMat4(U_PROJ_MAT, dp.proj.data());
+    shader->setMat4(U_VIEW_MAT, dp.view.data());
     shader->setMat4(U_MODEL_MAT, identity);
 
     // Polygon offset prevents z-fighting with the ground plane at Y=0

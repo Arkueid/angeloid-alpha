@@ -34,17 +34,11 @@ public:
     // --- Renderable ---
     const char* name() const override { return mPmx.name.c_str(); }
     bool castShadow() const override { return true; }
+    bool shadowBounds(Vec3& outMin, Vec3& outMax) const override;
 
-    void onShadowPass(const std::array<float, 16>& lightViewProj,
-                      const std::array<float, 16>& model) override;
-    void onMainPass(const std::array<float, 16>& proj,
-                    const std::array<float, 16>& view,
-                    const std::array<float, 16>& model,
-                    const std::array<float, 16>& lightViewProj,
-                    bool hasShadow) override;
-    void onDebugPass(const std::array<float, 16>& proj,
-                     const std::array<float, 16>& view,
-                     const std::array<float, 16>& model) override;
+    void onShadowPass(const ShadowPassParams& sp) override;
+    void onMainPass(const MainPassParams& mp) override;
+    void onDebugPass(const DebugPassParams& dp) override;
 
     // --- Physics ---
     void enablePhysics(bool on);
@@ -124,11 +118,8 @@ public:
     const float* modelMatrix() const {
         return mRenderer.modelMatrix();
     }
-    void worldAABB(Vec3& outMin, Vec3& outMax) const {
-        mRenderer.worldAABB(outMin, outMax);
-    }
-    RigidBodyRenderer* physicsDebug();
     PhysicsWorld* physicsWorld() { return &mPhysics; }
+    RigidBodyRenderer* physicsDebug();
 
 private:
     void syncBoneTexture();

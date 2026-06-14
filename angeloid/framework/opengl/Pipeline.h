@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/math/VecMath.h"
 #include "framework/opengl/RenderTarget.h"
 
 #include <array>
@@ -22,20 +23,23 @@ public:
     void addRenderable(Renderable* item);
     void removeRenderable(Renderable* item);
 
-    // ── Per-frame ──
-    // sceneMin/Max: world-space AABB of shadow casters (pass nullptr for defaults)
-    void computeLightMatrix(const float* lightDir,
-                            const float* sceneMin = nullptr,
-                            const float* sceneMax = nullptr);
-    void execute(const std::array<float, 16>& proj,
-                 const std::array<float, 16>& view);
+    // ── Per-frame: resize + light + execute in one call ──
+    void render(int screenW, int screenH);
 
-    void resizeViewport(int w, int h);
+    bool showSelfShadow = true;
+    bool showGroundShadow = true;
+    float lightDir[3] = {0.3f, 0.8f, 0.5f};
 
 private:
     Pipeline() = default;
 
     void renderShadowPass();
+    void resizeViewport(int w, int h);
+    void computeLightMatrix(const float* lightDir,
+                            const float* sceneMin, const float* sceneMax);
+    void execute(const std::array<float, 16>& proj,
+                 const std::array<float, 16>& view);
+    bool collectShadowBounds(Vec3& outMin, Vec3& outMax) const;
 
     std::vector<Renderable*> mItems;
 

@@ -1,8 +1,10 @@
 #include "framework/opengl/Pipeline.h"
 
 #include <glad/glad.h>
+#include "framework/Camera.h"
 #include <cmath>
 
+#include "core/math/VecMath.h"
 #include "framework/opengl/Renderable.h"
 #include "framework/opengl/ShaderManager.h"
 
@@ -32,16 +34,45 @@ void Pipeline::removeRenderable(Renderable* item) {
         mItems.erase(it);
 }
 
+bool Pipeline::collectShadowBounds(Vec3& outMin, Vec3& outMax) const {
+    outMin = {1e9f, 1e9f, 1e9f};
+    outMax = {-1e9f, -1e9f, -1e9f};
+    bool has = false;
+    for (size_t i = 0; i < mItems.size(); ++i) {
+        auto* item = mItems[i];
+        Vec3 mn, mx;
+        if (item->castShadow() && item->shadowBounds(mn, mx)) {
+            outMin.x = std::min(outMin.x, mn.x);
+            outMin.y = std::min(outMin.y, mn.y);
+            outMin.z = std::min(outMin.z, mn.z);
+            outMax.x = std::max(outMax.x, mx.x);
+            outMax.y = std::max(outMax.y, mx.y);
+            outMax.z = std::max(outMax.z, mx.z);
+            has = true;
+        }
+    }
+    return has;
+}
+
+void Pipeline::render(int screenW, int screenH) {
+    resizeViewport(screenW, screenH);
+    Vec3 smin, smax;
+    bool has = collectShadowBounds(smin, smax);
+    computeLightMatrix(lightDir, has ? &smin.x : nullptr, has ? &smax.x : nullptr);
+    auto proj = Camera::projectionMatrix(screenW, screenH);
+    auto view = Camera::instance().viewMatrix();
+    execute(proj, view);
+}
+
 void Pipeline::resizeViewport(int w, int h) {
     mViewportW = w;
     mViewportH = h;
 }
 
-void Pipeline::computeLightMatrix(const float* lightDir,
+void Pipeline::computeLightMatrix(const float* ldir,
                                    const float* sceneMin,
                                    const float* sceneMax) {
-    // Normalize light direction
-    float lx = lightDir[0], ly = lightDir[1], lz = lightDir[2];
+    float lx = ldir[0], ly = ldir[1], lz = ldir[2];
     float len = std::sqrt(lx*lx + ly*ly + lz*lz);
     lx /= len; ly /= len; lz /= len;
 
@@ -64,7 +95,8 @@ void Pipeline::computeLightMatrix(const float* lightDir,
 
     // Compute light-space AABB from scene bounds (or use defaults)
     float lsMinX, lsMaxX, lsMinY, lsMaxY, lsMinZ, lsMaxZ;
-    if (sceneMin && sceneMax) {
+    bool hasBounds = sceneMin[0] != sceneMax[0];  // non-zero range = has data
+    if (hasBounds) {
         lsMinX = 1e9f; lsMaxX = -1e9f;
         lsMinY = 1e9f; lsMaxY = -1e9f;
         lsMinZ = 1e9f; lsMaxZ = -1e9f;
@@ -131,15 +163,18 @@ void Pipeline::renderShadowPass() {
     glClear(GL_DEPTH_BUFFER_BIT);
     glDepthFunc(GL_LESS);
 
+    ShadowPassParams sp{mLightViewProj, kIdentity};
     for (auto* item : mItems) {
         if (!item->visible || !item->castShadow()) continue;
-        item->onShadowPass(mLightViewProj, kIdentity);
+        item->onShadowPass(sp);
     }
 }
 
 void Pipeline::execute(const std::array<float, 16>& proj,
                        const std::array<float, 16>& view) {
-    renderShadowPass();
+    bool anyShadow = showSelfShadow || showGroundShadow;
+    if (anyShadow)
+        renderShadowPass();
     RenderTarget::bindScreen(mViewportW, mViewportH);
 
     // ── Frame setup ──
@@ -152,17 +187,23 @@ void Pipeline::execute(const std::array<float, 16>& proj,
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // ── Main pass (ground + model) ──
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, mShadowMap.depthTex());
+    if (anyShadow) {
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, mShadowMap.depthTex());
+    }
 
+    std::array<float, 3> ldir = {lightDir[0], lightDir[1], lightDir[2]};
+    MainPassParams mp{proj, view, kIdentity, mLightViewProj, ldir, false};
     for (auto* item : mItems) {
         if (!item->visible) continue;
-        item->onMainPass(proj, view, kIdentity, mLightViewProj, true);
+        mp.hasShadow = item->castShadow() ? showSelfShadow : showGroundShadow;
+        item->onMainPass(mp);
     }
 
     // ── Debug pass (axis + physics) ──
+    DebugPassParams dp{proj, view, kIdentity};
     for (auto* item : mItems) {
         if (!item->visible) continue;
-        item->onDebugPass(proj, view, kIdentity);
+        item->onDebugPass(dp);
     }
 }

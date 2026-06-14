@@ -69,6 +69,9 @@ public:
     float currentFrame() const {
         return mCurrentFrame;
     }
+    float maxFrame() const {
+        return mAnimation ? (float)mAnimation->maxFrame : 0;
+    }
     bool playing() const {
         return mPlaying;
     }
@@ -118,6 +121,7 @@ public:
     float getMorphWeight(const std::string& morphName) const;
 
     float currentFrame(int trackId) const;
+    float maxFrame(int trackId) const;
     bool  playing(int trackId) const;
     int   trackCount() const {
         return (int)mPlayStates.size();

@@ -37,6 +37,11 @@ void Model::load(const std::filesystem::path& pmxPath) {
     mLookAtCtrl.setup(mPmx);
 }
 
+bool Model::shadowBounds(Vec3& outMin, Vec3& outMax) const {
+    mRenderer.worldAABB(outMin, outMax);
+    return true;
+}
+
 void Model::applyVpdPost() {
     if (mPhysics.enabled)
         mPhysics.resetPhysics(mPoseWorld);
@@ -103,8 +108,7 @@ void Model::update(float dt) {
     syncBoneTexture();
 }
 
-void Model::onShadowPass(const std::array<float, 16>& lightViewProj,
-                         const std::array<float, 16>& /*model*/) {
+void Model::onShadowPass(const ShadowPassParams& sp) {
     if (!mRenderer.showModel) return;
 
     syncMorphOffsets();
@@ -116,14 +120,10 @@ void Model::onShadowPass(const std::array<float, 16>& lightViewProj,
 
     auto* shadowProg = ShaderManager::instance().shadow();
     if (shadowProg)
-        mRenderer.renderDepthPass(*shadowProg, lightViewProj, mRenderer.modelMatrix());
+        mRenderer.renderDepthPass(*shadowProg, sp.lightViewProj, mRenderer.modelMatrix());
 }
 
-void Model::onMainPass(const std::array<float, 16>& proj,
-                       const std::array<float, 16>& view,
-                       const std::array<float, 16>& /*model*/,
-                       const std::array<float, 16>& lightViewProj,
-                       bool hasShadow) {
+void Model::onMainPass(const MainPassParams& mp) {
     if (!mRenderer.showModel) return;
     const float* mm = mRenderer.modelMatrix();
 
@@ -132,7 +132,7 @@ void Model::onMainPass(const std::array<float, 16>& proj,
     if (mRenderer.showOutline) {
         auto* outlineProg = sm.outline();
         if (outlineProg)
-            mRenderer.renderMorphOutlinePass(*outlineProg, proj, view, mm);
+            mRenderer.renderMorphOutlinePass(*outlineProg, mp.proj, mp.view, mm);
     }
 
     auto* mainProg = mRenderer.showToon ? sm.toon() : sm.main();
@@ -140,15 +140,15 @@ void Model::onMainPass(const std::array<float, 16>& proj,
 
     mainProg->use();
 
-    if (hasShadow) {
+    if (mp.hasShadow) {
         mainProg->setInt("u_shadowMap", 5);
-        mainProg->setMat4("u_lightViewProj", lightViewProj.data());
+        mainProg->setMat4("u_lightViewProj", mp.lightViewProj.data());
         mainProg->setInt("u_hasShadow", 1);
     } else {
         mainProg->setInt("u_hasShadow", 0);
     }
 
-    mainProg->setVec3(U_LIGHT_DIR, 0.3f, 0.8f, 0.5f);
+    mainProg->setVec3(U_LIGHT_DIR, mp.lightDir[0], mp.lightDir[1], mp.lightDir[2]);
 
     if (mRenderer.showToon) {
         float camPos[3];
@@ -163,16 +163,14 @@ void Model::onMainPass(const std::array<float, 16>& proj,
         glBindTexture(GL_TEXTURE_2D, ctx.gradientTexture()->id);
     }
 
-    mRenderer.renderMorphMainPass(*mainProg, proj, view, mm);
+    mRenderer.renderMorphMainPass(*mainProg, mp.proj, mp.view, mm);
 }
 
-void Model::onDebugPass(const std::array<float, 16>& proj,
-                        const std::array<float, 16>& view,
-                        const std::array<float, 16>& model) {
+void Model::onDebugPass(const DebugPassParams& dp) {
     if (mShowRigidBodies) {
         auto* dbg = physicsDebug();
         if (dbg)
-            dbg->onDebugPass(proj, view, model);
+            dbg->onDebugPass(dp);
     }
 }
 

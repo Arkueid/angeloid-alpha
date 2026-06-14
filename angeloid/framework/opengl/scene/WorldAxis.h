@@ -13,9 +13,7 @@ public:
 
     const char* name() const override { return "Axis"; }
 
-    void onDebugPass(const std::array<float, 16>& proj,
-                     const std::array<float, 16>& view,
-                     const std::array<float, 16>& model) override;
+    void onDebugPass(const DebugPassParams& dp) override;
 
     bool showAxis = true;
     bool showGrid = true;

@@ -1,5 +1,7 @@
 #include "imgui/ImGuiManager.h"
 
+#include <filesystem>
+
 #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -14,20 +16,34 @@ ImGuiManager::~ImGuiManager() {
     shutdown();
 }
 
-bool ImGuiManager::init(GLFWwindow* window) {
+bool ImGuiManager::init(GLFWwindow* window, const char* cjkFontPath) {
     mWindow = window;
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 
     ImGuiIO& io = ImGui::GetIO();
-    io.IniFilename = nullptr;   // no .ini file for now
+    io.IniFilename = nullptr;
 
     ImGui::StyleColorsDark();
 
-    // Scale up from default ~13px to a comfortable size
-    ImGui::GetStyle().ScaleAllSizes(2.0f);
-    io.FontGlobalScale = 2.0f;
+    // CJK font: covers Latin, Japanese (Hiragana/Katakana), Chinese ideographs
+    static const ImWchar cjkRanges[] = {
+        0x0020, 0x00FF,  // Basic Latin + Latin Supplement
+        0x2000, 0x206F,  // General Punctuation
+        0x3000, 0x303F,  // CJK Symbols and Punctuation
+        0x3040, 0x309F,  // Hiragana
+        0x30A0, 0x30FF,  // Katakana
+        0x4E00, 0x9FFF,  // CJK Unified Ideographs
+        0xFF00, 0xFFEF,  // Halfwidth and Fullwidth Forms
+        0,
+    };
+    float xscale, yscale;
+    glfwGetWindowContentScale(window, &xscale, &yscale);
+    float fontSize = 13.0f * yscale;
+    if (cjkFontPath && std::filesystem::exists(cjkFontPath))
+        io.Fonts->AddFontFromFileTTF(cjkFontPath, fontSize, nullptr, cjkRanges);
+    ImGui::GetStyle().ScaleAllSizes(yscale);
 
     // false = don't install GLFW callbacks; we forward manually
     if (!ImGui_ImplGlfw_InitForOpenGL(window, false))

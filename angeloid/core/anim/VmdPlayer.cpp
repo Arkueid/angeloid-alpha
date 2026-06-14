@@ -379,6 +379,13 @@ float VmdMixer::currentFrame(int trackId) const {
     return 0;
 }
 
+float VmdMixer::maxFrame(int trackId) const {
+    for (auto& p : mPlayStates)
+        if (p.mTrackId == trackId)
+            return p.maxFrame();
+    return 0;
+}
+
 bool VmdMixer::playing(int trackId) const {
     for (auto& p : mPlayStates)
         if (p.mTrackId == trackId)
