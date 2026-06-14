@@ -85,9 +85,6 @@ void Pipeline::renderShadowPass() {
     auto* shadowProg = ShaderManager::instance().shadow();
     if (!shadowProg) return;
 
-    GLint prevDepthFunc;
-    glGetIntegerv(GL_DEPTH_FUNC, &prevDepthFunc);
-
     mShadowMap.bind();
     glClear(GL_DEPTH_BUFFER_BIT);
     glDepthFunc(GL_LESS);
@@ -96,8 +93,6 @@ void Pipeline::renderShadowPass() {
         if (!item->visible || !item->castShadow()) continue;
         item->onShadowPass(mLightViewProj, kIdentity);
     }
-
-    glDepthFunc(prevDepthFunc);
 }
 
 void Pipeline::execute(const std::array<float, 16>& proj,

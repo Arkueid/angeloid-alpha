@@ -3,6 +3,7 @@
 #include <glad/glad.h>
 #include <filesystem>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace Gpu {
@@ -39,7 +40,9 @@ public:
     static GLuint compileProgram(const std::string& vertexSrc, const std::string& fragmentSrc);
 
 private:
+    GLint cacheLocation(const std::string& name) const;
     GLuint mProgramId = 0;
+    mutable std::unordered_map<std::string, GLint> mUniformCache;
 };
 
 }  // namespace Gpu

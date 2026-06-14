@@ -337,6 +337,7 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
     mBoneTexture->bind(1);
 
     Gpu::Vao& vao = showToon ? mMorphVao : mMorphVaoNoToon;
+    vao.bind();
     for (const auto& batch : mMaterialBatches) {
         bool hasTex = (batch.textureIndex >= 0 && batch.textureIndex < (int)mTextures.size() &&
                        mTextures[batch.textureIndex]);
@@ -404,7 +405,6 @@ void ModelRenderer::renderMorphMainPass(Gpu::ShaderProgram& shader,
             shader.setInt(U_HAS_TOON, 0);
         }
 
-        vao.bind();
         glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
                        (void*)(intptr_t)(batch.first * sizeof(int32_t)));
     }
@@ -429,6 +429,7 @@ void ModelRenderer::renderMorphOutlinePass(Gpu::ShaderProgram& shader,
     mBoneTexture->bind(1);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_FRONT);
+    mMorphOutlineVao.bind();
     for (const auto& batch : mMaterialBatches) {
         if (!batch.hasEdge)
             continue;
@@ -452,7 +453,6 @@ void ModelRenderer::renderMorphOutlinePass(Gpu::ShaderProgram& shader,
             shader.setFloat(U_OUTLINE_THICKNESS, edge.size * 0.001f);
             shader.setFloat(U_MATERIAL_ALPHA, mModel->materials[batch.materialIndex].alpha);
         }
-        mMorphOutlineVao.bind();
         glDrawElements(GL_TRIANGLES, batch.count, GL_UNSIGNED_INT,
                        (void*)(intptr_t)(batch.first * sizeof(int32_t)));
     }
