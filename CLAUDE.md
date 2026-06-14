@@ -60,7 +60,7 @@ cmake --build build --config RelWithDebInfo
 - Each Renderable fetches its own shader from `ShaderManager::instance()`
 - Shaders loaded from `resources/effects.cfg` (INI-style `[section] vert= frag=`) — 7 programs: shadow/outline/base/toon/rigidbody/ground/axis
 - Renderable interface: `onShadowPass(lightViewProj, model)` / `onMainPass(proj, view, model, lightViewProj, hasShadow)` / `onDebugPass(proj, view, model)` — all `const std::array<float,16>&`
-- Shadow map: 4096×4096 depth-only, 3×3 manual PCF, alpha-aware (morph transparency via `shadow_depth.frag`)
+- Shadow map: 4096×4096 depth-only, hardware 4-tap PCF (sampler2DShadow + GL_LINEAR), slope-scale bias, alpha-aware (morph transparency via `shadow_depth.frag`)
 
 ## Physics (Bullet)
 - Bullet Physics as git submodule at `thirdparty/bullet` (version 3.27)
