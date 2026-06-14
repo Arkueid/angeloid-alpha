@@ -54,7 +54,8 @@ public:
     PhysicsWorld();
     ~PhysicsWorld();
 
-    void build(const PmxModel& model, float modelScale);
+    void build(const PmxModel& model, float modelScale,
+               const std::vector<std::array<float, 16>>& bindPoseWorld);
     void resetPhysics(const std::vector<std::array<float, 16>>& poseWorld);
     void step(float deltaTime, const std::vector<std::array<float, 16>>& poseWorld);
     void getBoneTransforms(std::vector<std::array<float, 16>>& out) const;

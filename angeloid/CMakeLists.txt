@@ -13,6 +13,8 @@ set(MMD_SOURCES
     core/anim/VmdPlayer.cpp
     core/anim/VpdLoader.cpp
     core/encoding/Encoding.cpp
+    framework/AnimationController.cpp
+    framework/LookAtController.cpp
     framework/Model.cpp
     framework/opengl/gpu/Mesh.cpp
     framework/opengl/gpu/Texture.cpp

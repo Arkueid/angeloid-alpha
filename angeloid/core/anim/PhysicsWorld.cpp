@@ -48,7 +48,8 @@ PhysicsWorld::~PhysicsWorld() {
             mWorld->removeRigidBody(b.body);
 }
 
-void PhysicsWorld::build(const PmxModel& model, float modelScale) {
+void PhysicsWorld::build(const PmxModel& model, float modelScale,
+                         const std::vector<std::array<float, 16>>& bindPoseWorld) {
     // Compute bounds
     float minX = 1e9f, minY = 1e9f, minZ = 1e9f, maxX = -1e9f, maxY = -1e9f, maxZ = -1e9f;
     for (const auto& v : model.vertices) {
@@ -64,7 +65,7 @@ void PhysicsWorld::build(const PmxModel& model, float modelScale) {
     mModelScale = modelScale;
     mWorld->setGravity(btVector3(0, kGravityY / modelScale, 0));
 
-    mBoneBindWorld = BoneSkinning::computeBindWorldMatrices(model);
+    mBoneBindWorld = bindPoseWorld;
 
     for (auto& c : mConstraints) {
         if (c)

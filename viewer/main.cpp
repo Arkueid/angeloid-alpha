@@ -1,4 +1,5 @@
 #include "framework/MMD.h"
+#include "framework/Camera.h"
 #include "framework/Model.h"
 #include "framework/opengl/Pipeline.h"
 #include "framework/opengl/scene/GroundPlane.h"
@@ -230,6 +231,7 @@ int main(int argc, char* argv[]) {
                 idx = (idx - 1 + (int)morphList.size()) % (int)morphList.size();
                 morphIndex = morphList[idx];
                 std::string name = model.morphName(morphIndex);
+                MMD_INFO("MORPH", "select [%d/%d] %s", idx, (int)morphList.size(), name.c_str());
                 morphWeight = model.savedMorphWeight(name);
                 model.setMorphWeight(name, morphWeight);
             }
@@ -241,6 +243,7 @@ int main(int argc, char* argv[]) {
                 idx = (idx + 1) % (int)morphList.size();
                 morphIndex = morphList[idx];
                 std::string name = model.morphName(morphIndex);
+                MMD_INFO("MORPH", "select [%d/%d] %s", idx, (int)morphList.size(), name.c_str());
                 morphWeight = model.savedMorphWeight(name);
                 model.setMorphWeight(name, morphWeight);
             }

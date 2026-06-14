@@ -62,10 +62,6 @@ struct BoneSkinning {
                                            const std::unordered_map<std::string, VpdPose>& vpdPoses,
                                            std::vector<std::array<float, 16>>& poseWorld);
 
-    // Overlay physics world matrices onto skinning matrices
-    static void applyPhysics(const PmxModel& model, std::vector<float>& skinMatrices,
-                             const std::vector<std::array<float, 16>>& physicsMats);
-
     static std::vector<std::array<float, 16>> computeInvBindWorld(
         const std::vector<std::array<float, 16>>& bindWorld);
 

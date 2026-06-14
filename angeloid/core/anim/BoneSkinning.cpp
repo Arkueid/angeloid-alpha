@@ -65,9 +65,9 @@ static void applyVmdTransform(Mat4& local, const std::array<float, 4>& rot,
     float xx = qx * x2, xy = qx * y2, xz = qx * z2;
     float yy = qy * y2, yz = qy * z2, zz = qz * z2;
     float wx = qw * x2, wy = qw * y2, wz = qw * z2;
-    local[0] = 1.0f - (yy + zz);  local[4] = xy + wz;          local[8]  = xz - wy;
-    local[1] = xy - wz;            local[5] = 1.0f - (xx + zz); local[9]  = yz + wx;
-    local[2] = xz + wy;            local[6] = yz - wx;           local[10] = 1.0f - (xx + yy);
+    local[0] = 1.0f - (yy + zz);  local[4] = xy - wz;          local[8]  = xz + wy;
+    local[1] = xy + wz;            local[5] = 1.0f - (xx + zz); local[9]  = yz - wx;
+    local[2] = xz - wy;            local[6] = yz + wx;           local[10] = 1.0f - (xx + yy);
     local[12] += pos[0];
     local[13] += pos[1];
     local[14] += pos[2];
@@ -506,8 +506,8 @@ std::vector<float> BoneSkinning::computeSkinningMatrices(
             float xx = qx * x2, xy = qx * y2, xz = qx * z2;
             float yy = qy * y2, yz = qy * z2, zz = qz * z2;
             float wx = qw * x2, wy = qw * y2, wz = qw * z2;
-            float r[9] = {1.0f - (yy + zz), xy - wz, xz + wy, xy + wz,         1.0f - (xx + zz),
-                          yz - wx,          xz - wy, yz + wx, 1.0f - (xx + yy)};
+            float r[9] = {1.0f - (yy + zz), xy + wz, xz - wy, xy - wz,         1.0f - (xx + zz),
+                          yz + wx,          xz + wy, yz - wx, 1.0f - (xx + yy)};
 
             // VMD rotation REPLACES existing local rotation (Python: local[:3,:3] = rot_mat)
             local[0] = r[0];
@@ -589,28 +589,6 @@ void BoneSkinning::applyBoneMorphs(std::vector<float>& skinMatrices, int boneCou
         }
         for (int j = 0; j < 12; ++j)
             M[j] = tmp[j];
-    }
-}
-
-void BoneSkinning::applyPhysics(const PmxModel& model, std::vector<float>& skinMatrices,
-                                const std::vector<std::array<float, 16>>& physicsMats) {
-    auto bindWorld = BoneSkinning::computeBindWorldMatrices(model);
-
-    for (size_t i = 0; i < physicsMats.size() && i < (size_t)model.boneCount(); ++i) {
-        bool hasPhysics = false;
-        for (int j = 0; j < 16; ++j) {
-            if (physicsMats[i][j] != 0) {
-                hasPhysics = true;
-                break;
-            }
-        }
-        if (!hasPhysics)
-            continue;
-
-        auto invBind = inverseMat4(bindWorld[i]);
-        auto M = mulMat4(physicsMats[i], invBind);
-        for (int j = 0; j < 16; ++j)
-            skinMatrices[i * 16 + j] = M[j];
     }
 }
 

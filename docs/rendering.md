@@ -83,3 +83,32 @@ Loaded by `ShaderManager` singleton; each Renderable fetches its own shader via 
 - Gradient 1D texture bound to GL_TEXTURE2
 - Rim: `rim_power=4.0`, white, camera_pos from `Camera::instance().getEyePosition()`
 - T key toggles between base.frag and toon.frag via `ModelRenderer::showToon`
+
+## Quaternion-to-Matrix Convention
+
+Bone rotation matrices use a **transposed** quaternion-to-matrix formula compared to the
+standard textbook derivation. This is intentional and matches the MMD coordinate system
+convention used by PMX and VMD data.
+
+The correct formula (used in `BoneSkinning.cpp:applyVmdTransform` and `applyBoneMorphs`):
+
+```
+// r[9] row-major array = {R00, R01, R02, R10, R11, R12, R20, R21, R22}
+float r[9] = {1-yy-zz,  xy+wz,   xz-wy,
+              xy-wz,    1-xx-zz,  yz+wx,
+              xz+wy,    yz-wx,    1-xx-yy};
+```
+
+Stored into column-major `Mat4` as:
+```
+local[0]=r[0], local[4]=r[3], local[8]=r[6],   // column 0 → rotation row 0
+local[1]=r[1], local[5]=r[4], local[9]=r[7],   // column 1 → rotation row 1
+local[2]=r[2], local[6]=r[5], local[10]=r[8];  // column 2 → rotation row 2
+```
+
+**Do not** replace with the standard formula (`xy-wz` on column 0, `xz+wy` on column 0, etc.) —
+that will produce incorrect bone rotations for MMD models. The sign pattern
+`(+,+,- / -,-,+ / +,-,-)` on off-diagonals is the MMD convention.
+
+If extracting a shared helper, copy the original layout verbatim rather than
+re-deriving from a textbook reference.
