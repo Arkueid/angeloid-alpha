@@ -23,7 +23,10 @@ public:
     void removeRenderable(Renderable* item);
 
     // ── Per-frame ──
-    void computeLightMatrix(const float* lightDir);
+    // sceneMin/Max: world-space AABB of shadow casters (pass nullptr for defaults)
+    void computeLightMatrix(const float* lightDir,
+                            const float* sceneMin = nullptr,
+                            const float* sceneMax = nullptr);
     void execute(const std::array<float, 16>& proj,
                  const std::array<float, 16>& view);
 

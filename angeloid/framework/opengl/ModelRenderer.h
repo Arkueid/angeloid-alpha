@@ -82,6 +82,11 @@ public:
     const float* modelMatrix() const    { return mModelMat.data(); }
     const PmxModel* model() const       { return mModel; }
 
+    // PMX-space vertex bounds (set by loadModel)
+    Vec3 mPmxMin{}, mPmxMax{};
+    // Compute world-space AABB by transforming PMX bounds by model matrix
+    void worldAABB(Vec3& outMin, Vec3& outMax) const;
+
     void setMaterialOverride(int idx, const MatMorphOverride& o) { mMatOverride[idx] = o; }
     void clearMaterialOverrides() { mMatOverride.clear(); }
     const MatMorphOverride* getMaterialOverride(int idx) const {

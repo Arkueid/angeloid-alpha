@@ -334,7 +334,9 @@ int main(int argc, char* argv[]) {
         auto view = Camera::instance().viewMatrix();
 
         float lightDir[3] = {0.3f, 0.8f, 0.5f};
-        pipe.computeLightMatrix(lightDir);
+        Vec3 sceneMin, sceneMax;
+        model.worldAABB(sceneMin, sceneMax);
+        pipe.computeLightMatrix(lightDir, &sceneMin.x, &sceneMax.x);
         pipe.execute(proj, view);
 
         imgui.endFrame();

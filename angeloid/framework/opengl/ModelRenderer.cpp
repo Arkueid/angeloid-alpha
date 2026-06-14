@@ -46,6 +46,8 @@ void ModelRenderer::loadModel(const PmxModel& model, const std::filesystem::path
         (minPos.z + maxPos.z) / 2,
     };
     mMinY = minPos.y;
+    mPmxMin = minPos;
+    mPmxMax = maxPos;
     Vec3 size = {maxPos.x - minPos.x, maxPos.y - minPos.y, maxPos.z - minPos.z};
     float maxSize = std::max({size.x, size.y, size.z});
     mScale = maxSize > 0 ? 2.0f / maxSize : 1.0f;
@@ -457,4 +459,29 @@ void ModelRenderer::renderMorphOutlinePass(Gpu::ShaderProgram& shader,
                        (void*)(intptr_t)(batch.first * sizeof(int32_t)));
     }
     glDisable(GL_CULL_FACE);
+}
+
+void ModelRenderer::worldAABB(Vec3& outMin, Vec3& outMax) const {
+    float s = mScale;
+    // Transform PMX AABB 8 corners by:  wx = s*(x - cx),  wy = s*(y - mMinY),  wz = s*(cz - z)
+    float cx = mCenter.x, cy = mMinY, cz = mCenter.z;
+    float corners[8][3] = {
+        {mPmxMin.x, mPmxMin.y, mPmxMin.z}, {mPmxMin.x, mPmxMin.y, mPmxMax.z},
+        {mPmxMin.x, mPmxMax.y, mPmxMin.z}, {mPmxMin.x, mPmxMax.y, mPmxMax.z},
+        {mPmxMax.x, mPmxMin.y, mPmxMin.z}, {mPmxMax.x, mPmxMin.y, mPmxMax.z},
+        {mPmxMax.x, mPmxMax.y, mPmxMin.z}, {mPmxMax.x, mPmxMax.y, mPmxMax.z},
+    };
+    outMin = {1e9f, 1e9f, 1e9f};
+    outMax = {-1e9f, -1e9f, -1e9f};
+    for (int i = 0; i < 8; ++i) {
+        float wx = s * (corners[i][0] - cx);
+        float wy = s * (corners[i][1] - cy);
+        float wz = s * (cz - corners[i][2]);
+        outMin.x = std::min(outMin.x, wx);
+        outMin.y = std::min(outMin.y, wy);
+        outMin.z = std::min(outMin.z, wz);
+        outMax.x = std::max(outMax.x, wx);
+        outMax.y = std::max(outMax.y, wy);
+        outMax.z = std::max(outMax.z, wz);
+    }
 }

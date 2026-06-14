@@ -134,6 +134,9 @@ public:
     const float* modelMatrix() const {
         return mRenderer.modelMatrix();
     }
+    void worldAABB(Vec3& outMin, Vec3& outMax) const {
+        mRenderer.worldAABB(outMin, outMax);
+    }
     RigidBodyRenderer* physicsDebug();
     PhysicsWorld* physicsWorld() { return &mPhysics; }
 
