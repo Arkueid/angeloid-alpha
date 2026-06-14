@@ -20,14 +20,11 @@ void main() {
             // Clamp: fragments beyond far plane would incorrectly compare against
             // the cleared depth (1.0) and fail GL_LEQUAL, causing false shadow
             fragDepth = clamp(fragDepth, 0.0, 1.0);
-            // 3x3 manual PCF (9 taps)
-            vec2 texelSize = 1.0 / vec2(textureSize(u_shadowMap, 0));
-            float pcf = 0.0;
-            for (int x = -1; x <= 1; ++x)
-                for (int y = -1; y <= 1; ++y)
-                    pcf += texture(u_shadowMap, vec3(uv + vec2(x, y) * texelSize, fragDepth - 0.003));
-            pcf /= 9.0;
-            shadow = 0.3 + pcf * 0.7;
+
+            float bias = 0.002;
+            // Hardware 4-tap PCF (sampler2DShadow + GL_LINEAR filtering)
+            float pcf = texture(u_shadowMap, vec3(uv, fragDepth - bias));
+            shadow = 0.5 + pcf * 0.5;
         }
     }
 

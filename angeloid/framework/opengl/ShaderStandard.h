@@ -39,7 +39,6 @@
 #define U_OUTLINE_COLOR       "u_outlineColor"
 
 // ──── Toon parameters ────
-#define U_SHADOW_THRESH       "u_shadowThresh"
 #define U_RIM_POWER           "u_rimPower"
 #define U_RIM_COLOR           "u_rimColor"
 #define U_SPHERE_MODE         "u_sphereMode"

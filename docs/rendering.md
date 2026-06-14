@@ -33,8 +33,9 @@ pipe.addRenderable(&model);        // 3. PMX model (shadow caster + receiver)
 ## Shadow Map
 - 4096×4096, `GL_DEPTH_COMPONENT32F`, no color attachment
 - Orthographic: half-size 3.0, near=13, far=17, centered on origin
-- Filter: `GL_NEAREST`, `GL_COMPARE_REF_TO_TEXTURE`, `GL_LEQUAL`
-- 3×3 manual PCF in all shadow-receiving shaders (base/toon/ground)
+- Filter: `GL_LINEAR`, `GL_COMPARE_REF_TO_TEXTURE`, `GL_LEQUAL`
+- Hardware 4-tap PCF (sampler2DShadow) in all shadow-receiving shaders (base/toon/ground)
+- Slope-scale bias: `max(0.005 * (1 - NdotL), 0.001)` (base/toon); flat 0.002 (ground)
 - Alpha-aware: `shadow_depth.frag` discards fragments with `u_alpha < 0.01`
   - Alpha = morph override (if active) else PMX material base alpha
 

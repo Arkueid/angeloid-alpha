@@ -289,7 +289,6 @@ void Model::onMainPass(const std::array<float, 16>& proj,
         float camPos[3];
         Camera::instance().getEyePosition(camPos[0], camPos[1], camPos[2]);
         mainProg->setVec3(U_CAMERA_POS, camPos[0], camPos[1], camPos[2]);
-        mainProg->setFloat(U_SHADOW_THRESH, 0.0f);
         mainProg->setFloat(U_RIM_POWER, 4.0f);
         mainProg->setVec3(U_RIM_COLOR, 1.0f, 1.0f, 1.0f);
 
