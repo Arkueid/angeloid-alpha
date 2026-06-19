@@ -6,6 +6,8 @@
 #include "framework/scene/WorldAxis.h"
 #include "framework/util/CfgParser.h"
 #include "imgui/ImGuiManager.h"
+#include "imgui/ImGuiRendererGL.h"
+#include "imgui/ImGuiRendererVk.h"
 #include "window/GlfwWindow.h"
 
 #include <imgui.h>
@@ -17,8 +19,7 @@
 #include <windows.h>
 #endif
 
-#include <cmath>
-#include <cstdlib>
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -87,11 +88,16 @@ int main(int argc, char* argv[]) {
 
     std::string modelName = "ikaros-uniform";
     std::vector<fs::path> vmdPaths;
+    mmd::GpuBackend backend = mmd::GpuBackend::Vulkan;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if ((arg == "--model" || arg == "-m") && i + 1 < argc)
             modelName = argv[++i];
+        else if ((arg == "--opengl" || arg == "--gl"))
+            backend = mmd::GpuBackend::OpenGL;
+        else if ((arg == "--vulkan" || arg == "--vk"))
+            backend = mmd::GpuBackend::Vulkan;
         else if (arg == "--vmd" || arg == "-v")
             while (i + 1 < argc && argv[i + 1][0] != '-')
                 vmdPaths.push_back(fs::u8path(argv[++i]));
@@ -109,20 +115,36 @@ int main(int argc, char* argv[]) {
     else
         pmxPath = fs::u8path(modelName);
     fs::path vpdPath = projRoot / fs::u8path("resources/vpd/自然站姿.vpd");
-    // --- Window ---
-    GlfwWindow app(1280, 720, "MMD PMX Viewer");
 
-    ImGuiManager imgui;
-    auto fontPath = projRoot / "resources/fonts/cjk.ttf";
-    imgui.init(app.glfwWindow(), fontPath.string().c_str());
+    // --- Window ---
+    GlfwWindow app(1280, 720, "MMD PMX Viewer", backend);
 
     // --- Init mmd module ---
     mmd::InitArgs args;
-    args.shaderDir = projRoot / "resources/shaders";
+    if (backend == mmd::GpuBackend::Vulkan) {
+        args.shaderDir = projRoot / "resources/shaders/vulkan";
+        args.effectsCfg = projRoot / "resources/effects.cfg";  // same cfg, same shader names
+    } else {
+        args.shaderDir = projRoot / "resources/shaders/opengl";
+        args.effectsCfg = projRoot / "resources/effects.cfg";
+    }
     args.toonDir = projRoot / "resources/toon";
-    args.effectsCfg = projRoot / "resources/effects.cfg";
     args.blinkMorphs = {"blink", "blink_l", "blink_r", "まばたき", "まぶたき", "ウィンク", "ｳｨﾝｸ"};
+    args.backend = backend;
+    args.window = app.glfwWindow();
     mmd::init(std::move(args));
+
+    // --- ImGui (must follow mmd::init, needs GPU device alive) ---
+    ImGuiManager imgui;
+    auto fontPath = projRoot / "resources/fonts/cjk.ttf";
+    bool vk = (backend == mmd::GpuBackend::Vulkan);
+    if (vk)
+        imgui.init(app.glfwWindow(),
+                   std::make_unique<ImGuiRendererVk>(mmd::gpuDevice()),
+                   /*useVulkan=*/true, fontPath.string().c_str());
+    else
+        imgui.init(app.glfwWindow(), std::make_unique<ImGuiRendererGL>(),
+                   /*useVulkan=*/false, fontPath.string().c_str());
 
     // --- Load model ---
     mmd::Model model;
@@ -300,9 +322,10 @@ int main(int argc, char* argv[]) {
         smoothFps = smoothFps * 0.95f + (1.0f / dt) * 0.05f;
         ImGui::Begin("Control Panel", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
-        ImGui::Text("FPS: %.0f (%.2f ms)", smoothFps, dt * 1000.0);
+        ImGui::TextDisabled("%s", model.modelName().c_str());
         ImGui::SameLine();
-        ImGui::TextDisabled("  %s", model.modelName().c_str());
+        ImGui::TextDisabled(" %s", vk ? "Vulkan" : "OpenGL");
+        ImGui::Text("FPS: %.0f (%.2f ms)", smoothFps, dt * 1000.0);
 
         // ── Model Inspector ──
         if (ImGui::CollapsingHeader("Model Inspector")) {
@@ -623,6 +646,9 @@ int main(int argc, char* argv[]) {
     };
 
     app.run();
+    // Destroy in order: ImGui → Pipeline → GPU device
+    imgui.shutdown();
+    pipe.clear();
     mmd::dispose();
     return 0;
 }

@@ -52,18 +52,20 @@ angeloid/
 │   └── math/               #   Vec2/3/4, Quat
 ├── framework/              # Rendering + framework layer
 │   ├── gpu/                #   GPU abstraction (IGpuDevice, IGpuTexture, IGpuShader...)
-│   │   └── opengl/         #     OpenGL backend (GlDevice, GlTexture, GlShader...)
+│   │   ├── opengl/         #     OpenGL backend (GlDevice, GlTexture, GlShader...)
+│   │   └── vulkan/         #     Vulkan backend (VulkanDevice, VkBuffer, VkTexture...)
 │   ├── scene/              #   Debug visualization (GroundPlane, WorldAxis, RigidBodyRenderer)
 │   ├── util/               #   Utilities (CfgParser, StbImage)
 │   ├── Model.h/.cpp        #   Model facade
 │   ├── Pipeline.h/.cpp     #   Render orchestrator
 │   └── MMD.h/.cpp          #   Module init/dispose
-├── viewer/                 # C++ app entry point
+├── viewer/                 # C++ app entry point (ImGui control panel)
 ├── resources/
-│   ├── shaders/            # GLSL shaders
+│   ├── shaders/opengl/     # OpenGL GLSL shaders
+│   ├── shaders/vulkan/     # Vulkan GLSL shaders (SPIR-V)
 │   ├── toon/               # Shared toon textures
 │   └── models/             # PMX model directories
-├── thirdparty/             # GLFW, glad, Bullet, stb, backward-cpp
+├── thirdparty/             # GLFW, glad, Bullet, stb, backward-cpp, imgui
 └── docs/                   # Technical docs
 ```
 

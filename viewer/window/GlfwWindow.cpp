@@ -1,21 +1,27 @@
 #include "window/GlfwWindow.h"
-
+#include "framework/MMD.h"
 #include "framework/gpu/IGpuDevice.h"
 
 #include <iostream>
 #include <stdexcept>
 
-GlfwWindow::GlfwWindow(int width, int height, const std::string& title)
+GlfwWindow::GlfwWindow(int width, int height, const std::string& title,
+                       mmd::GpuBackend backend)
     : mWidth(width), mHeight(height) {
     if (!glfwInit())
         throw std::runtime_error("Failed to initialize GLFW");
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
-    glfwWindowHint(GLFW_DEPTH_BITS, 24);
-    glfwWindowHint(GLFW_SAMPLES, 4);
+    mVulkan = (backend == mmd::GpuBackend::Vulkan);
+    if (mVulkan) {
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    } else {
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
+        glfwWindowHint(GLFW_DEPTH_BITS, 24);
+        glfwWindowHint(GLFW_SAMPLES, 4);
+    }
 
     mWindow = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
     if (!mWindow) {
@@ -23,7 +29,9 @@ GlfwWindow::GlfwWindow(int width, int height, const std::string& title)
         throw std::runtime_error("Failed to create GLFW window");
     }
 
-    glfwMakeContextCurrent(mWindow);
+    if (backend != mmd::GpuBackend::Vulkan) {
+        glfwMakeContextCurrent(mWindow);
+    }
 
     glfwSetFramebufferSizeCallback(mWindow, framebufferSizeCallback);
     glfwSetKeyCallback(mWindow, keyCallback);
@@ -51,10 +59,18 @@ void GlfwWindow::run() {
         if (onUpdate)
             onUpdate(mDeltaTime);
 
-        if (onRender)
+        if (onRender) {
+            if (auto* dev = Gpu::device()) {
+                dev->beginFrame();
+            }
             onRender();
+            if (auto* dev = Gpu::device()) {
+                dev->endFrame();
+            }
+        }
 
-        glfwSwapBuffers(mWindow);
+        if (!mVulkan)
+            glfwSwapBuffers(mWindow);
         glfwPollEvents();
     }
 }

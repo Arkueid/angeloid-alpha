@@ -5,6 +5,8 @@
 #include "framework/util/CfgParser.h"
 #include "core/util/Log.h"
 
+#include <chrono>
+
 namespace fs = std::filesystem;
 
 ShaderManager& ShaderManager::instance() {
@@ -28,6 +30,7 @@ Gpu::IGpuShader* ShaderManager::compile(const fs::path& shaderDir,
 }
 
 void ShaderManager::init(const fs::path& effectsCfg, const fs::path& shaderDir) {
+    auto t0 = std::chrono::steady_clock::now();
     auto sections = parseCfgSections(effectsCfg);
 
     auto get = [&](const char* name) -> std::unordered_map<std::string, std::string>* {
@@ -50,7 +53,9 @@ void ShaderManager::init(const fs::path& effectsCfg, const fs::path& shaderDir) 
     if (auto* c = get("axis"))
         mAxis = compile(shaderDir, (*c)["vert"], (*c)["frag"]);
 
-    MMD_INFO("SHADER", "Loaded %zu programs", mPrograms.size());
+    auto elapsed = std::chrono::duration<float, std::milli>(
+        std::chrono::steady_clock::now() - t0).count();
+    MMD_INFO("SHADER", "Loaded %zu programs in %.1f ms", mPrograms.size(), elapsed);
 }
 
 void ShaderManager::clear() {

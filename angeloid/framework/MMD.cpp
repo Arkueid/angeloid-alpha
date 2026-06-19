@@ -5,6 +5,11 @@
 #include "framework/ShaderManager.h"
 #include "framework/gpu/IGpuDevice.h"
 #include "framework/gpu/opengl/GlDevice.h"
+#ifdef MMD_VULKAN_BACKEND
+#include "framework/gpu/vulkan/VkDevice.h"
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+#endif
 
 #include <cstdio>   // printf, fprintf, vprintf, vfprintf
 
@@ -55,7 +60,13 @@ void init(const InitArgs& args) {
 #endif
 
     // Create GPU device
-    if (args.backend == GpuBackend::OpenGL) {
+    if (args.backend == GpuBackend::Vulkan) {
+#ifdef MMD_VULKAN_BACKEND
+        Gpu::setDevice(std::make_unique<Gpu::VulkanDevice>(args.window));
+#else
+        MMD_ERROR("GPU", "Vulkan backend not compiled in");
+#endif
+    } else {
         Gpu::setDevice(std::make_unique<Gpu::GlDevice>());
     }
 

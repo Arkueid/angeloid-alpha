@@ -10,15 +10,19 @@ for approval before running `git commit`. This overrides all other instructions.
 ## Build & Run
 
 ```bash
-# Configure + build (MSVC requires vcvars64.bat sourced first)
+# Requires Vulkan SDK (https://vulkan.lunarg.com/)
 cmake -B build -DBUILD_VIEWER=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build --config RelWithDebInfo
 
-# Run
+# Run (default: Vulkan)
 ./build/viewer/RelWithDebInfo/viewer -m <model-name>
+
+# Run with OpenGL
+./build/viewer/RelWithDebInfo/viewer --gl -m <model-name>
 ```
 
-- `ENABLE_STACKTRACE` option: includes backward-cpp submodule for crash stack traces (printed to stderr, includes file/line/function)
+- `ENABLE_STACKTRACE` option: includes backward-cpp submodule for crash stack traces
+- Vulkan SDK required: headers + `shaderc_shared` for GLSL→SPIR-V compilation
 
 ## Project structure
 - `angeloid/core/` — computation layer (no OpenGL dependency)
@@ -29,18 +33,19 @@ cmake --build build --config RelWithDebInfo
   - `util/` — Log
 - `angeloid/framework/` — rendering + framework layer
   - `Model.h/.cpp` — facade: load/update + Renderable (onShadowPass/onMainPass/onDebugPass)
-  - `MMD.h/.cpp` — init/dispose, InitArgs
+  - `MMD.h/.cpp` — init/dispose, InitArgs, GpuBackend enum (Vulkan/OpenGL)
   - `Camera.h/.cpp` — FPS + Orbit camera
   - `gpu/` — GPU abstraction layer (backend-agnostic interfaces + enums)
-      - `IGpuDevice.h` — central device: resource creation, state, draw calls
+      - `IGpuDevice.h` — central device: resource creation, state, draw calls, beginFrame/endFrame
       - `IGpuBuffer.h`, `IGpuTexture.h`, `IGpuShader.h` — resource handles
       - `IGpuVertexArray.h`, `IGpuRenderTarget.h` — VAO + FBO handles
       - `Types.h` — shared enums (BufferUsage, TextureFormat, CompareFunc, etc.)
       - `ShaderUtil.h` — CPU-only helpers (readShaderFile)
       - `gpu/opengl/` — OpenGL backend (implements all IGpu*)
+      - `gpu/vulkan/` — Vulkan backend (VulkanDevice, VkBuffer/Texture/Shader/VertexArray/RenderTarget)
       - `Renderable.h` — interface (onShadowPass/onMainPass/onDebugPass)
       - `PassParams.h` — per-pass data bundles (MainPassParams, etc.)
-      - `Pipeline.h/.cpp` — render orchestrator: pass ordering + renderable list + shadow map
+      - `Pipeline.h/.cpp` — render orchestrator: pass ordering + renderable list + shadow map, Vulkan depth correction
       - `ShaderManager.h/.cpp` — global shader registry (7 programs from effects.cfg)
       - `RenderContext.h/.cpp` — singleton: gradient + toon textures
       - `ModelRenderer.h/.cpp` — PMX GPU meshes, material batches, morph VAOs
@@ -53,7 +58,8 @@ cmake --build build --config RelWithDebInfo
 - `viewer/` — application entry point (GLFW + ImGui)
     - `imgui/` — ImGuiManager (lifecycle + event forwarding)
 - `resources/` — assets
-  - `shaders/` — GLSL vertex/fragment shaders
+  - `shaders/opengl/` — GLSL shaders for OpenGL backend
+  - `shaders/vulkan/` — Vulkan-compatible GLSL (uniform blocks, binding/location qualifiers)
   - `toon/` — shared toon ramp textures
   - `models/` — PMX model directories
 - `thirdparty/` — GLFW, glad, Bullet, stb, backward-cpp, imgui
@@ -64,7 +70,8 @@ cmake --build build --config RelWithDebInfo
 - Each Renderable fetches its own shader from `ShaderManager::instance()`
 - Shaders loaded from `resources/effects.cfg` (INI-style `[section] vert= frag=`) — 7 programs: shadow/outline/base/toon/rigidbody/ground/axis
 - Renderable interface: `onShadowPass(lightViewProj, model)` / `onMainPass(proj, view, model, lightViewProj, hasShadow)` / `onDebugPass(proj, view, model)` — all `const std::array<float,16>&`
-- Shadow map: 4096×4096 depth-only, hardware 4-tap PCF (sampler2DShadow + GL_LINEAR), slope-scale bias, alpha-aware (morph transparency via `shadow_depth.frag`)
+- Shadow map: 4096×4096 depth-only, hardware 4-tap PCF (sampler2DShadow + GL_LINEAR/VK_COMPARE_OP_LESS_OR_EQUAL), slope-scale bias, alpha-aware
+- Vulkan backend: dynamic rendering (VK_KHR_dynamic_rendering), SPIR-V via shaderc, lazy pipeline cache, descriptor sets for UBO+textures, host-visible uniform ring buffer
 
 ## Physics (Bullet)
 - Bullet Physics as git submodule at `thirdparty/bullet` (version 3.27)

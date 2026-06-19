@@ -53,6 +53,10 @@ public:
 
     // Texture binding
     void bindTextureToUnit(int unit, IGpuTexture* tex) override;
+
+    // Frame management (no-ops for OpenGL)
+    void beginFrame() override {}
+    void endFrame() override {}
 };
 
 // Set the global GPU device (called once at init).

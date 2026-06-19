@@ -157,7 +157,7 @@ void Pipeline::computeLightMatrix(const float* ldir,
     };
 }
 
-void Pipeline::renderShadowPass() {
+void Pipeline::renderShadowPass(const std::array<float, 16>& lightViewProj) {
     auto* shadowProg = ShaderManager::instance().shadow();
     if (!shadowProg) return;
 
@@ -166,7 +166,7 @@ void Pipeline::renderShadowPass() {
     dev->clear(false, true);
     dev->setDepthFunc(Gpu::CompareFunc::Less);
 
-    ShadowPassParams sp{mLightViewProj, kIdentity};
+    ShadowPassParams sp{lightViewProj, kIdentity};
     for (auto* item : mItems) {
         if (!item->visible || !item->castShadow()) continue;
         item->onShadowPass(sp);
@@ -177,26 +177,43 @@ void Pipeline::execute(const std::array<float, 16>& proj,
                        const std::array<float, 16>& view) {
     auto* dev = Gpu::device();
     bool anyShadow = showSelfShadow || showGroundShadow;
-    if (anyShadow)
-        renderShadowPass();
-    dev->bindScreenFramebuffer(mViewportW, mViewportH);
 
     // ── Frame setup ──
-    dev->setFrontFace(true);  // CW front face (MMD convention)
+    dev->setFrontFace(true);
     dev->setDepthTest(true);
     dev->setDepthFunc(Gpu::CompareFunc::LEqual);
     dev->setBlend(true);
     dev->setBlendFunc(Gpu::BlendFactor::SrcAlpha, Gpu::BlendFactor::OneMinusSrcAlpha);
     dev->setClearColor(0.15f, 0.15f, 0.15f, 1.0f);
+
+    // Vulkan: correct depth range from OpenGL [-1,1] to Vulkan [0,1]
+    auto depthCorrect = [&](const std::array<float, 16>& m) -> std::array<float, 16> {
+        if (!dev->needsDepthCorrection()) return m;
+        std::array<float, 16> r = m;
+        for (int j = 0; j < 4; ++j) {
+            int i2 = j*4 + 2;  // Z row
+            int i3 = j*4 + 3;  // W row
+            r[i2] = 0.5f * m[i2] + 0.5f * m[i3];
+        }
+        return r;
+    };
+
+    auto projVk = depthCorrect(proj);
+    auto lightVP_Vk = depthCorrect(mLightViewProj);
+
+    if (anyShadow)
+        renderShadowPass(lightVP_Vk);
+    dev->setDepthFunc(Gpu::CompareFunc::LEqual);  // restore after shadow pass (which uses Less)
+    dev->bindScreenFramebuffer(mViewportW, mViewportH);
     dev->clear(true, true);
 
-    // ── Main pass (ground + model) ──
+    // ── Main pass ──
     if (anyShadow) {
         dev->bindTextureToUnit(5, mShadowMap->depthTexture());
     }
 
     std::array<float, 3> ldir = {lightDir[0], lightDir[1], lightDir[2]};
-    MainPassParams mp{proj, view, kIdentity, mLightViewProj, ldir, false};
+    MainPassParams mp{projVk, view, kIdentity, lightVP_Vk, ldir, false};
     for (auto* item : mItems) {
         if (!item->visible) continue;
         mp.hasShadow = item->castShadow() ? showSelfShadow : showGroundShadow;
@@ -204,7 +221,7 @@ void Pipeline::execute(const std::array<float, 16>& proj,
     }
 
     // ── Debug pass (axis + physics) ──
-    DebugPassParams dp{proj, view, kIdentity};
+    DebugPassParams dp{projVk, view, kIdentity};
     for (auto* item : mItems) {
         if (!item->visible) continue;
         item->onDebugPass(dp);

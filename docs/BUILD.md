@@ -15,11 +15,15 @@ Dependencies (git submodules):
 - [stb_image](https://github.com/nothings/stb) — texture loading
 - [Bullet Physics](https://github.com/bulletphysics/bullet3) — physics engine
 
+System dependencies:
+- [Vulkan SDK](https://vulkan.lunarg.com/) — Vulkan backend + shaderc for GLSL→SPIR-V compilation
+
 ### CLI
 
 ```bash
-./build/viewer/RelWithDebInfo/viewer                 # default model
+./build/viewer/RelWithDebInfo/viewer                 # default model (Vulkan)
 ./build/viewer/RelWithDebInfo/viewer -m 姵儿          # named model
+./build/viewer/RelWithDebInfo/viewer --gl -m 姵儿      # OpenGL backend
 ./build/viewer/RelWithDebInfo/viewer -v 动作.vmd       # play VMD
 ./build/viewer/RelWithDebInfo/viewer -v a.vmd b.vmd    # multiple VMDs
 ```
@@ -28,6 +32,8 @@ Dependencies (git submodules):
 |------|-------------|
 | `-m, --model` | Model name (matches entries in `resources/models.cfg`) |
 | `-v, --vmd` | VMD file(s), accepts multiple |
+| `--vulkan, --vk` | Vulkan backend (default) |
+| `--opengl, --gl` | OpenGL backend |
 
 ### Keyboard
 

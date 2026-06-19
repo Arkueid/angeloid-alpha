@@ -20,6 +20,8 @@ add_executable(viewer
     main.cpp
     window/GlfwWindow.cpp
     imgui/ImGuiManager.cpp
+    imgui/ImGuiRendererGL.cpp
+    imgui/ImGuiRendererVk.cpp
 )
 
 target_include_directories(viewer PRIVATE
@@ -36,10 +38,12 @@ target_sources(viewer PRIVATE
     ${IMGUI_DIR}/imgui_widgets.cpp
     ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
     ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
 )
 target_include_directories(viewer PRIVATE ${IMGUI_DIR} ${IMGUI_DIR}/backends)
 
-target_link_libraries(viewer PRIVATE angeloid glfw)
+find_package(Vulkan REQUIRED)
+target_link_libraries(viewer PRIVATE angeloid glfw Vulkan::Vulkan)
 target_compile_definitions(viewer PRIVATE
     MMD_PROJECT_ROOT="${CMAKE_SOURCE_DIR}/"
 )

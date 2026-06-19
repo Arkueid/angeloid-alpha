@@ -6,6 +6,8 @@
 
 #include "core/util/Log.h"
 
+struct GLFWwindow;
+
 namespace Gpu {
 class IGpuDevice;
 }
@@ -14,8 +16,8 @@ namespace mmd {
 
 // Backend selection for mmd::init().
 enum class GpuBackend {
-    OpenGL,    // default
-    // Vulkan,  // future
+    Vulkan,    // default
+    OpenGL,
 };
 
 // Initialization arguments passed to mmd::init().
@@ -25,7 +27,8 @@ struct InitArgs {
     std::filesystem::path effectsCfg;
     std::vector<std::string> blinkMorphs;  // morph names for auto-blink, set by caller
     LogFunc logFunc = nullptr;             // optional custom log sink
-    GpuBackend backend = GpuBackend::OpenGL;
+    GpuBackend backend = GpuBackend::Vulkan;
+    GLFWwindow* window = nullptr;          // needed for Vulkan surface creation
 };
 
 // Initialize mmd module (GPU resources, etc.). Must call while GL context is alive.

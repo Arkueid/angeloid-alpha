@@ -1,12 +1,14 @@
 #pragma once
 
 #include "window/IWindow.h"
+#include "framework/MMD.h"
 
 #include <GLFW/glfw3.h>
 
 class GlfwWindow : public IWindow {
 public:
-    GlfwWindow(int width, int height, const std::string& title);
+    GlfwWindow(int width, int height, const std::string& title,
+               mmd::GpuBackend backend = mmd::GpuBackend::Vulkan);
     ~GlfwWindow() override;
 
     void run() override;
@@ -36,4 +38,5 @@ private:
     GLFWwindow* mWindow = nullptr;
     int mWidth, mHeight;
     float mLastTime = 0, mDeltaTime = 0;
+    bool mVulkan = false;
 };

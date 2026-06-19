@@ -34,7 +34,7 @@ public:
 private:
     Pipeline() = default;
 
-    void renderShadowPass();
+    void renderShadowPass(const std::array<float, 16>& lightViewProj);
     void resizeViewport(int w, int h);
     void computeLightMatrix(const float* lightDir,
                             const float* sceneMin, const float* sceneMax);

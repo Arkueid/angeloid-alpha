@@ -50,9 +50,10 @@ void RenderContext::release() {
 void RenderContext::createGradientTexture() {
     // 4-level gray gradient for cel-shading ramp in toon fragment shader.
     uint8_t gradient[] = {
-        60, 60, 60, 120, 120, 120, 180, 180, 180, 220, 220, 220,
+        60, 60, 60, 255, 120, 120, 120, 255,
+        180, 180, 180, 255, 220, 220, 220, 255,
     };
-    mGradient = Gpu::device()->createTexture(4, 1, Gpu::TextureFormat::RGB8, gradient);
+    mGradient = Gpu::device()->createTexture(4, 1, Gpu::TextureFormat::RGBA8, gradient);
     mGradient->setFilter(Gpu::TextureFilter::Linear, Gpu::TextureFilter::Linear);
     mGradient->setWrap(Gpu::TextureWrap::Clamp, Gpu::TextureWrap::Clamp);
 }

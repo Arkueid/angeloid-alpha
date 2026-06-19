@@ -71,12 +71,23 @@ Loaded by `ShaderManager` singleton; each Renderable fetches its own shader via 
 - Shader reads via `texelFetch(u_boneTex, ivec2(col, row), 0)` — 4 consecutive texels
 
 ## GPU Backend (namespace Gpu)
-Abstract interfaces in `framework/gpu/`, OpenGL implementation in `framework/gpu/opengl/`:
-`IGpuDevice` — central device: resource creation, state, draw calls
-`IGpuTexture` — 2D texture, `bind(unit)`, `write(data)`, `setFilter()`
+Abstract interfaces in `framework/gpu/`, two backends:
+- `gpu/opengl/` — OpenGL implementation (GlDevice, GlTexture, etc.)
+- `gpu/vulkan/` — Vulkan implementation (VulkanDevice, VkBuffer, etc.)
+
+`IGpuDevice` — central device: resource creation, state, draw calls, `beginFrame()`/`endFrame()`, `needsDepthCorrection()`
+`IGpuTexture` — 2D texture, `bind(unit)`, `write(data)`, `setFilter()`, `setMirrorWrap()`
 `IGpuShader` — shader program, `use()`, `setMat4()`, `setVec3()`, `setInt()`
 `IGpuVertexArray` — VAO, `draw(prim, count, first)`
 `IGpuRenderTarget` — FBO, `bind()`, `colorTexture()`, `depthTexture()`
+
+### Vulkan Backend Details
+- **Dynamic Rendering** (`VK_KHR_dynamic_rendering`): avoids explicit render pass/framebuffer objects
+- **SPIR-V Compilation**: shaderc (in-process, ~68ms for all 14 modules), Vulkan-specific GLSL with uniform blocks + `layout(binding=N, location=N)`
+- **Pipeline Cache**: lazy creation keyed by (shader, VAO format, blend/depth/cull/polygon state)
+- **Descriptor Sets**: binding 0 = UBO (uniform buffer, scalar layout), bindings 1-6 = combined image samplers
+- **Depth Correction**: OpenGL NDC Z [-1,1] → Vulkan NDC Z [0,1] via projection matrix row transform
+- **Y Convention**: viewport Y-flip (`height = -H, y = H`) to match OpenGL's Y-up screen mapping
 
 ## ModelRenderer VAOs
 Single morph VAO (`mMorphVao`) with bone indices/weights + morph position/UV VBOs.

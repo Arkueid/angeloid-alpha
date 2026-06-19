@@ -22,6 +22,12 @@ set(MMD_SOURCES
     framework/gpu/opengl/GlVertexArray.cpp
     framework/gpu/opengl/GlRenderTarget.cpp
     framework/gpu/opengl/GlDevice.cpp
+    framework/gpu/vulkan/VkBuffer.cpp
+    framework/gpu/vulkan/VkTexture.cpp
+    framework/gpu/vulkan/VkShader.cpp
+    framework/gpu/vulkan/VkVertexArray.cpp
+    framework/gpu/vulkan/VkRenderTarget.cpp
+    framework/gpu/vulkan/VkDevice.cpp
     framework/ModelRenderer.cpp
     framework/RenderContext.cpp
     framework/scene/RigidBodyRenderer.cpp
@@ -64,6 +70,26 @@ target_link_libraries(angeloid PUBLIC
     glad
     BulletDynamics BulletCollision LinearMath
 )
+
+find_package(Vulkan REQUIRED)
+target_link_libraries(angeloid PUBLIC Vulkan::Vulkan)
+target_compile_definitions(angeloid PUBLIC MMD_VULKAN_BACKEND)
+# Vulkan SDK include path (for glslang/shaderc headers)
+set(VULKAN_SDK_INCLUDE "$ENV{VULKAN_SDK}/Include")
+if(EXISTS "${VULKAN_SDK_INCLUDE}")
+    target_include_directories(angeloid PUBLIC "${VULKAN_SDK_INCLUDE}")
+endif()
+# GLFW include (for VkDevice surface creation via GLFWwindow)
+target_include_directories(angeloid PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/glfw/include")
+# shaderc — in-process GLSL→SPIR-V (cross-platform, shared library)
+set(VULKAN_SDK_LIB "$ENV{VULKAN_SDK}/Lib")
+if(WIN32)
+    target_link_libraries(angeloid PUBLIC "${VULKAN_SDK_LIB}/shaderc_shared.lib")
+elseif(APPLE)
+    target_link_libraries(angeloid PUBLIC "${VULKAN_SDK_LIB}/libshaderc_shared.dylib")
+else()
+    target_link_libraries(angeloid PUBLIC "${VULKAN_SDK_LIB}/libshaderc_shared.so")
+endif()
 
 if(ENABLE_STACKTRACE)
     target_link_libraries(angeloid PUBLIC Backward::Backward)

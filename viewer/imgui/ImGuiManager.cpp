@@ -1,14 +1,11 @@
 #include "imgui/ImGuiManager.h"
+#include "imgui/ImGuiRenderer.h"
 
 #include <filesystem>
 
-#define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
-
 #include <imgui.h>
 #include "backends/imgui_impl_glfw.h"
-#include "backends/imgui_impl_opengl3.h"
 
 static ImGuiManager* sInstance = nullptr;
 
@@ -16,7 +13,8 @@ ImGuiManager::~ImGuiManager() {
     shutdown();
 }
 
-bool ImGuiManager::init(GLFWwindow* window, const char* cjkFontPath) {
+bool ImGuiManager::init(GLFWwindow* window, std::unique_ptr<ImGuiRenderer> renderer,
+                        bool useVulkan, const char* cjkFontPath) {
     mWindow = window;
 
     IMGUI_CHECKVERSION();
@@ -27,16 +25,10 @@ bool ImGuiManager::init(GLFWwindow* window, const char* cjkFontPath) {
 
     ImGui::StyleColorsDark();
 
-    // CJK font: covers Latin, Japanese (Hiragana/Katakana), Chinese ideographs
     static const ImWchar cjkRanges[] = {
-        0x0020, 0x00FF,  // Basic Latin + Latin Supplement
-        0x2000, 0x206F,  // General Punctuation
-        0x3000, 0x303F,  // CJK Symbols and Punctuation
-        0x3040, 0x309F,  // Hiragana
-        0x30A0, 0x30FF,  // Katakana
-        0x4E00, 0x9FFF,  // CJK Unified Ideographs
-        0xFF00, 0xFFEF,  // Halfwidth and Fullwidth Forms
-        0,
+        0x0020, 0x00FF,  0x2000, 0x206F,  0x3000, 0x303F,
+        0x3040, 0x309F,  0x30A0, 0x30FF,  0x4E00, 0x9FFF,
+        0xFF00, 0xFFEF,  0,
     };
     float xscale, yscale;
     glfwGetWindowContentScale(window, &xscale, &yscale);
@@ -45,13 +37,15 @@ bool ImGuiManager::init(GLFWwindow* window, const char* cjkFontPath) {
         io.Fonts->AddFontFromFileTTF(cjkFontPath, fontSize, nullptr, cjkRanges);
     ImGui::GetStyle().ScaleAllSizes(yscale);
 
-    // false = don't install GLFW callbacks; we forward manually
-    if (!ImGui_ImplGlfw_InitForOpenGL(window, false))
-        return false;
-    if (!ImGui_ImplOpenGL3_Init("#version 330 core"))
-        return false;
+    // GLFW platform backend
+    bool glfwOk = useVulkan
+        ? ImGui_ImplGlfw_InitForVulkan(window, false)
+        : ImGui_ImplGlfw_InitForOpenGL(window, false);
+    if (!glfwOk) return false;
 
-    // Install char callback for text input (GlfwWindow doesn't forward it)
+    if (!renderer->init(window)) return false;
+
+    mRenderer = std::move(renderer);
     sInstance = this;
     glfwSetCharCallback(window, charCallback);
 
@@ -60,26 +54,29 @@ bool ImGuiManager::init(GLFWwindow* window, const char* cjkFontPath) {
 }
 
 void ImGuiManager::beginFrame() {
-    ImGui_ImplOpenGL3_NewFrame();
+    mRenderer->newFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 }
 
 void ImGuiManager::endFrame() {
     ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    mRenderer->render();
 }
 
 void ImGuiManager::shutdown() {
-    if (!mInitialized)
-        return;
+    if (!mInitialized) return;
 
     if (mWindow) {
         glfwSetCharCallback(mWindow, nullptr);
         mWindow = nullptr;
     }
 
-    ImGui_ImplOpenGL3_Shutdown();
+    if (mRenderer) {
+        mRenderer->shutdown();
+        mRenderer = nullptr;
+    }
+
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 
@@ -103,8 +100,6 @@ void ImGuiManager::onChar(unsigned int codepoint) {
     ImGui_ImplGlfw_CharCallback(mWindow, codepoint);
 }
 
-// static
-void ImGuiManager::charCallback(GLFWwindow* /*window*/, unsigned int codepoint) {
-    if (sInstance)
-        sInstance->onChar(codepoint);
+void ImGuiManager::charCallback(GLFWwindow*, unsigned int codepoint) {
+    if (sInstance) sInstance->onChar(codepoint);
 }

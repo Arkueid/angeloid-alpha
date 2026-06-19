@@ -53,18 +53,20 @@ angeloid/
 │   └── math/               #   Vec2/3/4, Quat
 ├── framework/              # 渲染 + 框架层
 │   ├── gpu/                #   GPU 抽象层 (IGpuDevice, IGpuTexture, IGpuShader...)
-│   │   └── opengl/         #     OpenGL 后端 (GlDevice, GlTexture, GlShader...)
+│   │   ├── opengl/         #     OpenGL 后端 (GlDevice, GlTexture, GlShader...)
+│   │   └── vulkan/         #     Vulkan 后端 (VulkanDevice, VkBuffer, VkTexture...)
 │   ├── scene/              #   调试可视化 (GroundPlane, WorldAxis, RigidBodyRenderer)
 │   ├── util/               #   工具 (CfgParser, StbImage)
 │   ├── Model.h/.cpp        #   模型 facade
 │   ├── Pipeline.h/.cpp     #   渲染编排
 │   └── MMD.h/.cpp          #   模块 init/dispose
-├── viewer/                 # C++ 应用入口
+├── viewer/                 # C++ 应用入口 (ImGui 控制面板)
 ├── resources/
-│   ├── shaders/            # GLSL 着色器
+│   ├── shaders/opengl/     # OpenGL GLSL 着色器
+│   ├── shaders/vulkan/     # Vulkan GLSL 着色器 (SPIR-V)
 │   ├── toon/               # 共享 toon 纹理
 │   └── models/             # PMX 模型目录
-├── thirdparty/             # GLFW, glad, Bullet, stb, backward-cpp
+├── thirdparty/             # GLFW, glad, Bullet, stb, backward-cpp, imgui
 └── docs/                   # 技术文档
 ```
 
