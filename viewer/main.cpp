@@ -1,9 +1,9 @@
 #include "framework/Camera.h"
 #include "framework/MMD.h"
 #include "framework/Model.h"
-#include "framework/opengl/Pipeline.h"
-#include "framework/opengl/scene/GroundPlane.h"
-#include "framework/opengl/scene/WorldAxis.h"
+#include "framework/Pipeline.h"
+#include "framework/scene/GroundPlane.h"
+#include "framework/scene/WorldAxis.h"
 #include "framework/util/CfgParser.h"
 #include "imgui/ImGuiManager.h"
 #include "window/GlfwWindow.h"
@@ -623,7 +623,6 @@ int main(int argc, char* argv[]) {
     };
 
     app.run();
-    glFinish();
     mmd::dispose();
     return 0;
 }

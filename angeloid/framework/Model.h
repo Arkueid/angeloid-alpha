@@ -5,11 +5,11 @@
 #include "core/anim/PhysicsWorld.h"
 #include "core/util/Log.h"
 #include "core/pmx/PmxModel.h"
-#include "framework/opengl/Renderable.h"
-#include "framework/opengl/ModelRenderer.h"
+#include "framework/Renderable.h"
+#include "framework/ModelRenderer.h"
 #include "framework/AnimationController.h"
 #include "framework/LookAtController.h"
-#include "framework/opengl/scene/RigidBodyRenderer.h"
+#include "framework/scene/RigidBodyRenderer.h"
 
 #include <array>
 #include <filesystem>

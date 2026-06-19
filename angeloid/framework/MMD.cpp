@@ -1,16 +1,16 @@
 #include "framework/MMD.h"
 #include "core/util/Log.h"
-#include "framework/opengl/Pipeline.h"
-#include "framework/opengl/RenderContext.h"
-#include "framework/opengl/ShaderManager.h"
+#include "framework/Pipeline.h"
+#include "framework/RenderContext.h"
+#include "framework/ShaderManager.h"
+#include "framework/gpu/IGpuDevice.h"
+#include "framework/gpu/opengl/GlDevice.h"
 
 #include <cstdio>   // printf, fprintf, vprintf, vfprintf
 
 #ifdef MMD_ENABLE_STACKTRACE
 #include "backward.hpp"
 #endif
-
-extern "C" int gladLoadGL();
 
 namespace mmd {
 namespace {
@@ -53,25 +53,30 @@ void init(const InitArgs& args) {
 #ifdef MMD_ENABLE_STACKTRACE
     static backward::SignalHandling sh;
 #endif
+
+    // Create GPU device
+    if (args.backend == GpuBackend::OpenGL) {
+        Gpu::setDevice(std::make_unique<Gpu::GlDevice>());
+    }
+
     RenderContext::instance().init(args.toonDir);
     ShaderManager::instance().init(args.effectsCfg, args.shaderDir);
     Pipeline::instance().init();
-}
-
-void glInit() {
-    if (!gladLoadGL()) {
-        MMD_ERROR("MMD", "Failed to initialize OpenGL (glad)");
-    }
 }
 
 void dispose() {
     Pipeline::instance().clear();
     ShaderManager::instance().clear();
     RenderContext::instance().release();
+    Gpu::setDevice(nullptr);  // destroy GPU device last
 }
 
 const InitArgs& initArgs() {
     return sInitArgs;
+}
+
+Gpu::IGpuDevice* gpuDevice() {
+    return Gpu::device();
 }
 
 }  // namespace mmd

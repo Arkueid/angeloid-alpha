@@ -16,18 +16,20 @@ set(MMD_SOURCES
     framework/AnimationController.cpp
     framework/LookAtController.cpp
     framework/Model.cpp
-    framework/opengl/gpu/Mesh.cpp
-    framework/opengl/gpu/Texture.cpp
-    framework/opengl/gpu/Shader.cpp
-    framework/opengl/ModelRenderer.cpp
-    framework/opengl/RenderContext.cpp
-    framework/opengl/RenderTarget.cpp
-    framework/opengl/scene/RigidBodyRenderer.cpp
-    framework/opengl/scene/WorldAxis.cpp
-    framework/opengl/scene/GroundPlane.cpp
-    framework/opengl/Pipeline.cpp
-    framework/opengl/ShaderManager.cpp
-    framework/opengl/StbImage.cpp
+    framework/gpu/opengl/GlBuffer.cpp
+    framework/gpu/opengl/GlTexture.cpp
+    framework/gpu/opengl/GlShader.cpp
+    framework/gpu/opengl/GlVertexArray.cpp
+    framework/gpu/opengl/GlRenderTarget.cpp
+    framework/gpu/opengl/GlDevice.cpp
+    framework/ModelRenderer.cpp
+    framework/RenderContext.cpp
+    framework/scene/RigidBodyRenderer.cpp
+    framework/scene/WorldAxis.cpp
+    framework/scene/GroundPlane.cpp
+    framework/Pipeline.cpp
+    framework/ShaderManager.cpp
+    framework/util/StbImage.cpp
     framework/Camera.cpp
     framework/MMD.cpp
 )

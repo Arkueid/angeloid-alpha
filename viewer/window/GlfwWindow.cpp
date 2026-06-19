@@ -1,5 +1,7 @@
 #include "window/GlfwWindow.h"
 
+#include "framework/gpu/IGpuDevice.h"
+
 #include <iostream>
 #include <stdexcept>
 
@@ -22,17 +24,6 @@ GlfwWindow::GlfwWindow(int width, int height, const std::string& title)
     }
 
     glfwMakeContextCurrent(mWindow);
-
-    if (!gladLoadGL()) {
-        glfwTerminate();
-        throw std::runtime_error("Failed to initialize GLAD (OpenGL loader)");
-    }
-
-    std::cout << "OpenGL " << GLVersion.major << "." << GLVersion.minor << "\n";
-    std::cout << "Renderer: " << glGetString(GL_RENDERER) << "\n";
-
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_MULTISAMPLE);
 
     glfwSetFramebufferSizeCallback(mWindow, framebufferSizeCallback);
     glfwSetKeyCallback(mWindow, keyCallback);
@@ -60,13 +51,8 @@ void GlfwWindow::run() {
         if (onUpdate)
             onUpdate(mDeltaTime);
 
-        if (onRender) {
+        if (onRender)
             onRender();
-        }
-        else {
-            glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        }
 
         glfwSwapBuffers(mWindow);
         glfwPollEvents();
@@ -85,7 +71,9 @@ void GlfwWindow::framebufferSizeCallback(GLFWwindow* win, int w, int h) {
     auto* self = static_cast<GlfwWindow*>(glfwGetWindowUserPointer(win));
     self->mWidth = w;
     self->mHeight = h;
-    glViewport(0, 0, w, h);
+    // Device may not exist yet if callback fires before mmd::init()
+    if (auto* dev = Gpu::device())
+        dev->setViewport(0, 0, w, h);
     if (self->onResize)
         self->onResize(w, h);
 }

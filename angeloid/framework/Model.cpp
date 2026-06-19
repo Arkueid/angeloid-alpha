@@ -3,9 +3,10 @@
 #include "framework/Camera.h"
 #include "framework/MMD.h"
 #include "core/pmx/PmxReader.h"
-#include "framework/opengl/RenderContext.h"
-#include "framework/opengl/ShaderManager.h"
-#include "framework/opengl/ShaderStandard.h"
+#include "framework/RenderContext.h"
+#include "framework/ShaderManager.h"
+#include "framework/ShaderStandard.h"
+#include "framework/gpu/IGpuDevice.h"
 #include "core/util/Log.h"
 
 #include <cmath>
@@ -159,8 +160,7 @@ void Model::onMainPass(const MainPassParams& mp) {
 
         mainProg->setInt("u_gradientMap", TEX_UNIT_GRADIENT);
         auto& ctx = mmd::RenderContext::instance();
-        glActiveTexture(GL_TEXTURE0 + TEX_UNIT_GRADIENT);
-        glBindTexture(GL_TEXTURE_2D, ctx.gradientTexture()->id);
+        Gpu::device()->bindTextureToUnit(TEX_UNIT_GRADIENT, ctx.gradientTexture());
     }
 
     mRenderer.renderMorphMainPass(*mainProg, mp.proj, mp.view, mm);

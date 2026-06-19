@@ -2,7 +2,6 @@
 
 #include "window/IWindow.h"
 
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
 class GlfwWindow : public IWindow {
