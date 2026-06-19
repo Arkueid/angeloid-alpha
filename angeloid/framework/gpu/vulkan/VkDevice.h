@@ -69,6 +69,7 @@ public:
     void bindTextureToUnit(int unit, IGpuTexture* tex) override;
 
     bool needsDepthCorrection() const override { return true; }
+    VulkanDevice* asVulkan() override { return this; }
 
     // ── Frame management (IGpuDevice overrides) ──
     void beginFrame() override;
@@ -76,6 +77,7 @@ public:
 
     // ── ImGui integration: expose Vulkan handles ──
     VkInstance vkInstance() const { return mInstance; }
+    VkSampleCountFlagBits msaaSamples() const { return mMsaaSamples; }
 
     // ── Internal: called by Vk* classes ──
 
@@ -114,6 +116,10 @@ private:
     void createSurface();
     void selectPhysicalDevice();
     void createLogicalDevice();
+    void createMsImage(uint32_t w, uint32_t h, VkFormat fmt,
+                       VkImageUsageFlags usage, VkImageAspectFlags aspect,
+                       VkImageLayout targetLayout,
+                       VkImage& img, VkDeviceMemory& mem, VkImageView& view);
     void createScreenDepth();
     void createSwapchain();
     void createCommandPool();
@@ -136,6 +142,7 @@ private:
         PrimitiveType primType;
         bool frontFaceClockwise;
         bool hasColorTarget;
+        uint32_t sampleCount;
     };
     struct PipelineStateHash {
         size_t operator()(const PipelineState& s) const;
@@ -173,10 +180,14 @@ private:
     std::vector<VkImageView> mSwapchainViews;
     uint32_t mCurrentImageIndex = 0;
 
-    // Screen depth buffer (not provided by swapchain)
-    VkImage mScreenDepthImage = VK_NULL_HANDLE;
-    VkDeviceMemory mScreenDepthMemory = VK_NULL_HANDLE;
-    VkImageView mScreenDepthView = VK_NULL_HANDLE;
+    // MSAA screen resources (not provided by swapchain)
+    VkSampleCountFlagBits mMsaaSamples = VK_SAMPLE_COUNT_4_BIT;
+    VkImage mScreenColorMS = VK_NULL_HANDLE;
+    VkDeviceMemory mScreenColorMSMemory = VK_NULL_HANDLE;
+    VkImageView mScreenColorMSView = VK_NULL_HANDLE;
+    VkImage mScreenDepthMS = VK_NULL_HANDLE;
+    VkDeviceMemory mScreenDepthMSMemory = VK_NULL_HANDLE;
+    VkImageView mScreenDepthMSView = VK_NULL_HANDLE;
 
     // Current frame resources
     VkCommandPool mCmdPool = VK_NULL_HANDLE;
@@ -226,6 +237,7 @@ private:
     // Pipeline cache
     std::unordered_map<PipelineState, VkPipeline, PipelineStateHash, PipelineStateEqual>
         mPipelineCache;
+    VkPipelineCache mPipelineCacheVk = VK_NULL_HANDLE;
 
     // Per-shader descriptor sets (one per frame for texture bindings + UBO)
     struct ShaderDescriptors {
@@ -236,6 +248,9 @@ private:
     // Texture bindings (staged until next draw)
     VkTexture* mBoundTextures[6] = {};  // unit 0..5
     VkDescriptorSet mCurrentDescSet = VK_NULL_HANDLE;
+    VkShader* mLastFlushedShader = nullptr;
+    uint64_t mTextureBindGen = 0;
+    uint64_t mLastFlushBindGen = 0;
 
     // Uniform ring buffer
     ::VkBuffer mUniformRingBuffer = VK_NULL_HANDLE;

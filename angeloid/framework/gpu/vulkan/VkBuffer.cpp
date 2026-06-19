@@ -9,8 +9,8 @@
 namespace Gpu {
 
 VkBuffer::VkBuffer(VulkanDevice* device, const void* data, size_t bytes,
-                   VkBufferUsageFlags usage, bool cpuWritable)
-    : mDevice(device), mSize(bytes), mCpuWritable(cpuWritable) {
+                   VkBufferUsageFlags usage, bool)
+    : mDevice(device), mSize(bytes) {
 
     VkBufferCreateInfo ci{};
     ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -47,13 +47,8 @@ VkBuffer::VkBuffer(VulkanDevice* device, const void* data, size_t bytes,
     }
 
     vkBindBufferMemory(mDevice->device(), mBuffer, mMemory, 0);
-
-    if (data) {
-        void* mapped;
-        vkMapMemory(mDevice->device(), mMemory, 0, bytes, 0, &mapped);
-        memcpy(mapped, data, bytes);
-        vkUnmapMemory(mDevice->device(), mMemory);
-    }
+    vkMapMemory(mDevice->device(), mMemory, 0, bytes, 0, &mMapped);
+    if (data) memcpy(mMapped, data, bytes);
 }
 
 VkBuffer::~VkBuffer() {
@@ -61,24 +56,15 @@ VkBuffer::~VkBuffer() {
 }
 
 void VkBuffer::write(const void* data, size_t bytes) {
-    if (!mMemory || bytes > mSize) return;
-
-    void* mapped;
-    vkMapMemory(mDevice->device(), mMemory, 0, bytes, 0, &mapped);
-    memcpy(mapped, data, bytes);
-    vkUnmapMemory(mDevice->device(), mMemory);
+    if (!mMapped || bytes > mSize) return;
+    memcpy(mMapped, data, bytes);
 }
 
 void VkBuffer::destroy() {
-    if (!Gpu::device()) { mMemory = VK_NULL_HANDLE; mBuffer = VK_NULL_HANDLE; return; }
-    if (mMemory) {
-        vkFreeMemory(mDevice->device(), mMemory, nullptr);
-        mMemory = VK_NULL_HANDLE;
-    }
-    if (mBuffer) {
-        vkDestroyBuffer(mDevice->device(), mBuffer, nullptr);
-        mBuffer = VK_NULL_HANDLE;
-    }
+    if (!Gpu::device()) { mMapped = nullptr; mMemory = VK_NULL_HANDLE; mBuffer = VK_NULL_HANDLE; return; }
+    if (mMapped)   { vkUnmapMemory(mDevice->device(), mMemory); mMapped = nullptr; }
+    if (mMemory)    { vkFreeMemory(mDevice->device(), mMemory, nullptr); mMemory = VK_NULL_HANDLE; }
+    if (mBuffer)    { vkDestroyBuffer(mDevice->device(), mBuffer, nullptr); mBuffer = VK_NULL_HANDLE; }
 }
 
 }  // namespace Gpu

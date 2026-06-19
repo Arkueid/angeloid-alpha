@@ -1,11 +1,15 @@
 #include "imgui/ImGuiManager.h"
-#include "imgui/ImGuiRenderer.h"
 
 #include <filesystem>
 
+#define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_opengl3.h"
+#include "backends/imgui_impl_vulkan.h"
+#include "framework/gpu/vulkan/VkDevice.h"
 
 static ImGuiManager* sInstance = nullptr;
 
@@ -13,9 +17,10 @@ ImGuiManager::~ImGuiManager() {
     shutdown();
 }
 
-bool ImGuiManager::init(GLFWwindow* window, std::unique_ptr<ImGuiRenderer> renderer,
-                        bool useVulkan, const char* cjkFontPath) {
+bool ImGuiManager::init(GLFWwindow* window, Gpu::IGpuDevice* dev,
+                        const char* cjkFontPath) {
     mWindow = window;
+    mVulkan = (dev->asVulkan() != nullptr);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -38,14 +43,41 @@ bool ImGuiManager::init(GLFWwindow* window, std::unique_ptr<ImGuiRenderer> rende
     ImGui::GetStyle().ScaleAllSizes(yscale);
 
     // GLFW platform backend
-    bool glfwOk = useVulkan
-        ? ImGui_ImplGlfw_InitForVulkan(window, false)
-        : ImGui_ImplGlfw_InitForOpenGL(window, false);
-    if (!glfwOk) return false;
+    if (mVulkan)
+        ImGui_ImplGlfw_InitForVulkan(window, false);
+    else
+        ImGui_ImplGlfw_InitForOpenGL(window, false);
 
-    if (!renderer->init(window)) return false;
+    // Renderer backend
+    if (mVulkan) {
+        auto* vkDev = dev->asVulkan();
+        ImGui_ImplVulkan_InitInfo info{};
+        info.ApiVersion = VK_API_VERSION_1_2;
+        info.Instance = vkDev->vkInstance();
+        info.PhysicalDevice = vkDev->physicalDevice();
+        info.Device = vkDev->device();
+        info.QueueFamily = vkDev->graphicsQueueFamily();
+        info.Queue = vkDev->graphicsQueue();
+        info.DescriptorPoolSize = 32;
+        info.MinImageCount = 3;
+        info.ImageCount = 3;
+        info.UseDynamicRendering = true;
+        info.PipelineInfoMain.MSAASamples = vkDev->msaaSamples();
 
-    mRenderer = std::move(renderer);
+        VkPipelineRenderingCreateInfoKHR dynRender{};
+        dynRender.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
+        dynRender.colorAttachmentCount = 1;
+        VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
+        dynRender.pColorAttachmentFormats = &colorFormat;
+        info.PipelineInfoMain.PipelineRenderingCreateInfo = dynRender;
+
+        if (!ImGui_ImplVulkan_Init(&info))
+            return false;
+    } else {
+        if (!ImGui_ImplOpenGL3_Init("#version 330 core"))
+            return false;
+    }
+
     sInstance = this;
     glfwSetCharCallback(window, charCallback);
 
@@ -54,14 +86,21 @@ bool ImGuiManager::init(GLFWwindow* window, std::unique_ptr<ImGuiRenderer> rende
 }
 
 void ImGuiManager::beginFrame() {
-    mRenderer->newFrame();
+    if (mVulkan)
+        ImGui_ImplVulkan_NewFrame();
+    else
+        ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 }
 
 void ImGuiManager::endFrame() {
     ImGui::Render();
-    mRenderer->render();
+    if (mVulkan)
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(),
+            Gpu::device()->asVulkan()->currentCmd());
+    else
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
 void ImGuiManager::shutdown() {
@@ -72,10 +111,10 @@ void ImGuiManager::shutdown() {
         mWindow = nullptr;
     }
 
-    if (mRenderer) {
-        mRenderer->shutdown();
-        mRenderer = nullptr;
-    }
+    if (mVulkan)
+        ImGui_ImplVulkan_Shutdown();
+    else
+        ImGui_ImplOpenGL3_Shutdown();
 
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

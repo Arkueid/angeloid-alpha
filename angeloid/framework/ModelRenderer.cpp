@@ -1,5 +1,7 @@
 #include "framework/ModelRenderer.h"
 
+#include <chrono>
+
 #include "framework/PassParams.h"
 #include "framework/ShaderStandard.h"
 
@@ -76,7 +78,10 @@ void ModelRenderer::loadModel(const PmxModel& model, const fs::path& textureDir)
     // Copy indices (shared by all VAOs)
     mIndices.assign(model.indices.begin(), model.indices.end());
 
+    auto tTex = std::chrono::steady_clock::now();
     loadTextures(textureDir);
+    MMD_INFO("RENDER", "  Textures: %.0f ms",
+             std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - tTex).count());
     buildMaterialBatches(model);
 }
 

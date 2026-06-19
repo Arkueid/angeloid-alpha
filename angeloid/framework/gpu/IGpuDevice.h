@@ -13,6 +13,8 @@ class IGpuTexture;
 class IGpuShader;
 class IGpuVertexArray;
 class IGpuRenderTarget;
+class GlDevice;
+class VulkanDevice;
 struct VertexAttribute;
 
 // ──── IGpuDevice — backend-agnostic GPU device ────
@@ -78,9 +80,12 @@ public:
     // Called once at the end of each frame (after all rendering, submits + presents).
     virtual void endFrame() = 0;
 
-    // Vulkan backend (and other non-OpenGL backends) need depth range correction:
     // OpenGL NDC Z is [-1,1], Vulkan NDC Z is [0,1].
     virtual bool needsDepthCorrection() const { return false; }
+
+    // Backend identification — returns this if matching, nullptr otherwise.
+    virtual GlDevice*     asOpenGL()  { return nullptr; }
+    virtual VulkanDevice* asVulkan()  { return nullptr; }
 };
 
 // ── Global device access ──

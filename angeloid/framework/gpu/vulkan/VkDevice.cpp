@@ -66,6 +66,10 @@ VulkanDevice::VulkanDevice(GLFWwindow* window) : mWindow(window) {
     createUniformRing();
     createDummyTexture();
 
+    VkPipelineCacheCreateInfo cacheCI{};
+    cacheCI.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    vkCreatePipelineCache(mDevice, &cacheCI, nullptr, &mPipelineCacheVk);
+
     MMD_INFO("VULKAN", "Device: %s", mDeviceProps.deviceName);
 }
 
@@ -77,6 +81,10 @@ VulkanDevice::~VulkanDevice() {
         vkDestroyPipeline(mDevice, pipeline, nullptr);
     }
     mPipelineCache.clear();
+    if (mPipelineCacheVk) {
+        vkDestroyPipelineCache(mDevice, mPipelineCacheVk, nullptr);
+        mPipelineCacheVk = VK_NULL_HANDLE;
+    }
 
     mShaderDescSets.clear();
     mDummyTexture.reset();
@@ -181,6 +189,14 @@ void VulkanDevice::selectPhysicalDevice() {
 
     vkGetPhysicalDeviceMemoryProperties(mPhysicalDevice, &mMemoryProps);
 
+    // Check MSAA support
+    VkSampleCountFlags counts = mDeviceProps.limits.framebufferColorSampleCounts
+                              & mDeviceProps.limits.framebufferDepthSampleCounts;
+    if (!(counts & VK_SAMPLE_COUNT_4_BIT)) {
+        mMsaaSamples = VK_SAMPLE_COUNT_1_BIT;
+        MMD_INFO("VULKAN", "MSAA 4x not supported, falling back to 1x");
+    }
+
     // Find graphics queue family
     uint32_t qfCount;
     vkGetPhysicalDeviceQueueFamilyProperties(mPhysicalDevice, &qfCount, nullptr);
@@ -234,80 +250,93 @@ void VulkanDevice::createLogicalDevice() {
 
 // ──── Swapchain ────
 
-void VulkanDevice::createScreenDepth() {
-    if (mSwapchainExtent.width == 0 || mSwapchainExtent.height == 0) return;
+void VulkanDevice::createMsImage(uint32_t w, uint32_t h, VkFormat fmt,
+                                  VkImageUsageFlags usage, VkImageAspectFlags aspect,
+                                  VkImageLayout targetLayout,
+                                  VkImage& img, VkDeviceMemory& mem, VkImageView& view) {
+    VkImageCreateInfo ici{};
+    ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    ici.imageType = VK_IMAGE_TYPE_2D;
+    ici.format = fmt;
+    ici.extent = {w, h, 1};
+    ici.mipLevels = 1;
+    ici.arrayLayers = 1;
+    ici.samples = mMsaaSamples;
+    ici.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ici.usage = usage;
+    ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkCreateImage(mDevice, &ici, nullptr, &img);
 
-    VkImageCreateInfo imgCI{};
-    imgCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imgCI.imageType = VK_IMAGE_TYPE_2D;
-    imgCI.format = VK_FORMAT_D32_SFLOAT;
-    imgCI.extent = {mSwapchainExtent.width, mSwapchainExtent.height, 1};
-    imgCI.mipLevels = 1;
-    imgCI.arrayLayers = 1;
-    imgCI.samples = VK_SAMPLE_COUNT_1_BIT;
-    imgCI.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imgCI.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    imgCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imgCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    vkCreateImage(mDevice, &imgCI, nullptr, &mScreenDepthImage);
+    VkMemoryRequirements mr;
+    vkGetImageMemoryRequirements(mDevice, img, &mr);
+    int mi = findMemoryType(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    VkMemoryAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    ai.allocationSize = mr.size;
+    ai.memoryTypeIndex = (uint32_t)mi;
+    vkAllocateMemory(mDevice, &ai, nullptr, &mem);
+    vkBindImageMemory(mDevice, img, mem, 0);
 
-    VkMemoryRequirements memReqs;
-    vkGetImageMemoryRequirements(mDevice, mScreenDepthImage, &memReqs);
-    VkMemoryPropertyFlags props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    int memIndex = findMemoryType(memReqs.memoryTypeBits, props);
+    VkImageViewCreateInfo vci{};
+    vci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    vci.image = img;
+    vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    vci.format = fmt;
+    vci.subresourceRange.aspectMask = aspect;
+    vci.subresourceRange.levelCount = 1;
+    vci.subresourceRange.layerCount = 1;
+    vkCreateImageView(mDevice, &vci, nullptr, &view);
 
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memReqs.size;
-    allocInfo.memoryTypeIndex = (uint32_t)memIndex;
-    vkAllocateMemory(mDevice, &allocInfo, nullptr, &mScreenDepthMemory);
-    vkBindImageMemory(mDevice, mScreenDepthImage, mScreenDepthMemory, 0);
-
-    VkImageViewCreateInfo viewCI{};
-    viewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewCI.image = mScreenDepthImage;
-    viewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewCI.format = VK_FORMAT_D32_SFLOAT;
-    viewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    viewCI.subresourceRange.levelCount = 1;
-    viewCI.subresourceRange.layerCount = 1;
-    vkCreateImageView(mDevice, &viewCI, nullptr, &mScreenDepthView);
-
-    // Transition to DEPTH_ATTACHMENT_OPTIMAL using temp command buffer
-    VkCommandBufferAllocateInfo tmpAI{};
-    tmpAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    tmpAI.commandPool = mCmdPool;
-    tmpAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    tmpAI.commandBufferCount = 1;
-    VkCommandBuffer tmpCmd;
-    vkAllocateCommandBuffers(mDevice, &tmpAI, &tmpCmd);
-    VkCommandBufferBeginInfo beginBI{};
-    beginBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(tmpCmd, &beginBI);
-    VkImageMemoryBarrier b{};
-    b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    b.newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
-    b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    b.image = mScreenDepthImage;
-    b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    b.subresourceRange.levelCount = 1;
-    b.subresourceRange.layerCount = 1;
-    b.srcAccessMask = 0;
-    b.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    vkCmdPipelineBarrier(tmpCmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0,
-                         0, nullptr, 0, nullptr, 1, &b);
-    vkEndCommandBuffer(tmpCmd);
+    VkCommandBufferAllocateInfo cai{};
+    cai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cai.commandPool = mCmdPool;
+    cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cai.commandBufferCount = 1;
+    VkCommandBuffer tmp;
+    vkAllocateCommandBuffers(mDevice, &cai, &tmp);
+    VkCommandBufferBeginInfo bi{};
+    bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(tmp, &bi);
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout = targetLayout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = img;
+    barrier.subresourceRange.aspectMask = aspect;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.layerCount = 1;
+    VkPipelineStageFlags dstStage = (aspect == VK_IMAGE_ASPECT_COLOR_BIT)
+        ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+        : VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    barrier.dstAccessMask = (aspect == VK_IMAGE_ASPECT_COLOR_BIT)
+        ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+        : VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    vkCmdPipelineBarrier(tmp, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, dstStage, 0,
+                         0, nullptr, 0, nullptr, 1, &barrier);
+    vkEndCommandBuffer(tmp);
     VkSubmitInfo si{};
     si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     si.commandBufferCount = 1;
-    si.pCommandBuffers = &tmpCmd;
+    si.pCommandBuffers = &tmp;
     vkQueueSubmit(mGraphicsQueue, 1, &si, VK_NULL_HANDLE);
     vkQueueWaitIdle(mGraphicsQueue);
-    vkFreeCommandBuffers(mDevice, mCmdPool, 1, &tmpCmd);
+    vkFreeCommandBuffers(mDevice, mCmdPool, 1, &tmp);
+}
+
+void VulkanDevice::createScreenDepth() {
+    if (mSwapchainExtent.width == 0 || mSwapchainExtent.height == 0) return;
+    auto w = mSwapchainExtent.width, h = mSwapchainExtent.height;
+    createMsImage(w, h, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                  VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                  mScreenColorMS, mScreenColorMSMemory, mScreenColorMSView);
+    createMsImage(w, h, VK_FORMAT_D32_SFLOAT,
+                  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                  VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                  mScreenDepthMS, mScreenDepthMSMemory, mScreenDepthMSView);
 }
 
 void VulkanDevice::createSwapchain() {
@@ -369,9 +398,12 @@ void VulkanDevice::createSwapchain() {
 }
 
 void VulkanDevice::cleanupSwapchain() {
-    if (mScreenDepthView) { vkDestroyImageView(mDevice, mScreenDepthView, nullptr); mScreenDepthView = VK_NULL_HANDLE; }
-    if (mScreenDepthMemory) { vkFreeMemory(mDevice, mScreenDepthMemory, nullptr); mScreenDepthMemory = VK_NULL_HANDLE; }
-    if (mScreenDepthImage) { vkDestroyImage(mDevice, mScreenDepthImage, nullptr); mScreenDepthImage = VK_NULL_HANDLE; }
+    if (mScreenColorMSView) { vkDestroyImageView(mDevice, mScreenColorMSView, nullptr); mScreenColorMSView = VK_NULL_HANDLE; }
+    if (mScreenColorMSMemory) { vkFreeMemory(mDevice, mScreenColorMSMemory, nullptr); mScreenColorMSMemory = VK_NULL_HANDLE; }
+    if (mScreenColorMS) { vkDestroyImage(mDevice, mScreenColorMS, nullptr); mScreenColorMS = VK_NULL_HANDLE; }
+    if (mScreenDepthMSView) { vkDestroyImageView(mDevice, mScreenDepthMSView, nullptr); mScreenDepthMSView = VK_NULL_HANDLE; }
+    if (mScreenDepthMSMemory) { vkFreeMemory(mDevice, mScreenDepthMSMemory, nullptr); mScreenDepthMSMemory = VK_NULL_HANDLE; }
+    if (mScreenDepthMS) { vkDestroyImage(mDevice, mScreenDepthMS, nullptr); mScreenDepthMS = VK_NULL_HANDLE; }
     for (auto v : mSwapchainViews) vkDestroyImageView(mDevice, v, nullptr);
     mSwapchainViews.clear();
     if (mSwapchain) {
@@ -432,13 +464,13 @@ void VulkanDevice::createSyncObjects() {
 void VulkanDevice::createDescriptorPool() {
     // Large enough for all shaders × frames
     std::vector<VkDescriptorPoolSize> poolSizes = {
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 32},
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 256},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 256},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1024},
     };
 
     VkDescriptorPoolCreateInfo ci{};
     ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    ci.maxSets = 64;
+    ci.maxSets = 512;
     ci.poolSizeCount = (uint32_t)poolSizes.size();
     ci.pPoolSizes = poolSizes.data();
     ci.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
@@ -491,7 +523,7 @@ void VulkanDevice::createUniformRing() {
 }
 
 VulkanDevice::RingAllocation VulkanDevice::allocateUniformRing(uint32_t size) {
-    uint32_t align = std::max(256u, (uint32_t)mDeviceProps.limits.minUniformBufferOffsetAlignment);
+    uint32_t align = mDeviceProps.limits.minUniformBufferOffsetAlignment;
     mUniformRingOffset = (mUniformRingOffset + align - 1) & ~(align - 1);
 
     if (mUniformRingOffset + size > mUniformRingSize) {
@@ -655,6 +687,7 @@ size_t VulkanDevice::PipelineStateHash::operator()(const PipelineState& s) const
     hashCombine((int)s.primType);
     hashCombine(s.frontFaceClockwise);
     hashCombine(s.hasColorTarget);
+    hashCombine(s.sampleCount);
     return h;
 }
 
@@ -666,7 +699,8 @@ bool VulkanDevice::PipelineStateEqual::operator()(const PipelineState& a,
            a.depthFunc == b.depthFunc && a.cullMode == b.cullMode &&
            a.polyMode == b.polyMode && a.primType == b.primType &&
            a.frontFaceClockwise == b.frontFaceClockwise &&
-           a.hasColorTarget == b.hasColorTarget;
+           a.hasColorTarget == b.hasColorTarget &&
+           a.sampleCount == b.sampleCount;
 }
 
 VkPipeline VulkanDevice::getOrCreatePipeline(const PipelineState& state) {
@@ -739,7 +773,7 @@ VkPipeline VulkanDevice::getOrCreatePipeline(const PipelineState& state) {
     // Multisampling
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.rasterizationSamples = (VkSampleCountFlagBits)state.sampleCount;
 
     // Depth/stencil
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
@@ -798,7 +832,7 @@ VkPipeline VulkanDevice::getOrCreatePipeline(const PipelineState& state) {
     pipelineCI.layout = shader->pipelineLayout();
 
     VkPipeline pipeline;
-    VkResult res = vkCreateGraphicsPipelines(mDevice, VK_NULL_HANDLE, 1, &pipelineCI,
+    VkResult res = vkCreateGraphicsPipelines(mDevice, mPipelineCacheVk, 1, &pipelineCI,
                                               nullptr, &pipeline);
     if (res != VK_SUCCESS) {
         MMD_ERROR("VULKAN", "Failed to create graphics pipeline (code=%d)", res);
@@ -816,6 +850,9 @@ void VulkanDevice::flushDescriptorSet(VkShader* shader) {
     if (it == mShaderDescSets.end()) return;
 
     VkDescriptorSet ds = it->second.sets[mCurrentFrame];
+    bool texturesChanged = (shader != mLastFlushedShader || mTextureBindGen != mLastFlushBindGen);
+    mLastFlushedShader = shader;
+    if (texturesChanged) mLastFlushBindGen = mTextureBindGen;
 
     // We need to write:
     // - binding 0: UBO (if shader has uniforms)
@@ -848,7 +885,8 @@ void VulkanDevice::flushDescriptorSet(VkShader* shader) {
         writes.push_back(write);
     }
 
-    // Texture bindings
+    // Texture bindings — skip when unchanged (same shader, no texture rebinds)
+    if (texturesChanged) {
     for (int i = 0; i < 6; ++i) {
         VkTexture* tex = mBoundTextures[i];
         if (!tex) tex = mDummyTexture.get();
@@ -874,6 +912,7 @@ void VulkanDevice::flushDescriptorSet(VkShader* shader) {
         write.pImageInfo = &imageInfos.back();
         writes.push_back(write);
     }
+    }  // texturesChanged
 
     vkUpdateDescriptorSets(mDevice, (uint32_t)writes.size(), writes.data(), 0, nullptr);
 
@@ -906,6 +945,7 @@ void VulkanDevice::drawVertexArray(VkVertexArray* vao, PrimitiveType prim, int c
     psoState.primType = prim;
     psoState.frontFaceClockwise = mState.frontFaceClockwise;
     psoState.hasColorTarget = mCurrentRT ? mCurrentRT->hasColor() : true;
+    psoState.sampleCount = psoState.hasColorTarget ? (uint32_t)mMsaaSamples : 1;
 
     // Get or create pipeline
     VkPipeline pipeline = getOrCreatePipeline(psoState);
@@ -1030,6 +1070,7 @@ void VulkanDevice::setLineWidth(float width) {
 void VulkanDevice::bindTextureToUnit(int unit, IGpuTexture* tex) {
     if (unit >= 0 && unit < 6) {
         mBoundTextures[unit] = static_cast<VkTexture*>(tex);
+        mTextureBindGen++;
     }
 }
 
@@ -1210,8 +1251,11 @@ void VulkanDevice::bindScreenFramebuffer(int w, int h) {
 
     VkRenderingAttachmentInfo colorAttachment{};
     colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    colorAttachment.imageView = mSwapchainViews[mCurrentImageIndex];
+    colorAttachment.imageView = mScreenColorMSView;
     colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorAttachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+    colorAttachment.resolveImageView = mSwapchainViews[mCurrentImageIndex];
+    colorAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.clearValue.color = {
@@ -1219,7 +1263,7 @@ void VulkanDevice::bindScreenFramebuffer(int w, int h) {
 
     VkRenderingAttachmentInfo depthAttachment{};
     depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    depthAttachment.imageView = mScreenDepthView;
+    depthAttachment.imageView = mScreenDepthMSView;
     depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
     depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1234,6 +1278,7 @@ void VulkanDevice::bindScreenFramebuffer(int w, int h) {
     renderingInfo.pDepthAttachment = &depthAttachment;
 
     vkCmdBeginRendering(mCurrentCmd, &renderingInfo);
+    mRenderingActive = true;
 }
 
 // ──── Frame management ────

@@ -1,19 +1,16 @@
 #pragma once
 
-#include <memory>
-
 struct GLFWwindow;
 
-class ImGuiRenderer;
+namespace Gpu { class IGpuDevice; }
 
 class ImGuiManager {
 public:
     ImGuiManager() = default;
     ~ImGuiManager();
 
-    // Takes ownership of renderer. useVulkan = use ImGui_ImplGlfw_InitForVulkan.
-    bool init(GLFWwindow* window, std::unique_ptr<ImGuiRenderer> renderer,
-              bool useVulkan, const char* cjkFontPath = nullptr);
+    bool init(GLFWwindow* window, Gpu::IGpuDevice* dev,
+              const char* cjkFontPath = nullptr);
 
     void beginFrame();
     void endFrame();
@@ -30,6 +27,6 @@ private:
     static void charCallback(GLFWwindow* window, unsigned int codepoint);
 
     bool mInitialized = false;
+    bool mVulkan = false;
     GLFWwindow* mWindow = nullptr;
-    std::unique_ptr<ImGuiRenderer> mRenderer;
 };

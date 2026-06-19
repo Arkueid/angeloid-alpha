@@ -20,8 +20,6 @@ add_executable(viewer
     main.cpp
     window/GlfwWindow.cpp
     imgui/ImGuiManager.cpp
-    imgui/ImGuiRendererGL.cpp
-    imgui/ImGuiRendererVk.cpp
 )
 
 target_include_directories(viewer PRIVATE

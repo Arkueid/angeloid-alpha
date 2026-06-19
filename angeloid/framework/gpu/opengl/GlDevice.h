@@ -57,6 +57,8 @@ public:
     // Frame management (no-ops for OpenGL)
     void beginFrame() override {}
     void endFrame() override {}
+
+    GlDevice* asOpenGL() override { return this; }
 };
 
 // Set the global GPU device (called once at init).

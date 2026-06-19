@@ -29,8 +29,8 @@ private:
     VulkanDevice* mDevice;
     ::VkBuffer mBuffer = VK_NULL_HANDLE;
     VkDeviceMemory mMemory = VK_NULL_HANDLE;
+    void* mMapped = nullptr;
     size_t mSize = 0;
-    bool mCpuWritable = false;
 };
 
 }  // namespace Gpu

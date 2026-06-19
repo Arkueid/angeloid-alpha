@@ -1,13 +1,12 @@
 #include "framework/Camera.h"
 #include "framework/MMD.h"
 #include "framework/Model.h"
+#include "framework/gpu/IGpuDevice.h"
 #include "framework/Pipeline.h"
 #include "framework/scene/GroundPlane.h"
 #include "framework/scene/WorldAxis.h"
 #include "framework/util/CfgParser.h"
 #include "imgui/ImGuiManager.h"
-#include "imgui/ImGuiRendererGL.h"
-#include "imgui/ImGuiRendererVk.h"
 #include "window/GlfwWindow.h"
 
 #include <imgui.h>
@@ -136,15 +135,8 @@ int main(int argc, char* argv[]) {
 
     // --- ImGui (must follow mmd::init, needs GPU device alive) ---
     ImGuiManager imgui;
-    auto fontPath = projRoot / "resources/fonts/cjk.ttf";
-    bool vk = (backend == mmd::GpuBackend::Vulkan);
-    if (vk)
-        imgui.init(app.glfwWindow(),
-                   std::make_unique<ImGuiRendererVk>(mmd::gpuDevice()),
-                   /*useVulkan=*/true, fontPath.string().c_str());
-    else
-        imgui.init(app.glfwWindow(), std::make_unique<ImGuiRendererGL>(),
-                   /*useVulkan=*/false, fontPath.string().c_str());
+    imgui.init(app.glfwWindow(), mmd::gpuDevice(),
+               (projRoot / "resources/fonts/cjk.ttf").string().c_str());
 
     // --- Load model ---
     mmd::Model model;
@@ -324,7 +316,7 @@ int main(int argc, char* argv[]) {
 
         ImGui::TextDisabled("%s", model.modelName().c_str());
         ImGui::SameLine();
-        ImGui::TextDisabled(" %s", vk ? "Vulkan" : "OpenGL");
+        ImGui::TextDisabled(" %s", mmd::gpuDevice()->asVulkan() ? "Vulkan" : "OpenGL");
         ImGui::Text("FPS: %.0f (%.2f ms)", smoothFps, dt * 1000.0);
 
         // ── Model Inspector ──
