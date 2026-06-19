@@ -46,18 +46,25 @@ cmake --build build --config RelWithDebInfo
 
 ```
 angeloid/
-├── mmd/                   # C++ core library
-│   ├── pmx/               # PMX format (PmxModel, PmxReader)
-│   ├── anim/              # Animation (BoneSkinning, PhysicsWorld, VmdPlayer, MorphController)
-│   ├── render/opengl/     # Rendering (ModelRenderer, Pipeline, GPU wrappers, debug viz)
-│   ├── util/              # Utilities (CfgParser, Log)
-│   └── math/              # Vec2/3/4, Quat
-├── viewer/                # C++ app entry point
+├── core/                   # Computation layer (no GPU dependency)
+│   ├── pmx/                #   PMX format (PmxModel, PmxReader)
+│   ├── anim/               #   Animation (BoneSkinning, PhysicsWorld, VmdPlayer, MorphController)
+│   └── math/               #   Vec2/3/4, Quat
+├── framework/              # Rendering + framework layer
+│   ├── gpu/                #   GPU abstraction (IGpuDevice, IGpuTexture, IGpuShader...)
+│   │   └── opengl/         #     OpenGL backend (GlDevice, GlTexture, GlShader...)
+│   ├── scene/              #   Debug visualization (GroundPlane, WorldAxis, RigidBodyRenderer)
+│   ├── util/               #   Utilities (CfgParser, StbImage)
+│   ├── Model.h/.cpp        #   Model facade
+│   ├── Pipeline.h/.cpp     #   Render orchestrator
+│   └── MMD.h/.cpp          #   Module init/dispose
+├── viewer/                 # C++ app entry point
 ├── resources/
-│   ├── core/              # Engine resources (shaders, effects, toon)
-│   └── app/               # App content (models, vpd, vmd)
-├── thirdparty/            # GLFW, glad, Bullet, stb, backward-cpp
-└── docs/                  # Technical docs
+│   ├── shaders/            # GLSL shaders
+│   ├── toon/               # Shared toon textures
+│   └── models/             # PMX model directories
+├── thirdparty/             # GLFW, glad, Bullet, stb, backward-cpp
+└── docs/                   # Technical docs
 ```
 
 ## Model Credits

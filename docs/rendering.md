@@ -18,7 +18,7 @@ Frame:
 
 ## Renderables
 
-Interface: `Renderable` (`framework/opengl/Renderable.h`)
+Interface: `Renderable` (`framework/Renderable.h`)
 - `onShadowPass(lightViewProj, model)` — depth-only
 - `onMainPass(proj, view, model, lightViewProj, hasShadow)` — color + shadow
 - `onDebugPass(proj, view, model)` — overlay (no shadow)
@@ -52,32 +52,35 @@ All defined in `resources/effects.cfg`:
 ```
 Loaded by `ShaderManager` singleton; each Renderable fetches its own shader via `ShaderManager::instance()`.
 
-## GL State
-| What | Where | Notes |
+## GL State (all routed through Gpu::device())
+| State | Where | Notes |
 |------|-------|-------|
-| `glFrontFace(GL_CW)` | `Pipeline::execute` start | PMX clockwise winding |
-| `glEnable(GL_DEPTH_TEST)` | `Pipeline::execute` start | |
-| `glDepthFunc(GL_LEQUAL)` | `Pipeline::execute` start | |
-| `glEnable(GL_BLEND)` | `Pipeline::execute` start | `SRC_ALPHA, ONE_MINUS_SRC_ALPHA` |
-| Shadow: `glDepthFunc(GL_LESS)` | `renderShadowPass` | saved/restored internally |
-| Axis: `glEnable(GL_POLYGON_OFFSET_LINE)` | `WorldAxis::onDebugPass` | avoids z-fight with ground |
-| Outline: `glCullFace(GL_FRONT)` | `renderMorphOutlinePass` | inverted hull |
+| `setFrontFace(true)` (CW) | `Pipeline::execute` start | PMX clockwise winding |
+| `setDepthTest(true)` | `Pipeline::execute` start | |
+| `setDepthFunc(LEqual)` | `Pipeline::execute` start | |
+| `setBlend(true)`, `SrcAlpha/OneMinusSrcAlpha` | `Pipeline::execute` start | |
+| Shadow: `setDepthFunc(Less)` | `renderShadowPass` | saved/restored internally |
+| Axis: `setPolygonOffset(-1,-1)` | `WorldAxis::onDebugPass` | avoids z-fight with ground |
+| Outline: `setCullMode(Front)` | `renderMorphOutlinePass` | inverted hull |
 
 ## Bone Texture
 - RGBA32F, 4 texels per matrix (column-major 4×4)
 - Packed by `BoneSkinning::packBoneMatrices()`
-- Created by `BoneTextureUtil::createBoneTexture()` (inline header)
-- Uploaded by `ModelRenderer::uploadBoneData()` via `syncBoneTexture()`
+- Created inline in `ModelRenderer.cpp` via `Gpu::device()->createTexture()`
+- Uploaded by `ModelRenderer::uploadBoneData()` via `mBoneTexture->write()`
 - Shader reads via `texelFetch(u_boneTex, ivec2(col, row), 0)` — 4 consecutive texels
 
 ## GPU Backend (namespace Gpu)
-`Vao`: VAO + VBOs + EBO, `render(mode)`, `destroy()`
-`VboWrapper`: dynamic VBO, `write(data, bytes)`
-`Texture`: 2D texture, `bind(unit)`, `write(data)`, `setFilter()`
-`ShaderProgram`: GLSL program, `use()`, `setMat4()`, `setVec3()`, `setInt()`
+Abstract interfaces in `framework/gpu/`, OpenGL implementation in `framework/gpu/opengl/`:
+`IGpuDevice` — central device: resource creation, state, draw calls
+`IGpuTexture` — 2D texture, `bind(unit)`, `write(data)`, `setFilter()`
+`IGpuShader` — shader program, `use()`, `setMat4()`, `setVec3()`, `setInt()`
+`IGpuVertexArray` — VAO, `draw(prim, count, first)`
+`IGpuRenderTarget` — FBO, `bind()`, `colorTexture()`, `depthTexture()`
 
 ## ModelRenderer VAOs
-3 total: `mMorphVao`, `mMorphVaoNoToon`, `mMorphOutlineVao`. All include bone indices/weights + morph position/UV VBOs.
+Single morph VAO (`mMorphVao`) with bone indices/weights + morph position/UV VBOs.
+Toon/no-toon/outline all share the same VAO; the shader selection determines the look.
 
 ## Toon Shading
 - Gradient 1D texture bound to GL_TEXTURE2

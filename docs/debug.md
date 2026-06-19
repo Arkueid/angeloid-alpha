@@ -4,7 +4,7 @@ description: RigidBodyRenderer, WorldAxis, console dump, physics debug overlay
 type: reference
 ---
 
-## RigidBodyRenderer (mmd/render/opengl/debug/)
+## RigidBodyRenderer (framework/scene/)
 - B key toggles wireframe display
 - Shows rigid bodies as colored wireframe shapes + joints as lines
 - Lazy-initialized on first draw (needs active GL context)
@@ -13,7 +13,7 @@ type: reference
 - `mShowPhysicsDebug` flag controls visibility (independent of physics enabled state)
 - Doesn't require physics to be ON — just toggles display
 
-## WorldAxis (mmd/render/opengl/debug/)
+## WorldAxis (framework/scene/)
 - X key: RGB axis lines
 - G key: ground grid
 - Uses "axis" shader

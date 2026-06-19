@@ -31,17 +31,21 @@ cmake --build build --config RelWithDebInfo
   - `Model.h/.cpp` — facade: load/update + Renderable (onShadowPass/onMainPass/onDebugPass)
   - `MMD.h/.cpp` — init/dispose, InitArgs
   - `Camera.h/.cpp` — FPS + Orbit camera
-  - `opengl/` — OpenGL rendering
+  - `gpu/` — GPU abstraction layer (backend-agnostic interfaces + enums)
+      - `IGpuDevice.h` — central device: resource creation, state, draw calls
+      - `IGpuBuffer.h`, `IGpuTexture.h`, `IGpuShader.h` — resource handles
+      - `IGpuVertexArray.h`, `IGpuRenderTarget.h` — VAO + FBO handles
+      - `Types.h` — shared enums (BufferUsage, TextureFormat, CompareFunc, etc.)
+      - `ShaderUtil.h` — CPU-only helpers (readShaderFile)
+      - `gpu/opengl/` — OpenGL backend (implements all IGpu*)
       - `Renderable.h` — interface (onShadowPass/onMainPass/onDebugPass)
+      - `PassParams.h` — per-pass data bundles (MainPassParams, etc.)
       - `Pipeline.h/.cpp` — render orchestrator: pass ordering + renderable list + shadow map
       - `ShaderManager.h/.cpp` — global shader registry (7 programs from effects.cfg)
       - `RenderContext.h/.cpp` — singleton: gradient + toon textures
-      - `RenderTarget.h/.cpp` — FBO wrapper (color + depth)
       - `ModelRenderer.h/.cpp` — PMX GPU meshes, material batches, morph VAOs
       - `ShaderStandard.h` — uniform/texture/attribute naming conventions
-      - `BoneTextureUtil.h`, `StbImage.cpp` — utilities
-      - `gpu/` — Mesh, Shader, Texture (OpenGL primitives)
-      - `scene/` — visual Renderable implementations
+      - `scene/` — visual Renderable implementations (GroundPlane, WorldAxis, RigidBodyRenderer)
           - `GroundPlane` — 200×200 white quad with shadow reception
           - `WorldAxis` — RGB axis + grid lines
           - `RigidBodyRenderer` — physics debug wireframe
