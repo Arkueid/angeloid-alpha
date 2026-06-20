@@ -7,8 +7,8 @@
 #include "core/pmx/PmxModel.h"
 #include "framework/Renderable.h"
 #include "framework/ModelRenderer.h"
-#include "framework/AnimationController.h"
-#include "framework/LookAtController.h"
+#include "core/anim/AnimationController.h"
+#include "core/anim/LookAtController.h"
 #include "framework/scene/RigidBodyRenderer.h"
 
 #include <array>
@@ -115,7 +115,7 @@ public:
     float modelScale() const {
         return mRenderer.modelScale();
     }
-    const float* modelMatrix() const {
+    const std::array<float, 16>& modelMatrix() const {
         return mRenderer.modelMatrix();
     }
     PhysicsWorld* physicsWorld() { return &mPhysics; }

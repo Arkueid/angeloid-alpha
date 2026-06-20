@@ -1,7 +1,6 @@
 #include "framework/MMD.h"
 #include "core/util/Log.h"
 #include "framework/Pipeline.h"
-#include "framework/RenderContext.h"
 #include "framework/ShaderManager.h"
 #include "framework/gpu/IGpuDevice.h"
 #include "framework/gpu/opengl/GlDevice.h"
@@ -70,16 +69,16 @@ void init(const InitArgs& args) {
         Gpu::setDevice(std::make_unique<Gpu::GlDevice>());
     }
 
-    RenderContext::instance().init(args.toonDir);
-    ShaderManager::instance().init(args.effectsCfg, args.shaderDir);
+    ShaderManager::instance().init(args.effectsCfg, args.shaderDir, args.toonDir);
     Pipeline::instance().init();
 }
 
 void dispose() {
+    MMD_INFO("MMD", "Shutting down...");
     Pipeline::instance().clear();
     ShaderManager::instance().clear();
-    RenderContext::instance().release();
-    Gpu::setDevice(nullptr);  // destroy GPU device last
+    Gpu::setDevice(nullptr);
+    MMD_INFO("MMD", "Shutdown complete");
 }
 
 const InitArgs& initArgs() {

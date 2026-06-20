@@ -14,6 +14,8 @@
 #include <unordered_map>
 #include <vector>
 
+class ShaderManager;
+
 struct MaterialBatch {
     int first = 0;
     int count = 0;
@@ -62,22 +64,24 @@ public:
     // Depth-only pass for shadow map generation (no textures, no materials)
     void renderDepthPass(Gpu::IGpuShader& shader,
                          const std::array<float, 16>& lightViewProj,
-                         const float* modelMat = nullptr);
+                         const std::array<float, 16>& modelMat);
 
     void renderMorphMainPass(Gpu::IGpuShader& shader,
                              const std::array<float, 16>& proj,
                              const std::array<float, 16>& view,
-                             const float* modelMat = nullptr);
+                             const std::array<float, 16>& modelMat,
+                             ShaderManager& sm);
 
     void renderMorphOutlinePass(Gpu::IGpuShader& shader,
                                 const std::array<float, 16>& proj,
                                 const std::array<float, 16>& view,
-                                const float* modelMat = nullptr);
+                                const std::array<float, 16>& modelMat,
+                                ShaderManager& sm);
 
     Gpu::IGpuBuffer* morphVbo() const   { return mMorphVboBuffer.get(); }
     Gpu::IGpuBuffer* uvMorphVbo() const { return mUvMorphVboBuffer.get(); }
     float modelScale() const            { return mScale; }
-    const float* modelMatrix() const    { return mModelMat.data(); }
+    const std::array<float, 16>& modelMatrix() const { return mModelMat; }
     const PmxModel* model() const       { return mModel; }
 
     // PMX-space vertex bounds (set by loadModel)

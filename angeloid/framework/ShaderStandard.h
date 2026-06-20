@@ -38,6 +38,20 @@
 #define U_OUTLINE_THICKNESS   "u_outlineThickness"
 #define U_OUTLINE_COLOR       "u_outlineColor"
 
+// ──── Shadow uniforms ────
+#define U_SHADOW_MAP          "u_shadowMap"
+#define U_LIGHT_VIEW_PROJ     "u_lightViewProj"
+#define U_HAS_SHADOW          "u_hasShadow"
+
+// ──── Texture sampler names ────
+#define U_DIFFUSE_TEX         "u_tex"
+#define U_SPHERE_TEX          "u_sphereTex"
+#define U_TOON_TEX            "u_toonTex"
+#define U_GRADIENT_MAP        "u_gradientMap"
+
+// ──── Per-draw uniforms (not in u_material* family — depth/outline pass) ────
+#define U_ALPHA               "u_alpha"
+
 // ──── Toon parameters ────
 #define U_RIM_POWER           "u_rimPower"
 #define U_RIM_COLOR           "u_rimColor"

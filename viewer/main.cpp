@@ -314,9 +314,8 @@ int main(int argc, char* argv[]) {
         smoothFps = smoothFps * 0.95f + (1.0f / dt) * 0.05f;
         ImGui::Begin("Control Panel", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
-        ImGui::TextDisabled("%s", model.modelName().c_str());
-        ImGui::SameLine();
-        ImGui::TextDisabled(" %s", mmd::gpuDevice()->asVulkan() ? "Vulkan" : "OpenGL");
+        ImGui::Text("Model: %s", model.modelName().c_str());
+        ImGui::Text("GPU: %s", mmd::gpuDevice()->asVulkan() ? "Vulkan" : "OpenGL");
         ImGui::Text("FPS: %.0f (%.2f ms)", smoothFps, dt * 1000.0);
 
         // ── Model Inspector ──
@@ -638,9 +637,7 @@ int main(int argc, char* argv[]) {
     };
 
     app.run();
-    // Destroy in order: ImGui → Pipeline → GPU device
     imgui.shutdown();
-    pipe.clear();
-    mmd::dispose();
+    mmd::dispose();  // Pipeline → ShaderManager → GPU device, in order
     return 0;
 }

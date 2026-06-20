@@ -13,9 +13,9 @@ class PhysicsWorld;
 
 class RigidBodyRenderer : public Renderable {
 public:
-    void build(const PmxModel& model, float modelScale = 1.0f,
-               const float* modelMat = nullptr,
-               const PhysicsWorld* physicsWorld = nullptr);
+    void build(const PmxModel& model, float modelScale,
+               const std::array<float, 16>& modelMat,
+               const PhysicsWorld* physicsWorld);
 
     const char* name() const override { return "RigidBody"; }
 
@@ -35,7 +35,7 @@ private:
     int mBodyTexWidth = 64;
     int mBodyCount = 0;
     float mModelScale = 1.0f;
-    const float* mModelMat = nullptr;
+    const std::array<float, 16>* mModelMat = nullptr;
     const PhysicsWorld* mPhysicsWorld = nullptr;
     float mCx = 0, mMy = 0, mCz = 0;
 

@@ -262,10 +262,10 @@ static void buildPass(const PmxModel& model, float cx, float my, float cz, float
 }
 
 void RigidBodyRenderer::build(const PmxModel& model, float modelScale,
-                               const float* modelMat,
+                               const std::array<float, 16>& modelMat,
                                const PhysicsWorld* physicsWorld) {
     mModelScale = modelScale;
-    mModelMat = modelMat;
+    mModelMat = &modelMat;
     mPhysicsWorld = physicsWorld;
     Vec3 minPos = {1e9f, 1e9f, 1e9f}, maxPos = {-1e9f, -1e9f, -1e9f};
     for (const auto& v : model.vertices) {
@@ -379,7 +379,7 @@ void RigidBodyRenderer::updateFromPhysics() {
 void RigidBodyRenderer::onDebugPass(const DebugPassParams& dp) {
     updateFromPhysics();
 
-    auto* s = ShaderManager::instance().rigidBody();
+    auto* s = dp.shaders->rigidBody();
     if (!s) return;
 
     auto* dev = Gpu::device();
@@ -387,7 +387,7 @@ void RigidBodyRenderer::onDebugPass(const DebugPassParams& dp) {
     s->use();
     s->setMat4(U_PROJ_MAT, dp.proj.data());
     s->setMat4(U_VIEW_MAT, dp.view.data());
-    s->setMat4(U_MODEL_MAT, mModelMat);
+    s->setMat4(U_MODEL_MAT, mModelMat->data());
 
     bool hasPhysics = (mRbPhysics != nullptr);
     Gpu::IGpuVertexArray& rb = hasPhysics ? *mRbPhysics : (useBoneMatrices ? *mRbAnimated : *mRbStatic);

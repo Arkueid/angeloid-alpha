@@ -1,4 +1,4 @@
-#include "framework/AnimationController.h"
+#include "core/anim/AnimationController.h"
 
 #include "core/anim/BoneSkinning.h"
 #include "core/anim/VmdPlayer.h"

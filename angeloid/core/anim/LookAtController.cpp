@@ -1,8 +1,7 @@
-#include "framework/LookAtController.h"
+#include "core/anim/LookAtController.h"
 
 #include "core/pmx/PmxModel.h"
 #include "core/util/Log.h"
-#include "framework/Camera.h"
 
 #include <cmath>
 
@@ -108,17 +107,17 @@ void LookAtController::applyBoneQuat(std::vector<std::array<float, 16>>& poseWor
 }
 
 void LookAtController::apply(std::vector<std::array<float, 16>>& poseWorld,
-                             const std::array<float, 16>& modelMat) {
+                             const std::array<float, 16>& modelMat,
+                             const std::array<float, 16>& viewMat,
+                             const float cameraPos[3],
+                             bool isFpsMode) {
     if (mHeadBoneIndex < 0 || mScreenW <= 0 || mScreenH <= 0)
         return;
 
-    auto& cam = Camera::instance();
-    Vec3 camPos;
-    cam.getEyePosition(camPos.x, camPos.y, camPos.z);
-    auto view = cam.viewMatrix();
-    Vec3 right = {view[0], view[4], view[8]};
-    Vec3 upVec = {view[1], view[5], view[9]};
-    Vec3 backward = {view[2], view[6], view[10]};
+    Vec3 camPos = {cameraPos[0], cameraPos[1], cameraPos[2]};
+    Vec3 right = {viewMat[0], viewMat[4], viewMat[8]};
+    Vec3 upVec = {viewMat[1], viewMat[5], viewMat[9]};
+    Vec3 backward = {viewMat[2], viewMat[6], viewMat[10]};
 
     // Head world position
     Vec3 headPosModel = mat4Translation(poseWorld[mHeadBoneIndex]);
@@ -145,7 +144,7 @@ void LookAtController::apply(std::vector<std::array<float, 16>>& poseWorld,
 
     static constexpr float kMaxAngle = 50.0f * 3.14159265f / 180.0f;
 
-    if (cam.mode() == CameraMode::Orbit)
+    if (!isFpsMode)
         return;
 
     // FPS mode: NDC-based mouse tracking

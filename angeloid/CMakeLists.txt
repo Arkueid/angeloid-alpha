@@ -13,8 +13,8 @@ set(MMD_SOURCES
     core/anim/VmdPlayer.cpp
     core/anim/VpdLoader.cpp
     core/encoding/Encoding.cpp
-    framework/AnimationController.cpp
-    framework/LookAtController.cpp
+    core/anim/AnimationController.cpp
+    core/anim/LookAtController.cpp
     framework/Model.cpp
     framework/gpu/opengl/GlBuffer.cpp
     framework/gpu/opengl/GlTexture.cpp
@@ -29,7 +29,6 @@ set(MMD_SOURCES
     framework/gpu/vulkan/VkRenderTarget.cpp
     framework/gpu/vulkan/VkDevice.cpp
     framework/ModelRenderer.cpp
-    framework/RenderContext.cpp
     framework/scene/RigidBodyRenderer.cpp
     framework/scene/WorldAxis.cpp
     framework/scene/GroundPlane.cpp

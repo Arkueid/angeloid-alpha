@@ -2,7 +2,7 @@
 
 #include "core/pmx/PmxModel.h"
 
-#include <btBulletDynamicsCommon.h>
+#include "LinearMath/btTransform.h"
 
 #include <array>
 #include <memory>

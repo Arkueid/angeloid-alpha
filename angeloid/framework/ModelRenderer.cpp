@@ -3,11 +3,12 @@
 #include <chrono>
 
 #include "framework/PassParams.h"
+#include "framework/Pipeline.h"
+#include "framework/ShaderManager.h"
 #include "framework/ShaderStandard.h"
 
 #include "core/anim/BoneSkinning.h"
 #include "core/anim/VpdLoader.h"
-#include "framework/RenderContext.h"
 #include "framework/gpu/IGpuDevice.h"
 #include "framework/gpu/Types.h"
 #include "core/util/Log.h"
@@ -278,18 +279,16 @@ void ModelRenderer::setupSkinning(const PmxModel& model, const fs::path& vpdPath
 
 void ModelRenderer::renderDepthPass(Gpu::IGpuShader& shader,
                                      const std::array<float, 16>& lightViewProj,
-                                     const float* modelMatParam) {
+                                     const std::array<float, 16>& modelMat) {
     if (!showModel || mMaterialBatches.empty()) return;
-
-    const float* mm = modelMatParam ? modelMatParam : mModelMat.data();
     shader.use();
-    shader.setMat4("u_projMat", lightViewProj.data());
+    shader.setMat4(U_PROJ_MAT, lightViewProj.data());
     float identity[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
-    shader.setMat4("u_viewMat", identity);
-    shader.setMat4("u_modelMat", mm);
+    shader.setMat4(U_VIEW_MAT, identity);
+    shader.setMat4(U_MODEL_MAT, modelMat.data());
     shader.setInt(U_BONE_TEX, TEX_UNIT_BONE);
     shader.setInt(U_BONE_TEX_WIDTH, mBoneTextureWidth);
-    shader.setFloat("u_morphWeight", 1.0f);
+    shader.setFloat(U_MORPH_WEIGHT, 1.0f);
     mBoneTexture->bind(TEX_UNIT_BONE);
 
     for (const auto& batch : mMaterialBatches) {
@@ -297,7 +296,7 @@ void ModelRenderer::renderDepthPass(Gpu::IGpuShader& shader,
         if (auto* ov = getMaterialOverride(batch.materialIndex)) {
             alpha = ov->alpha;
         }
-        shader.setFloat("u_alpha", alpha);
+        shader.setFloat(U_ALPHA, alpha);
         mMorphVao->draw(Gpu::PrimitiveType::Triangles, batch.count, batch.first);
     }
 }
@@ -310,19 +309,17 @@ void ModelRenderer::uploadBoneData(const void* data, size_t bytes) {
 void ModelRenderer::renderMorphMainPass(Gpu::IGpuShader& shader,
                                         const std::array<float, 16>& proj,
                                         const std::array<float, 16>& view,
-                                        const float* modelMatParam) {
+                                        const std::array<float, 16>& modelMat,
+                                        ShaderManager& sm) {
     if (!showModel || mMaterialBatches.empty())
         return;
-
-    const float* modelMatDefault = mModelMat.data();
-    const float* mm = modelMatParam ? modelMatParam : modelMatDefault;
     shader.use();
     shader.setMat4(U_PROJ_MAT, proj.data());
     shader.setMat4(U_VIEW_MAT, view.data());
-    shader.setMat4(U_MODEL_MAT, mm);
-    shader.setInt("u_tex", 0);
-    shader.setInt("u_sphereTex", 3);
-    shader.setInt("u_toonTex", 4);
+    shader.setMat4(U_MODEL_MAT, modelMat.data());
+    shader.setInt(U_DIFFUSE_TEX, 0);
+    shader.setInt(U_SPHERE_TEX, 3);
+    shader.setInt(U_TOON_TEX, 4);
     shader.setInt(U_BONE_TEX, TEX_UNIT_BONE);
     shader.setInt(U_BONE_TEX_WIDTH, mBoneTextureWidth);
     shader.setFloat(U_MORPH_WEIGHT, 1.0f);
@@ -369,10 +366,10 @@ void ModelRenderer::renderMorphMainPass(Gpu::IGpuShader& shader,
         const auto& toon = mMaterialToon[batch.materialIndex];
         if (toon.sharingFlag != 0) {
             int si = toon.textureIndex;
-            if (auto* t = mmd::RenderContext::instance().sharedToon(si)) {
+            if (auto* t = sm.sharedToon(si)) {
                 t->bind(4);
                 shader.setInt(U_HAS_TOON, 1);
-            } else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
+            } else if (auto* t = sm.sharedToon(0)) {
                 t->bind(4);
                 shader.setInt(U_HAS_TOON, 1);
             } else {
@@ -382,7 +379,7 @@ void ModelRenderer::renderMorphMainPass(Gpu::IGpuShader& shader,
                    mTextures[toon.textureIndex]) {
             mTextures[toon.textureIndex]->bind(4);
             shader.setInt(U_HAS_TOON, 1);
-        } else if (auto* t = mmd::RenderContext::instance().sharedToon(0)) {
+        } else if (auto* t = sm.sharedToon(0)) {
             t->bind(4);
             shader.setInt(U_HAS_TOON, 1);
         } else {
@@ -396,22 +393,21 @@ void ModelRenderer::renderMorphMainPass(Gpu::IGpuShader& shader,
 void ModelRenderer::renderMorphOutlinePass(Gpu::IGpuShader& shader,
                                            const std::array<float, 16>& proj,
                                            const std::array<float, 16>& view,
-                                           const float* modelMatParam) {
+                                           const std::array<float, 16>& modelMat,
+                                           ShaderManager& sm) {
     if (!showModel || !showOutline || mMaterialBatches.empty())
         return;
-    const float* modelMatDefault = mModelMat.data();
-    const float* mm = modelMatParam ? modelMatParam : modelMatDefault;
     shader.use();
     shader.setMat4(U_PROJ_MAT, proj.data());
     shader.setMat4(U_VIEW_MAT, view.data());
-    shader.setMat4(U_MODEL_MAT, mm);
-    shader.setInt("u_tex", 0);
+    shader.setMat4(U_MODEL_MAT, modelMat.data());
+    shader.setInt(U_DIFFUSE_TEX, 0);
     shader.setInt(U_BONE_TEX, TEX_UNIT_BONE);
     shader.setInt(U_BONE_TEX_WIDTH, mBoneTextureWidth);
     shader.setFloat(U_MORPH_WEIGHT, 1.0f);
     mBoneTexture->bind(TEX_UNIT_BONE);
 
-    Gpu::device()->setCullMode(Gpu::CullMode::Front);
+    Pipeline::instance().setCullMode(Gpu::CullMode::Front);
 
     for (const auto& batch : mMaterialBatches) {
         if (!batch.hasEdge)
@@ -437,7 +433,7 @@ void ModelRenderer::renderMorphOutlinePass(Gpu::IGpuShader& shader,
         }
         mMorphVao->draw(Gpu::PrimitiveType::Triangles, batch.count, batch.first);
     }
-    Gpu::device()->setCullMode(Gpu::CullMode::None);
+    Pipeline::instance().setCullMode(Gpu::CullMode::None);
 }
 
 void ModelRenderer::worldAABB(Vec3& outMin, Vec3& outMax) const {

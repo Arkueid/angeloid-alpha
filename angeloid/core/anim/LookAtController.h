@@ -23,9 +23,16 @@ public:
     bool enabled() const { return mEnabled; }
 
     // Apply look-at rotation to poseWorld in-place.
-    // modelMatrix: model-to-world transform from ModelRenderer (16 floats, column-major).
+    // poseWorld: bone world matrices (column-major 4x4)
+    // modelMatrix: model-to-world transform from ModelRenderer (16 floats, column-major)
+    // viewMatrix: camera view matrix (16 floats, column-major)
+    // cameraPos: camera eye position (3 floats)
+    // isFpsMode: true if camera is in FPS mode (look-at only applies in FPS)
     void apply(std::vector<std::array<float, 16>>& poseWorld,
-               const std::array<float, 16>& modelMatrix);
+               const std::array<float, 16>& modelMatrix,
+               const std::array<float, 16>& viewMatrix,
+               const float cameraPos[3],
+               bool isFpsMode);
 
 private:
     void propagateToDescendants(std::vector<std::array<float, 16>>& poseWorld,

@@ -28,18 +28,18 @@ GroundPlane::GroundPlane() {
 }
 
 void GroundPlane::onMainPass(const MainPassParams& mp) {
-    auto* shader = ShaderManager::instance().ground();
+    auto* shader = mp.shaders->ground();
     if (!shader) return;
 
     shader->use();
     shader->setMat4(U_PROJ_MAT, mp.proj.data());
     shader->setMat4(U_VIEW_MAT, mp.view.data());
     if (mp.hasShadow) {
-        shader->setInt("u_shadowMap", 5);
-        shader->setMat4("u_lightViewProj", mp.lightViewProj.data());
-        shader->setInt("u_hasShadow", 1);
+        shader->setInt(U_SHADOW_MAP, 5);
+        shader->setMat4(U_LIGHT_VIEW_PROJ, mp.lightViewProj.data());
+        shader->setInt(U_HAS_SHADOW, 1);
     } else {
-        shader->setInt("u_hasShadow", 0);
+        shader->setInt(U_HAS_SHADOW, 0);
     }
     mVao->draw(Gpu::PrimitiveType::Triangles, 6);
 }

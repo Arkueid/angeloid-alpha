@@ -62,7 +62,7 @@ WorldAxis::WorldAxis() {
 }
 
 void WorldAxis::onDebugPass(const DebugPassParams& dp) {
-    auto* shader = ShaderManager::instance().axis();
+    auto* shader = dp.shaders->axis();
     if (!shader) return;
 
     auto* dev = Gpu::device();

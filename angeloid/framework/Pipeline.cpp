@@ -1,11 +1,13 @@
 #include "framework/Pipeline.h"
 
 #include "framework/Camera.h"
+#include "core/util/Log.h"
 #include <cmath>
 
 #include "core/math/VecMath.h"
 #include "framework/Renderable.h"
 #include "framework/ShaderManager.h"
+#include "framework/ShaderStandard.h"
 #include "framework/gpu/IGpuDevice.h"
 #include "framework/gpu/Types.h"
 
@@ -23,7 +25,16 @@ void Pipeline::init() {
 }
 
 void Pipeline::clear() {
+    MMD_INFO("PIPE", "Releasing %zu renderables", mItems.size());
     mItems.clear();
+}
+
+void Pipeline::setCullMode(Gpu::CullMode mode) {
+    Gpu::device()->setCullMode(mode);
+}
+
+void Pipeline::bindTextureToUnit(int unit, Gpu::IGpuTexture* tex) {
+    Gpu::device()->bindTextureToUnit(unit, tex);
 }
 
 void Pipeline::addRenderable(Renderable* item) {
@@ -157,8 +168,9 @@ void Pipeline::computeLightMatrix(const float* ldir,
     };
 }
 
-void Pipeline::renderShadowPass(const std::array<float, 16>& lightViewProj) {
-    auto* shadowProg = ShaderManager::instance().shadow();
+void Pipeline::renderShadowPass(const std::array<float, 16>& lightViewProj,
+                                   ShaderManager& sm) {
+    auto* shadowProg = sm.shadow();
     if (!shadowProg) return;
 
     auto* dev = Gpu::device();
@@ -166,7 +178,7 @@ void Pipeline::renderShadowPass(const std::array<float, 16>& lightViewProj) {
     dev->clear(false, true);
     dev->setDepthFunc(Gpu::CompareFunc::Less);
 
-    ShadowPassParams sp{lightViewProj, kIdentity};
+    ShadowPassParams sp{lightViewProj, kIdentity, &sm};
     for (auto* item : mItems) {
         if (!item->visible || !item->castShadow()) continue;
         item->onShadowPass(sp);
@@ -176,6 +188,7 @@ void Pipeline::renderShadowPass(const std::array<float, 16>& lightViewProj) {
 void Pipeline::execute(const std::array<float, 16>& proj,
                        const std::array<float, 16>& view) {
     auto* dev = Gpu::device();
+    auto& sm = ShaderManager::instance();
     bool anyShadow = showSelfShadow || showGroundShadow;
 
     // ── Frame setup ──
@@ -202,7 +215,7 @@ void Pipeline::execute(const std::array<float, 16>& proj,
     auto lightVP_Vk = depthCorrect(mLightViewProj);
 
     if (anyShadow)
-        renderShadowPass(lightVP_Vk);
+        renderShadowPass(lightVP_Vk, sm);
     dev->setDepthFunc(Gpu::CompareFunc::LEqual);  // restore after shadow pass (which uses Less)
     dev->bindScreenFramebuffer(mViewportW, mViewportH);
     dev->clear(true, true);
@@ -211,9 +224,14 @@ void Pipeline::execute(const std::array<float, 16>& proj,
     if (anyShadow) {
         dev->bindTextureToUnit(5, mShadowMap->depthTexture());
     }
+    if (auto* grad = sm.gradientTexture())
+        dev->bindTextureToUnit(TEX_UNIT_GRADIENT, grad);
 
     std::array<float, 3> ldir = {lightDir[0], lightDir[1], lightDir[2]};
-    MainPassParams mp{projVk, view, kIdentity, lightVP_Vk, ldir, false};
+    float cx, cy, cz;
+    Camera::instance().getEyePosition(cx, cy, cz);
+    std::array<float, 3> camPos = {cx, cy, cz};
+    MainPassParams mp{projVk, view, kIdentity, lightVP_Vk, ldir, camPos, false, &sm};
     for (auto* item : mItems) {
         if (!item->visible) continue;
         mp.hasShadow = item->castShadow() ? showSelfShadow : showGroundShadow;
@@ -221,7 +239,7 @@ void Pipeline::execute(const std::array<float, 16>& proj,
     }
 
     // ── Debug pass (axis + physics) ──
-    DebugPassParams dp{projVk, view, kIdentity};
+    DebugPassParams dp{projVk, view, kIdentity, &sm};
     for (auto* item : mItems) {
         if (!item->visible) continue;
         item->onDebugPass(dp);

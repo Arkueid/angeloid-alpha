@@ -3,10 +3,8 @@
 #include "framework/Camera.h"
 #include "framework/MMD.h"
 #include "core/pmx/PmxReader.h"
-#include "framework/RenderContext.h"
 #include "framework/ShaderManager.h"
 #include "framework/ShaderStandard.h"
-#include "framework/gpu/IGpuDevice.h"
 #include "core/util/Log.h"
 
 #include <cmath>
@@ -36,6 +34,9 @@ void Model::load(const std::filesystem::path& pmxPath) {
 
     mMorphCtl.setModel(mPmx);
     mLookAtCtrl.setup(mPmx);
+
+    mPhysicsDebug = std::make_unique<RigidBodyRenderer>();
+    mPhysicsDebug->build(mPmx, mRenderer.modelScale(), mRenderer.modelMatrix(), &mPhysics);
 }
 
 bool Model::shadowBounds(Vec3& outMin, Vec3& outMax) const {
@@ -66,10 +67,17 @@ void Model::update(float dt) {
         mMorphCtl.setMorphWeights(result.vmdMorphWeights);
 
     // 3. LookAt
+// NOTE: Camera::instance() is the last singleton access outside Pipeline during
+// per-frame updates. LookAtController is pure (takes camera data as parameters);
+// Model acts as adapter. Could inject Camera* at construction if this grows.
     if (mLookAtCtrl.enabled()) {
-        std::array<float, 16> mm;
-        std::memcpy(mm.data(), mRenderer.modelMatrix(), sizeof(mm));
-        mLookAtCtrl.apply(mPoseWorld, mm);
+        const auto& mm = mRenderer.modelMatrix();
+        auto& cam = Camera::instance();
+        auto viewMat = cam.viewMatrix();
+        float camPos[3];
+        cam.getEyePosition(camPos[0], camPos[1], camPos[2]);
+        bool isFps = (cam.mode() == CameraMode::FPS);
+        mLookAtCtrl.apply(mPoseWorld, mm, viewMat, camPos, isFps);
     }
 
     // 4. Physics
@@ -119,51 +127,43 @@ void Model::onShadowPass(const ShadowPassParams& sp) {
             mRenderer.setMaterialOverride((int)i, *ov);
     }
 
-    auto* shadowProg = ShaderManager::instance().shadow();
-    if (shadowProg)
+    if (auto* shadowProg = sp.shaders->shadow())
         mRenderer.renderDepthPass(*shadowProg, sp.lightViewProj, mRenderer.modelMatrix());
 }
 
 void Model::onMainPass(const MainPassParams& mp) {
     if (!mRenderer.showModel) return;
-    const float* mm = mRenderer.modelMatrix();
-
-    auto& sm = ShaderManager::instance();
+    const auto& mm = mRenderer.modelMatrix();
 
     if (mRenderer.showOutline) {
-        auto* outlineProg = sm.outline();
-        if (outlineProg)
-            mRenderer.renderMorphOutlinePass(*outlineProg, mp.proj, mp.view, mm);
+        if (auto* outlineProg = mp.shaders->outline())
+            mRenderer.renderMorphOutlinePass(*outlineProg, mp.proj, mp.view, mm, *mp.shaders);
     }
 
-    auto* mainProg = mRenderer.showToon ? sm.toon() : sm.main();
+    auto* mainProg = mRenderer.showToon ? mp.shaders->toon() : mp.shaders->main();
     if (!mainProg) return;
 
     mainProg->use();
 
     if (mp.hasShadow) {
-        mainProg->setInt("u_shadowMap", 5);
-        mainProg->setMat4("u_lightViewProj", mp.lightViewProj.data());
-        mainProg->setInt("u_hasShadow", 1);
+        mainProg->setInt(U_SHADOW_MAP, 5);
+        mainProg->setMat4(U_LIGHT_VIEW_PROJ, mp.lightViewProj.data());
+        mainProg->setInt(U_HAS_SHADOW, 1);
     } else {
-        mainProg->setInt("u_hasShadow", 0);
+        mainProg->setInt(U_HAS_SHADOW, 0);
     }
 
     mainProg->setVec3(U_LIGHT_DIR, mp.lightDir[0], mp.lightDir[1], mp.lightDir[2]);
 
     if (mRenderer.showToon) {
-        float camPos[3];
-        Camera::instance().getEyePosition(camPos[0], camPos[1], camPos[2]);
-        mainProg->setVec3(U_CAMERA_POS, camPos[0], camPos[1], camPos[2]);
+        mainProg->setVec3(U_CAMERA_POS, mp.cameraPos[0], mp.cameraPos[1], mp.cameraPos[2]);
         mainProg->setFloat(U_RIM_POWER, 4.0f);
         mainProg->setVec3(U_RIM_COLOR, 1.0f, 1.0f, 1.0f);
 
-        mainProg->setInt("u_gradientMap", TEX_UNIT_GRADIENT);
-        auto& ctx = mmd::RenderContext::instance();
-        Gpu::device()->bindTextureToUnit(TEX_UNIT_GRADIENT, ctx.gradientTexture());
+        mainProg->setInt(U_GRADIENT_MAP, TEX_UNIT_GRADIENT);
     }
 
-    mRenderer.renderMorphMainPass(*mainProg, mp.proj, mp.view, mm);
+    mRenderer.renderMorphMainPass(*mainProg, mp.proj, mp.view, mm, *mp.shaders);
 }
 
 void Model::onDebugPass(const DebugPassParams& dp) {
@@ -233,13 +233,6 @@ void Model::syncMorphOffsets() {
 }
 
 RigidBodyRenderer* Model::physicsDebug() {
-    if (!mPhysicsDebug) {
-        mPhysicsDebug = std::make_unique<RigidBodyRenderer>();
-        mPhysicsDebug->build(mPmx, mRenderer.modelScale(), mRenderer.modelMatrix(), &mPhysics);
-        mPhysicsDebug->showRigidBody = true;
-        mPhysicsDebug->showJoint = true;
-        mPhysicsDebug->useBoneMatrices = false;
-    }
     return mPhysicsDebug.get();
 }
 
