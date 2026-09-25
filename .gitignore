@@ -24,6 +24,7 @@ resources/vpd/*
 !resources/vpd/.gitkeep
 resources/vmd/*
 !resources/vmd/.gitkeep
+resources/models.local.cfg
 
 # OS
 .DS_Store

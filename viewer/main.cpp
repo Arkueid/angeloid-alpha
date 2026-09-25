@@ -1,8 +1,8 @@
 #include "framework/Camera.h"
 #include "framework/MMD.h"
 #include "framework/Model.h"
-#include "framework/gpu/IGpuDevice.h"
 #include "framework/Pipeline.h"
+#include "framework/gpu/IGpuDevice.h"
 #include "framework/scene/GroundPlane.h"
 #include "framework/scene/WorldAxis.h"
 #include "framework/util/CfgParser.h"
@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
 #endif
     std::cout << "MMD PMX Viewer (C++)" << std::endl;
 
-    std::string modelName = "ikaros-uniform";
+    std::string modelName;
     std::vector<fs::path> vmdPaths;
     mmd::GpuBackend backend = mmd::GpuBackend::Vulkan;
 
@@ -105,14 +105,21 @@ int main(int argc, char* argv[]) {
     }
 
     fs::path projRoot = fs::weakly_canonical(fs::path(MMD_PROJECT_ROOT));
-    auto modelRegistry = loadModelRegistry(projRoot / "resources/models.cfg");
+    auto modelRegistry = loadModelRegistry(projRoot / "resources/models.local.cfg");
+    if (modelRegistry.empty()) {
+        modelRegistry = loadModelRegistry(projRoot / "resources/models.cfg");
+    }
 
     fs::path pmxPath;
     auto it = modelRegistry.find(modelName);
-    if (it != modelRegistry.end())
+    if (it != modelRegistry.end()) {
         pmxPath = projRoot / fs::u8path(it->second);
-    else
-        pmxPath = fs::u8path(modelName);
+    } else {
+        for (auto kv : modelRegistry) {
+            pmxPath = projRoot / fs::u8path(kv.second);
+            break;
+        }
+    }
     fs::path vpdPath = projRoot / fs::u8path("resources/vpd/自然站姿.vpd");
 
     // --- Window ---
@@ -219,8 +226,7 @@ int main(int argc, char* argv[]) {
             if (activeVpdId >= 0 && model.vpdApplied()) {
                 model.resetPose();
                 std::cout << "VPD pose: OFF" << std::endl;
-            }
-            else if (activeVpdId >= 0) {
+            } else if (activeVpdId >= 0) {
                 model.applyVpd(activeVpdId);
                 std::cout << "VPD pose: ON" << std::endl;
             }
@@ -465,8 +471,7 @@ int main(int argc, char* argv[]) {
             int nTracks = model.vmdTrackCount();
             if (nTracks == 0) {
                 ImGui::TextDisabled("No VMD loaded");
-            }
-            else {
+            } else {
                 bool playing = model.isVmdPlaying();
                 if (ImGui::Button(playing ? "Pause (Space)" : "Play (Space)")) {
                     if (playing)
@@ -502,8 +507,7 @@ int main(int argc, char* argv[]) {
                         ImGui::SliderFloat(label, &f, 0.0f, maxF, "%.0f");
                         if (f != cur)
                             model.setVmdFrame(id, f);
-                    }
-                    else {
+                    } else {
                         ImGui::Text("%s: %.0f", label, cur);
                     }
                 }
@@ -513,7 +517,7 @@ int main(int argc, char* argv[]) {
 
             // VPD
             bool vpdOn = model.vpdApplied();
-            if (ImGui::Button(vpdOn ? "VPD Pose: OFF (P)" : "VPD Pose: ON (P)")) {
+            if (ImGui::Button(vpdOn ? "VPD Pose: ON (P)" : "VPD Pose: OFF (P)")) {
                 if (activeVpdId >= 0 && model.vpdApplied())
                     model.resetPose();
                 else if (activeVpdId >= 0)
@@ -531,8 +535,7 @@ int main(int argc, char* argv[]) {
 
             if (morphList.empty()) {
                 ImGui::TextDisabled("No interactable morphs");
-            }
-            else {
+            } else {
                 static std::vector<std::string> morphNames;
                 static std::vector<const char*> morphCStrs;
                 if (morphNames.size() != morphList.size()) {

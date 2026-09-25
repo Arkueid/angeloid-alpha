@@ -31,16 +31,6 @@ GlDevice::GlDevice() {
     glEnable(GL_MULTISAMPLE);
 }
 
-static std::unique_ptr<IGpuDevice> sDevice;
-
-IGpuDevice* device() {
-    return sDevice.get();
-}
-
-void setDevice(std::unique_ptr<IGpuDevice> dev) {
-    sDevice = std::move(dev);
-}
-
 // ── Buffer creation ──
 
 std::unique_ptr<IGpuBuffer> GlDevice::createVertexBuffer(const void* data, size_t bytes,

@@ -19,8 +19,8 @@ BraceWrapping:
   AfterEnum: false
   AfterNamespace: false
   AfterControlStatement: Never
-  BeforeElse: true
-  BeforeCatch: true
+  BeforeElse: false
+  BeforeCatch: false
 
 # Line width
 ColumnLimit: 100

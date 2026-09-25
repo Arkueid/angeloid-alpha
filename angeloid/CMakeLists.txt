@@ -28,6 +28,7 @@ set(MMD_SOURCES
     framework/gpu/vulkan/VkVertexArray.cpp
     framework/gpu/vulkan/VkRenderTarget.cpp
     framework/gpu/vulkan/VkDevice.cpp
+    framework/gpu/IGpuDevice.cpp
     framework/ModelRenderer.cpp
     framework/scene/RigidBodyRenderer.cpp
     framework/scene/WorldAxis.cpp
